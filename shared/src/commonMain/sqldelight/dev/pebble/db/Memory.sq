@@ -1,0 +1,68 @@
+-- What Pebble has learned or been told. Derived memories are keyed so re-learning updates them in
+-- place; `hidden` lets you delete one without the next learning pass bringing it back.
+CREATE TABLE memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL UNIQUE,
+    text TEXT NOT NULL,
+    data TEXT,
+    source TEXT NOT NULL,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE mood_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_millis INTEGER NOT NULL,
+    score INTEGER NOT NULL
+);
+
+CREATE TABLE media_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_millis INTEGER NOT NULL,
+    app TEXT NOT NULL,
+    title TEXT NOT NULL
+);
+
+CREATE INDEX media_log_at ON media_log(at_millis);
+
+upsertDerived:
+INSERT INTO memory(kind, key, text, data, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'derived', ?, ?)
+ON CONFLICT(key) DO UPDATE SET text = excluded.text, data = excluded.data, updated_at = excluded.updated_at;
+
+removeDerived:
+DELETE FROM memory WHERE key = ? AND source = 'derived' AND hidden = 0;
+
+insertFact:
+INSERT INTO memory(kind, key, text, data, source, created_at, updated_at) VALUES ('FACT', ?, ?, NULL, 'user', ?, ?);
+
+visibleMemories:
+SELECT * FROM memory WHERE hidden = 0 ORDER BY updated_at DESC;
+
+memoryByKey:
+SELECT * FROM memory WHERE key = ? AND hidden = 0;
+
+hideMemory:
+UPDATE memory SET hidden = 1 WHERE id = ?;
+
+deleteUserMemory:
+DELETE FROM memory WHERE id = ? AND source = 'user';
+
+insertMood:
+INSERT INTO mood_log(at_millis, score) VALUES (?, ?);
+
+moodSince:
+SELECT * FROM mood_log WHERE at_millis >= ? ORDER BY at_millis;
+
+insertMedia:
+INSERT INTO media_log(at_millis, app, title) VALUES (?, ?, ?);
+
+lastMedia:
+SELECT * FROM media_log ORDER BY at_millis DESC LIMIT 1;
+
+mediaSince:
+SELECT * FROM media_log WHERE at_millis >= ? ORDER BY at_millis DESC;
+
+clearMedia:
+DELETE FROM media_log;

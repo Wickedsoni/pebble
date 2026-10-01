@@ -1,0 +1,44 @@
+CREATE TABLE reminder_rule (
+    id TEXT NOT NULL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    interval_minutes INTEGER NOT NULL,
+    strictness TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    active_from_minute INTEGER NOT NULL DEFAULT 480,
+    active_to_minute INTEGER NOT NULL DEFAULT 1380,
+    last_done_at INTEGER
+);
+
+CREATE TABLE one_off_reminder (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    due_at INTEGER NOT NULL,
+    strictness TEXT NOT NULL,
+    done_at INTEGER
+);
+
+allRules:
+SELECT * FROM reminder_rule ORDER BY id;
+
+insertRuleIfMissing:
+INSERT OR IGNORE INTO reminder_rule(id, kind, title, interval_minutes, strictness, enabled)
+VALUES (?, ?, ?, ?, ?, ?);
+
+updateRuleSettings:
+UPDATE reminder_rule SET interval_minutes = ?, strictness = ?, enabled = ? WHERE id = ?;
+
+markRuleDone:
+UPDATE reminder_rule SET last_done_at = ? WHERE id = ?;
+
+pendingOneOffs:
+SELECT * FROM one_off_reminder WHERE done_at IS NULL ORDER BY due_at;
+
+insertOneOff:
+INSERT INTO one_off_reminder(title, due_at, strictness) VALUES (?, ?, ?);
+
+markOneOffDone:
+UPDATE one_off_reminder SET done_at = ? WHERE id = ?;
+
+rescheduleOneOff:
+UPDATE one_off_reminder SET due_at = ? WHERE id = ?;

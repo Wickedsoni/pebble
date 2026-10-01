@@ -1,5 +1,7 @@
 package dev.pebble.core.event
 
+import dev.pebble.core.reminders.ReminderAction
+import dev.pebble.core.reminders.ReminderKind
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -26,4 +28,52 @@ sealed interface PebbleEvent {
     @Serializable
     @SerialName("widget_visibility")
     data class WidgetVisibilityChanged(val widgetId: String, val visible: Boolean, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("reminder_due")
+    data class ReminderDue(val key: String, val kind: ReminderKind, val title: String, override val atMillis: Long) : PebbleEvent
+
+    /** How you reacted to a reminder — the raw signal the brain later learns timing from. */
+    @Serializable
+    @SerialName("reminder_acted")
+    data class ReminderActed(
+        val key: String,
+        val kind: ReminderKind,
+        val action: ReminderAction,
+        val snoozeMinutes: Int? = null,
+        override val atMillis: Long,
+    ) : PebbleEvent
+
+    @Serializable
+    @SerialName("water_logged")
+    data class WaterLogged(val ml: Int, val todayTotalMl: Int, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("note_created")
+    data class NoteCreated(val noteId: Long, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("quick_add")
+    data class QuickAddUsed(val command: String, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("pet_interaction")
+    data class PetInteraction(val kind: String, override val atMillis: Long) : PebbleEvent
+
+    /** Logged at most once per clock hour while you're at the computer; the basis for active-hours learning. */
+    @Serializable
+    @SerialName("active_hour")
+    data class ActiveHour(val hour: Int, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("note_completed")
+    data class NoteCompleted(val noteId: Long, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("mood_logged")
+    data class MoodLogged(val score: Int, override val atMillis: Long) : PebbleEvent
+
+    @Serializable
+    @SerialName("fact_remembered")
+    data class FactRemembered(val memoryKey: String, override val atMillis: Long) : PebbleEvent
 }

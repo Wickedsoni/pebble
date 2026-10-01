@@ -45,3 +45,6 @@ SELECT value FROM setting WHERE key = ?;
 upsertSetting:
 INSERT INTO setting(key, value) VALUES (?, ?)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+
+eventsOfTypeSince:
+SELECT * FROM event_log WHERE type = ? AND at_millis >= ? ORDER BY at_millis;

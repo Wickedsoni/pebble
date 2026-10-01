@@ -1,0 +1,23 @@
+{
+  "_note": "Every dataset/model Pebble trains on or ships. Pebble is released open source, so only permissive licences may be used for shipped models. 'verified' flips to true only after someone has read the actual licence page.",
+  "datasets": [
+    {"name": "Amazon MASSIVE (hi-IN, en-US)", "use": "M1 intents + slots", "license": "CC BY 4.0", "url": "https://github.com/alexa/massive", "verified": false},
+    {"name": "Mozilla Common Voice (hi, en)", "use": "M4 speech", "license": "CC0 1.0", "url": "https://commonvoice.mozilla.org/datasets", "verified": false},
+    {"name": "Google FLEURS (hi_in, en_us)", "use": "M4 speech", "license": "CC BY 4.0", "url": "https://huggingface.co/datasets/google/fleurs", "verified": false},
+    {"name": "AI4Bharat IndicVoices", "use": "M4 speech", "license": "check", "url": "https://ai4bharat.iitm.ac.in/indicvoices", "verified": false},
+    {"name": "AI4Bharat Kathbath", "use": "M4 speech", "license": "check", "url": "https://github.com/AI4Bharat/vistaar", "verified": false},
+    {"name": "AI4Bharat Aksharantar", "use": "Devanagari <-> Roman transliteration", "license": "check", "url": "https://huggingface.co/datasets/ai4bharat/Aksharantar", "verified": false},
+    {"name": "L3Cube HingCorpus / LinCE", "use": "Hinglish text", "license": "check per subset", "url": "https://github.com/l3cube-pune/code-mixed-nlp", "verified": false},
+    {"name": "Pebble personal data (your recordings, typed commands, corrections)", "use": "personalisation, eval sets", "license": "yours; never shipped", "url": "", "verified": true}
+  ],
+  "models": [
+    {"name": "intfloat/multilingual-e5-small", "use": "M1 teacher encoder", "license": "MIT", "verified": false},
+    {"name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "use": "alternative teacher", "license": "Apache-2.0", "verified": false},
+    {"name": "openai/whisper-base", "use": "M4 speech", "license": "MIT", "verified": false},
+    {"name": "Qwen/Qwen2.5-0.5B-Instruct", "use": "M5 chat", "license": "Apache-2.0", "verified": false}
+  ],
+  "rules": [
+    "No training on outputs of proprietary models (Claude, GPT, Gemini) — their terms forbid it for competing models.",
+    "Fixed eval sets in brain/eval are never used for training."
+  ]
+}

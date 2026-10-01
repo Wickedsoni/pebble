@@ -1,0 +1,42 @@
+CREATE TABLE water_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_millis INTEGER NOT NULL,
+    ml INTEGER NOT NULL
+);
+
+CREATE INDEX water_log_at ON water_log(at_millis);
+
+CREATE TABLE note (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+);
+
+logWater:
+INSERT INTO water_log(at_millis, ml) VALUES (?, ?);
+
+waterSince:
+SELECT coalesce(sum(ml), 0) FROM water_log WHERE at_millis >= ?;
+
+undoLastWaterSince:
+DELETE FROM water_log WHERE id = (SELECT max(id) FROM water_log WHERE at_millis >= ?);
+
+insertNote:
+INSERT INTO note(text, created_at, updated_at) VALUES (?, ?, ?);
+
+lastInsertedId:
+SELECT last_insert_rowid();
+
+updateNote:
+UPDATE note SET text = ?, updated_at = ? WHERE id = ?;
+
+archiveNote:
+UPDATE note SET archived = 1, updated_at = ? WHERE id = ?;
+
+activeNotes:
+SELECT * FROM note WHERE archived = 0 ORDER BY updated_at DESC LIMIT ?;
+
+waterLogSince:
+SELECT at_millis, ml FROM water_log WHERE at_millis >= ? ORDER BY at_millis;

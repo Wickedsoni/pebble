@@ -24,7 +24,7 @@ object Autostart {
         val path = launcherPath ?: return
         runCatching {
             if (enabled) {
-                Advapi32Util.registrySetStringValue(HKEY_CURRENT_USER, RUN_KEY, VALUE_NAME, "\"$path\"")
+                Advapi32Util.registrySetStringValue(HKEY_CURRENT_USER, RUN_KEY, VALUE_NAME, "\"$path\" --background")
             } else if (isEnabled()) {
                 Advapi32Util.registryDeleteValue(HKEY_CURRENT_USER, RUN_KEY, VALUE_NAME)
             }

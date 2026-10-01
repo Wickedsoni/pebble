@@ -33,3 +33,11 @@ bin/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 local.properties
+
+### Pebble brain (Python) ###
+brain/.venv/
+brain/data/raw/
+brain/models/*
+!brain/models/manifest.json
+__pycache__/
+.ipynb_checkpoints/
