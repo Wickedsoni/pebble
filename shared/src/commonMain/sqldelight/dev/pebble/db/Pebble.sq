@@ -1,0 +1,47 @@
+-- Where each widget window sits on screen; restored on next launch.
+CREATE TABLE widget_layout (
+    widget_id TEXT NOT NULL PRIMARY KEY,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    visible INTEGER NOT NULL DEFAULT 1
+);
+
+selectLayout:
+SELECT * FROM widget_layout WHERE widget_id = ?;
+
+upsertPosition:
+INSERT INTO widget_layout(widget_id, x, y) VALUES (?, ?, ?)
+ON CONFLICT(widget_id) DO UPDATE SET x = excluded.x, y = excluded.y;
+
+upsertVisible:
+INSERT INTO widget_layout(widget_id, x, y, visible) VALUES (?, -1, -1, ?)
+ON CONFLICT(widget_id) DO UPDATE SET visible = excluded.visible;
+
+-- Append-only log of everything that happens; the pet brain learns from it later.
+CREATE TABLE event_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    at_millis INTEGER NOT NULL
+);
+
+CREATE INDEX event_log_type_at ON event_log(type, at_millis);
+
+insertEvent:
+INSERT INTO event_log(type, payload, at_millis) VALUES (?, ?, ?);
+
+recentEvents:
+SELECT * FROM event_log ORDER BY at_millis DESC, id DESC LIMIT ?;
+
+-- Simple key/value app settings.
+CREATE TABLE setting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+selectSetting:
+SELECT value FROM setting WHERE key = ?;
+
+upsertSetting:
+INSERT INTO setting(key, value) VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value;
