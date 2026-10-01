@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib",
     "ipykernel",
     "jupyterlab",
+    "indic-transliteration>=2.3.82",
 ]
 
 [tool.uv]
