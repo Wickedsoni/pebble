@@ -42,7 +42,14 @@ class RouterWithModelTest {
             val r2 = router.route("कल सुबह छह बजे मुझे जगा देना") as Routed.Run
             val c2 = r2.command as QuickCommand.RemindAt
             assertEquals(6 to 1, c2.hour to c2.dayOffset)
-            assertIs<QuickCommand.TellTime>((router.route("abhi kitne baje hain") as Routed.Run).command)
+            assertIs<QuickCommand.TellTime>((router.route("aaj kaun si date hai") as Routed.Run).command)
+            // When the model is unsure it asks — and the right answer should be the first choice.
+            val unsure = router.route("abhi kitne baje hain") as Routed.Ask
+            assertIs<QuickCommand.TellTime>(unsure.options.first().command)
+            // Hindi rules fixed in this session.
+            assertIs<QuickCommand.RememberFact>((router.route("याद रखना कि मेरा एग्जाम बीस तारीख को है") as Routed.Run).command)
+            assertIs<QuickCommand.LogWater>((router.route("maine ek glass paani pi liya") as Routed.Run).command)
+            assertEquals("Mummy call karne", (router.route("shaam 7 baje mummy ko call karne ki yaad dila dena") as Routed.Run).command.let { (it as QuickCommand.RemindAt).title })
             assertIs<QuickCommand.SetInterval>((router.route("water every 45m") as Routed.Run).command) // rules first
         }
     }

@@ -25,6 +25,34 @@ enum class Script { EN, HI_DEVA, HI_ROMAN;
  * Pebble answers in the script you used.
  */
 object Replies {
+    const val LOW_MOOD = "mood_low"
+
+    private val lowMoodWords = listOf(
+        "sad", "feeling low", "feel low", "feeling down", "a bit low", "upset", "lonely", "stressed", "tired of", "depressed", "anxious", "not okay", "not ok", "bad day",
+        "mood off", "mood kharab", "mood thoda off", "udaas", "udas", "dukhi", "pareshan", "akela", "tension",
+        "उदास", "दुखी", "परेशान", "अकेला", "मूड ठीक नहीं", "मूड खराब", "टेंशन",
+    )
+
+    /** Words that signal a low mood, in all three scripts. */
+    fun isLowMood(text: String): Boolean {
+        val t = " " + text.lowercase().replace(Regex("""[^\p{L}\p{M}\s]"""), " ") + " "
+        return lowMoodWords.any { w -> if (w.contains(' ') || w.any { it in 'ऀ'..'ॿ' }) w in t else " $w " in t }
+    }
+
+    private val caring = mapOf(
+        Script.EN to listOf(
+            "I'm sorry today feels heavy. I'm right here — want to take a short break with me?",
+            "That sounds tough. Be gentle with yourself today. A glass of water and a few deep breaths?",
+        ),
+        Script.HI_ROMAN to listOf(
+            "Sorry yaar, aaj ka din bhaari lag raha hai. Main yahin hoon — thoda break lein saath mein?",
+            "Koi baat nahi, aisa hota hai. Thoda paani pi lo aur do minute aaram karo.",
+        ),
+        Script.HI_DEVA to listOf(
+            "अरे, आज का दिन भारी लग रहा है। मैं यहीं हूँ — थोड़ा ब्रेक लें साथ में?",
+            "कोई बात नहीं, ऐसा होता है। थोड़ा पानी पी लो और दो मिनट आराम करो।",
+        ),
+    )
     private val greet = mapOf(
         Script.EN to listOf("Hey! I'm here.", "Hi. Good to see you.", "Hello! What's up?"),
         Script.HI_ROMAN to listOf("Main badhiya! Tum batao?", "Hey! Main yahin hoon.", "Sab badhiya. Tumhara din kaisa ja raha hai?"),
@@ -60,6 +88,7 @@ object Replies {
 
     fun chitchat(text: String, intent: String, random: Random = Random): String {
         val s = Script.detect(text)
+        if (intent == LOW_MOOD || isLowMood(text)) return caring.getValue(Script.detect(text)).random(random)
         val pool = when (intent) {
             "general_joke" -> jokes
             "general_greet" -> greet

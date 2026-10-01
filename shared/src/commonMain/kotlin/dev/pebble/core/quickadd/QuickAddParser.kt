@@ -48,9 +48,9 @@ object QuickAddParser {
         RegexOption.IGNORE_CASE,
     )
     /** "har 45 minute", "हर पैंतालीस मिनट", "har ghante" — Hindi for "every". */
-    private val harRx = Regex("""(?:^|\s)(?:har|हर)\s+(?:(\S+)\s+)?(min|mins|minute|minutes|minat|मिनट|ghanta|ghante|घंटा|घंटे|hour|hours)""", RegexOption.IGNORE_CASE)
-    private val hiWaterRx = Regex("""(?:paani|pani|पानी)\s+(?:pi|pee|piya|पी|पिया)""", RegexOption.IGNORE_CASE)
-    private val enWaterRx = Regex("""(?:drank|had|finished)\s+(?:(a|an|one|two|three|four|\d+)\s+)?(?:glass(?:es)?|cups?|bottles?)\s+of\s+water""", RegexOption.IGNORE_CASE)
+    private val harRx = Regex("""(?:^|\s)(?:har|हर)\s+(?:(\S+)\s+)?(min|mins|minute|minutes|minat|मिनट|ghanta|ghante|घंटा|घंटे|hour|hours)(?=\s|$|[.,!?])""", RegexOption.IGNORE_CASE)
+    private val hiWaterRx = Regex("""(?:paani|pani|पानी)\s+(?:pi|pee|piya|पी|पिया)(?=\s|$|[.,!?])""", RegexOption.IGNORE_CASE)
+    private val enWaterRx = Regex("""\b(?:drank|had|finished)\s+(?:(a|an|one|two|three|four|\d+)\s+)?(?:glass(?:es)?|cups?|bottles?)\s+of\s+water\b""", RegexOption.IGNORE_CASE)
     private val noteRx = Regex("""^(?:note|n)\s*[:\-]?\s+(.+)$""", RegexOption.IGNORE_CASE)
     private val everyRx = Regex("""\bevery\s+(\d+(?:\.\d+)?)?\s*(m|min|mins|minutes?|h|hr|hrs|hours?)\b""", RegexOption.IGNORE_CASE)
     private val waterLogRx = Regex("""^(?:\+|drank|had|log)?\s*(\d+)?\s*(?:x\s*)?(?:glass(?:es)?(?: of water)?|water|💧)\s*(?:\+\s*(\d+))?$""", RegexOption.IGNORE_CASE)

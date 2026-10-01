@@ -31,6 +31,8 @@ class CommandRouter(
         val text = input.trim()
         if (text.isEmpty()) return null
         QuickAddParser.parseStrict(text)?.let { return Routed.Run(it, Source.RULES) }
+        // Feelings first: a low mood deserves a caring reply, never a joke or a "did you mean".
+        if (Replies.isLowMood(text)) return Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
 
         val understood = model()?.understand(text)
             ?: return Routed.Run(QuickCommand.AddNote(text), Source.FALLBACK)
@@ -58,22 +60,34 @@ class CommandRouter(
 
     private fun reminder(u: Understood, text: String): QuickCommand? {
         val slots = u.slots()
-        val timeText = listOfNotNull(slots["date"], slots["time"], slots["timeofday"]).joinToString(" ")
+        val slotText = listOfNotNull(slots["date"], slots["timeofday"], slots["time"]).joinToString(" ")
+        // The model sometimes tags only "shaam"/"kal" as the time. If the slot has no clock number,
+        // read the whole sentence, which still contains "7 baje".
+        val timeText = if (slotText.isNotBlank() && HinglishTime.hasClock(slotText)) slotText
+        else if (HinglishTime.hasClock(text)) text
+        else slotText.ifBlank { text }
         val title = reminderTitle(u, text)
-        return when (val w = HinglishTime.parse(timeText.ifBlank { text })) {
+        return when (val w = HinglishTime.parse(timeText)) {
             is HinglishTime.When.At -> QuickCommand.RemindAt(title, w.hour, w.minute, w.dayOffset, w.flexibleHalfDay)
             is HinglishTime.When.In -> QuickCommand.RemindIn(title, w.minutes)
             null -> null
         }
     }
 
-    /** The reminder text: the event slot if the model found one, else the words minus time words and filler. */
+    /**
+     * The reminder text: every word except time/date words and reminder filler, so slot words like
+     * the person ("mummy") stay in. Never the whole sentence: if nothing is left, a plain label.
+     */
     private fun reminderTitle(u: Understood, text: String): String {
-        u.slots()["event_name"]?.let { return it.replaceFirstChar(Char::uppercase) }
+        val timeTags = setOf("time", "date", "timeofday")
         val kept = u.words.zip(u.tags).filter { (w, t) ->
-            t == "O" && w.lowercase().trim(',', '.', '?', '!') !in filler
+            val kind = t.removePrefix("B-").removePrefix("I-")
+            (t == "O" || kind !in timeTags) &&
+                w.lowercase().trim(',', '.', '?', '!') !in filler &&
+                HinglishTime.numberOf(w.lowercase()) == null
         }.map { it.first }
-        return kept.joinToString(" ").ifBlank { text }.replaceFirstChar(Char::uppercase)
+        val title = kept.joinToString(" ").trim()
+        return title.ifBlank { if (u.top.intent == "alarm_set") "Wake up" else "Reminder" }.replaceFirstChar(Char::uppercase)
     }
 
     private fun askWhen(text: String, u: Understood): Routed.Ask {
@@ -120,6 +134,10 @@ class CommandRouter(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
             "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "dila", "do", "karo", "kar", "ki", "ka", "ke", "ko", "reminder", "laga", "lagao", "set", "utha",
             "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "की", "का", "के", "को", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",
+            // Time words the model may leave untagged — they belong to the time, never the title.
+            "baje", "bje", "o'clock", "oclock", "am", "pm", "subah", "shaam", "sham", "raat", "dopahar", "kal", "aaj", "parso",
+            "today", "tomorrow", "tonight", "morning", "evening", "night", "afternoon", "min", "mins", "minute", "minutes", "baad", "in",
+            "बजे", "सुबह", "शाम", "रात", "दोपहर", "कल", "आज", "परसों", "मिनट", "बाद", "घंटे",
         )
     }
 }

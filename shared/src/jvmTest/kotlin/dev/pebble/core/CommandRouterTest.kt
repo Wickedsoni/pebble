@@ -5,6 +5,7 @@ import dev.pebble.core.brain.CommandRouter
 import dev.pebble.core.brain.CommandRouter.Routed
 import dev.pebble.core.brain.CommandRouter.Source
 import dev.pebble.core.brain.IntentGuess
+import dev.pebble.core.brain.Replies
 import dev.pebble.core.brain.Understanding
 import dev.pebble.core.brain.Understood
 import dev.pebble.core.db.DatabaseFactory
@@ -90,5 +91,39 @@ class CommandRouterTest {
         val saved = repo.all().single()
         assertEquals("chitchat", saved.chosenAction)
         assertEquals("general_quirky", saved.modelIntent)
+    }
+
+    @Test
+    fun timeComesFromTheSentenceWhenTheSlotHasNoClock() {
+        val text = "shaam 7 baje mummy ko call karne ki yaad dila dena"
+        // The model tagged only "shaam" as a time and "mummy" as a person.
+        val tags = listOf("B-timeofday", "O", "O", "B-person", "O", "O", "O", "O", "O", "O")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        val cmd = r.command as QuickCommand.RemindAt
+        assertEquals(19, cmd.hour)
+        assertEquals("Mummy call karne", cmd.title)
+    }
+
+    @Test
+    fun emptyTitleFallsBackToALabelNotTheSentence() {
+        val text = "कल सुबह छह बजे मुझे जगा देना"
+        val tags = listOf("B-date", "B-timeofday", "B-time", "I-time", "O", "O", "O")
+        val r = CommandRouter({ model(text to u(text, tags, "alarm_set" to 0.9f)) }).route(text) as Routed.Run
+        val cmd = r.command as QuickCommand.RemindAt
+        assertEquals("Wake up", cmd.title)
+        assertEquals(6 to 1, cmd.hour to cmd.dayOffset)
+    }
+
+    @Test
+    fun lowMoodGetsACaringReplyBeforeTheModel() {
+        var asked = false
+        val router = CommandRouter({ asked = true; null })
+        for (t in listOf("aaj mood thoda off hai", "आज मेरा मूड ठीक नहीं है", "i'm feeling a bit low today")) {
+            val r = router.route(t) as Routed.Run
+            assertEquals(QuickCommand.Chitchat(t, Replies.LOW_MOOD), r.command)
+        }
+        assertTrue(!asked)
+        assertTrue(!Replies.isLowMood("my phone battery is low"))
+        assertTrue(Replies.chitchat("aaj mood thoda off hai", Replies.LOW_MOOD).isNotBlank())
     }
 }
