@@ -75,7 +75,12 @@ class Predictor:
         self.labels = Labels.load(ckpt / "labels.json")
         self.tokenizer = AutoTokenizer.from_pretrained(ckpt / "tokenizer")
         self.model = IntentSlotModel(len(self.labels.intents), len(self.labels.tags))
-        self.model.load_state_dict(torch.load(ckpt / "model.pt", map_location="cpu"))
+        state = torch.load(ckpt / "model.pt", map_location="cpu")
+        # Pruned checkpoints (prune_vocab.py) have a smaller embedding table than the base model.
+        rows = state["encoder.embeddings.word_embeddings.weight"].shape[0]
+        if rows != self.model.encoder.get_input_embeddings().num_embeddings:
+            self.model.encoder.resize_token_embeddings(rows)
+        self.model.load_state_dict(state)
         self.model.to(self.device).eval()
 
     @torch.no_grad()

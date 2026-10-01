@@ -25,7 +25,20 @@ Open the notebooks in IntelliJ / VS Code and pick the `brain/.venv` interpreter,
 |---|---|---|
 | M0 | `notebooks/01_pytorch_basics.ipynb` | tensors, autograd, the training loop, overfitting |
 | M0 | `notebooks/02_embeddings_common_base.ipynb` | embeddings, transfer learning, few-shot prototypes |
-| M1 | command understanding (next) | real data, eval sets, multi-task heads, distillation, ONNX export |
+| M1 | command understanding (below) | real data, eval sets, multi-task heads, vocab pruning, ONNX export |
+
+## M1 pipeline (command understanding)
+
+```powershell
+python -m uv run python data/download_massive.py                       # MASSIVE en-US + hi-IN, licence-checked
+python -m uv run python -m pebble_brain.train_intent --out models/intent-v0   # ~10 min on the RTX 4050, then evaluates
+python -m uv run python -m pebble_brain.prune_vocab models/intent-v0 models/intent-v0-pruned
+python -m uv run python -m pebble_brain.evaluate models/intent-v0-pruned
+python -m uv run python -m pebble_brain.export_onnx models/intent-v0-pruned  # → intent.int8.onnx (~31 MB)
+```
+
+Current model (`models/manifest.json`): MASSIVE intent accuracy en 87.9% / hi 85.9% / Roman 79.1%,
+Pebble actions 95.7% (int8), ~6.5 ms per command on 4 CPU threads, 33 MB with tokenizer.
 
 ## Folders
 
