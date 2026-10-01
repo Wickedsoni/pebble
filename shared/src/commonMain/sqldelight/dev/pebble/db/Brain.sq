@@ -1,0 +1,19 @@
+-- Labels you give the command model: each "Did you mean…?" pick is a training example for the next
+-- model version (active learning). Local only; exported by brain/ when you choose to retrain.
+CREATE TABLE command_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    chosen_action TEXT NOT NULL,
+    model_intent TEXT,
+    model_confidence REAL,
+    at_millis INTEGER NOT NULL
+);
+
+insertFeedback:
+INSERT INTO command_feedback(text, chosen_action, model_intent, model_confidence, at_millis) VALUES (?, ?, ?, ?, ?);
+
+allFeedback:
+SELECT * FROM command_feedback ORDER BY at_millis;
+
+feedbackCount:
+SELECT count(*) FROM command_feedback;

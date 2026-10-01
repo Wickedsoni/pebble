@@ -35,7 +35,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
-import dev.pebble.core.quickadd.QuickAddParser
+import androidx.compose.foundation.layout.Arrangement
+import dev.pebble.core.brain.CommandRouter
+import dev.pebble.desktop.now
+import dev.pebble.desktop.ui.Chip
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.PetLine
 import dev.pebble.desktop.platform.UserActivity
@@ -46,7 +52,13 @@ import dev.pebble.desktop.ui.glassColors
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 
-private val SIZE = DpSize(600.dp, 118.dp)
+private val SIZE = DpSize(640.dp, 150.dp)
+
+private fun sourceLabel(r: CommandRouter.Routed.Run): String = when (r.source) {
+    CommandRouter.Source.RULES -> "exact match"
+    CommandRouter.Source.MODEL -> "understood · ${((r.understood?.top?.confidence ?: 0f) * 100).toInt()}% sure"
+    CommandRouter.Source.FALLBACK -> "brain not loaded — saving as note"
+}
 
 /** Spotlight-style bar: type naturally, see what it will do, press Enter. Closes on Esc or focus loss. */
 @Composable
@@ -68,9 +80,30 @@ fun QuickAddWindow(app: PebbleApp, visible: Boolean, dark: Boolean, onDone: (Pet
     ) {
         var text by remember { mutableStateOf("") }
         val focus = remember { FocusRequester() }
-        val command = remember(text) { QuickAddParser.parse(text) }
+        var routed by remember { mutableStateOf<CommandRouter.Routed?>(null) }
+        // Route as you type: rules are instant; the model (~7 ms) runs off the UI thread, debounced.
+        LaunchedEffect(text) {
+            if (text.isBlank()) { routed = null; return@LaunchedEffect }
+            delay(120)
+            routed = withContext(Dispatchers.Default) { app.router.route(text) }
+        }
+
+        fun choose(option: CommandRouter.Option) {
+            val ask = routed as? CommandRouter.Routed.Ask
+            app.commandFeedback.record(text.trim(), option.action, ask?.understood, now())
+            onDone(app.execute(option.command))
+        }
+
+        fun submit() {
+            when (val r = routed ?: app.router.route(text)) {
+                is CommandRouter.Routed.Run -> onDone(app.execute(r.command))
+                is CommandRouter.Routed.Ask -> Unit // pick an option instead
+                null -> onDone(null)
+            }
+        }
 
         LaunchedEffect(Unit) {
+            app.model.warmUp()
             WindowsEffects.roundCorners(window)
             window.toFront()
             window.requestFocus()
@@ -105,7 +138,13 @@ fun QuickAddWindow(app: PebbleApp, visible: Boolean, dark: Boolean, onDone: (Pet
                                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                     when (e.key) {
                                         Key.Escape -> { onDone(null); true }
-                                        Key.Enter, Key.NumPadEnter -> { onDone(command?.let(app::execute)); true }
+                                        Key.Enter, Key.NumPadEnter -> { submit(); true }
+                                        Key.One, Key.Two, Key.Three -> {
+                                            val ask = routed as? CommandRouter.Routed.Ask ?: return@onPreviewKeyEvent false
+                                            val i = listOf(Key.One, Key.Two, Key.Three).indexOf(e.key)
+                                            ask.options.getOrNull(i)?.let(::choose)
+                                            ask.options.getOrNull(i) != null
+                                        }
                                         else -> false
                                     }
                                 },
@@ -113,11 +152,21 @@ fun QuickAddWindow(app: PebbleApp, visible: Boolean, dark: Boolean, onDone: (Pet
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        command?.let { app.describe(it) + "   ↵" } ?: "Esc to close",
-                        color = if (command != null) colors.accent else colors.secondary,
-                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    )
+                    when (val r = routed) {
+                        is CommandRouter.Routed.Run -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(app.describe(r.command) + "   ↵", color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.width(10.dp))
+                            Text(sourceLabel(r), color = colors.secondary, fontSize = 11.sp)
+                        }
+                        is CommandRouter.Routed.Ask -> Column {
+                            Text(r.question, color = colors.content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                r.options.forEachIndexed { i, o -> Chip("${i + 1}  ${o.label}", false) { choose(o) } }
+                            }
+                        }
+                        null -> Text("Type in English, Hindi or Hinglish · Esc to close", color = colors.secondary, fontSize = 13.sp)
+                    }
                 }
             }
         }

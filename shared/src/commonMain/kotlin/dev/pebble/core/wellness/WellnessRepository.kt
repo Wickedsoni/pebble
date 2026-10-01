@@ -41,6 +41,9 @@ class NoteRepository(private val db: PebbleDatabase) {
 
     fun archive(id: Long, at: Long) = q.archiveNote(at, id)
 
+    fun recent(limit: Long = 5): List<Note> =
+        q.activeNotes(limit).executeAsList().map { Note(it.id, it.text, it.updated_at) }
+
     fun activeFlow(limit: Long = 20): Flow<List<Note>> =
         q.activeNotes(limit).asFlow().mapToList(Dispatchers.Default).map { rows -> rows.map { Note(it.id, it.text, it.updated_at) } }
 }

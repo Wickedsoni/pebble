@@ -52,6 +52,10 @@ fun main(args: Array<String>) {
             PetController(app, openQuickAdd = { quickAddOpen = true }, openApp = { appOpen = true; page = Page.TODAY })
         }
         LaunchedEffect(Unit) { app.petLines.collect { pet.react(it) } }
+        app.openPage = { name ->
+            page = Page.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Page.TODAY
+            appOpen = true
+        }
         LaunchedEffect(Unit) {
             GlobalHotkey(GlobalHotkey.MOD_CONTROL or GlobalHotkey.MOD_ALT, GlobalHotkey.VK_SPACE) { quickAddOpen = true }.start()
             pet.greet()

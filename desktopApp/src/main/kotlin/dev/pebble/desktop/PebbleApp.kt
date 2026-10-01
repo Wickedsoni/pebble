@@ -61,6 +61,14 @@ class PebbleApp(db: PebbleDatabase) {
     /** Set by the UI once the tray exists; shows a Windows toast. */
     var notifier: (title: String, message: String) -> Unit = { _, _ -> }
 
+    /** Set by the UI: opens the Pebble window on a page ("reminders", "notes", …). */
+    var openPage: (String) -> Unit = {}
+
+    /** The local command model, loaded on demand; the router falls back to rules without it. */
+    val model = dev.pebble.desktop.brain.ModelManager(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    val router = dev.pebble.core.brain.CommandRouter({ model })
+    val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
+
     init {
         // Unconfined: events are written on the publisher's thread, so nothing is lost on exit.
         EventLogger(db).attach(bus, CoroutineScope(scope.coroutineContext + Dispatchers.Unconfined))
@@ -158,7 +166,30 @@ class PebbleApp(db: PebbleDatabase) {
                 reminders.addOneOff(cmd.title, at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
                 PetLine("I'll remind you ${describeWhen(at)}.")
             }
+            QuickCommand.ShowUpcoming -> {
+                val next = engine.upcoming(3)
+                PetLine(
+                    if (next.isEmpty()) "Nothing coming up." else "Next: " + next.joinToString(" · ") { "${it.title} ${dueIn(it.dueAt)}" },
+                    Mood.IDLE, 6_000,
+                )
+            }
+            QuickCommand.ShowNotes -> {
+                val open = notes.recent(3)
+                PetLine(if (open.isEmpty()) "No open notes." else open.joinToString(" · ") { it.text }, Mood.IDLE, 6_000)
+            }
+            QuickCommand.TellTime -> PetLine("It's " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm a, EEEE")) + ".", Mood.IDLE)
+            is QuickCommand.Chitchat -> PetLine(dev.pebble.core.brain.Replies.chitchat(cmd.text, cmd.intent), Mood.HAPPY, 5_000)
+            is QuickCommand.Unsupported -> PetLine(dev.pebble.core.brain.Replies.unsupported(cmd.text), Mood.IDLE, 5_000)
+            is QuickCommand.OpenPage -> {
+                openPage(cmd.page)
+                PetLine("")
+            }
         }
+    }
+
+    private fun dueIn(at: Long): String {
+        val m = ((at - now()) / 60_000).toInt()
+        return if (m <= 0) "now" else "in ${formatMinutes(m)}"
     }
 
     /** One-line preview shown under the quick-add field before you press Enter. */
@@ -170,14 +201,22 @@ class PebbleApp(db: PebbleDatabase) {
             (cmd.strictness?.let { " · ${it.label}" } ?: "")
         is QuickCommand.RemindIn -> "Remind me: “${cmd.title}” in ${formatMinutes(cmd.minutes)}"
         is QuickCommand.RemindAt -> "Remind me: “${cmd.title}” ${describeWhen(resolve(cmd))}"
+        QuickCommand.ShowUpcoming -> "Show what's coming up"
+        QuickCommand.ShowNotes -> "Show my notes"
+        QuickCommand.TellTime -> "Tell me the time"
+        is QuickCommand.Chitchat -> "Chat with Pebble"
+        is QuickCommand.Unsupported -> "Can't do this yet"
+        is QuickCommand.OpenPage -> "Open ${cmd.page} in Pebble"
     }
 
     private fun resolve(cmd: QuickCommand.RemindAt): LocalDateTime {
-        val today = LocalDate.now().atTime(cmd.hour, cmd.minute)
-        return when (cmd.dayOffset) {
-            null -> if (today.isAfter(LocalDateTime.now())) today else today.plusDays(1)
-            else -> today.plusDays(cmd.dayOffset!!.toLong())
-        }
+        val now = LocalDateTime.now()
+        val base = LocalDate.now().plusDays((cmd.dayOffset ?: 0).toLong())
+        // "5 baje" without am/pm: whichever of 5:00 / 17:00 comes next on that day.
+        val candidates = if (cmd.flexibleHalfDay && cmd.hour < 12) listOf(cmd.hour, cmd.hour + 12) else listOf(cmd.hour)
+        val onDay = candidates.map { base.atTime(it, cmd.minute) }
+        if (cmd.dayOffset != null) return onDay.firstOrNull { it.isAfter(now) } ?: onDay.last()
+        return onDay.firstOrNull { it.isAfter(now) } ?: base.plusDays(1).atTime(candidates.first(), cmd.minute)
     }
 
     private fun describeWhen(at: LocalDateTime): String {

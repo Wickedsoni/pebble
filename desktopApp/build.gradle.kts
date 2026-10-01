@@ -17,6 +17,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.jna)
     implementation(libs.jna.platform)
+    implementation(libs.onnxruntime)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.djl.tokenizers)
     testImplementation(kotlin("test"))
 }
 
