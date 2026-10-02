@@ -47,7 +47,7 @@ jobs:
         working-directory: brain
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - name: Ruff format
         run: uvx ruff format --check .
       - name: Ruff lint
