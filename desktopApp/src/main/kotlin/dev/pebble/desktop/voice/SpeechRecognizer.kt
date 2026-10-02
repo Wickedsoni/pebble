@@ -59,6 +59,7 @@ class SpeechRecognizer(private val scope: CoroutineScope, private val idleMillis
                 OrtEnvironment.getEnvironment()
                 LibraryUtils.load()
                 val size = whisperSize(dir)
+                hexTokens = Files.exists(dir.resolve("HEX_TOKENS"))
                 whisperAuto = recognizer(dir, size, language = "")
                 whisperHindi = recognizer(dir, size, language = "hi")
                 vad = Vad(
@@ -92,13 +93,16 @@ class SpeechRecognizer(private val scope: CoroutineScope, private val idleMillis
         return Transcript(cleaned, lang, speech.size * 1000L / AudioPrep.SAMPLE_RATE, System.currentTimeMillis() - t0)
     }
 
+    @Volatile private var hexTokens = false
+
     private fun decode(r: OfflineRecognizer, x: FloatArray): Pair<String, String> {
         val s = r.createStream()
         try {
             s.acceptWaveform(x, AudioPrep.SAMPLE_RATE)
             r.decode(s)
             val res = r.getResult(s)
-            return res.text to res.lang.trim('<', '|', '>', ' ')
+            val text = if (hexTokens) WhisperText.fromHex(res.text) else res.text
+            return text to res.lang.trim('<', '|', '>', ' ')
         } finally {
             s.release()
         }
@@ -150,8 +154,8 @@ class SpeechRecognizer(private val scope: CoroutineScope, private val idleMillis
             System.getenv("PEBBLE_ASR_DIR")?.let { Path.of(it) },
             DatabaseFactory.defaultDataDir().toPath().resolve("models/asr"),
             System.getProperty("compose.application.resources.dir")?.let { Path.of(it).resolve("models/asr") },
-            cwd.resolve("../brain/models/asr/pebble").normalize(),
-            cwd.resolve("brain/models/asr/pebble").normalize(),
+            cwd.resolve("../brain/models/asr-whisper-small").normalize(),
+            cwd.resolve("brain/models/asr-whisper-small").normalize(),
         )
         return candidates.firstOrNull { d -> Files.exists(d.resolve("silero_vad.onnx")) && runCatching { whisperSize(d) }.isSuccess }
     }
