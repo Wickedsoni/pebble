@@ -255,6 +255,104 @@ T_DE = [
     ("general_quirky", "बहुत बढ़िया"),
 ]
 
+# --------------------------------------------------------------------------- mood (head 3)
+# Written after eval/mood_v1.jsonl was frozen and without copying it; generate() drops look-alikes.
+# Mood sentences are small talk to the command model (general_quirky), with no slots.
+
+MOOD_FILL = {
+    "en": {
+        "low_adj": ["sad", "down", "lonely", "stressed", "anxious", "drained", "upset", "low", "hopeless", "burnt out"],
+        "when": ["today", "tonight", "this week", "lately", "right now", "since morning"],
+        "bad": ["rough", "exhausting", "horrible", "the worst", "really hard", "a mess"],
+        "reason": ["the assignment", "placements", "the project", "the deadline", "college", "my grades", "the viva", "my code"],
+        "good_adj": ["happy", "excited", "proud", "relaxed", "pumped", "grateful", "on top of the world", "really good"],
+        "great": ["awesome", "fantastic", "so good", "wonderful", "brilliant", "really fun"],
+        "achieved": ["aced the test", "finished the project", "got the internship", "submitted everything on time",
+                     "won the hackathon", "fixed the bug", "got selected", "finished my workout"],
+    },
+    "hi_roman": {
+        "low_adj": ["udaas", "pareshan", "akela", "dukhi", "tension mein", "bechain", "low", "thaka hua"],
+        "when": ["aaj", "aaj raat", "is hafte", "kuch dino se", "abhi", "subah se"],
+        "reason": ["assignment", "placement", "project", "deadline", "college", "marks", "viva", "exam"],
+        "good_adj": ["khush", "excited", "proud", "relaxed", "mast", "badhiya"],
+        "achieved": ["test acche se gaya", "project khatam ho gaya", "internship mil gayi", "sab time pe submit ho gaya",
+                     "hackathon jeet gaye", "bug fix ho gaya", "selection ho gaya", "workout poora ho gaya"],
+    },
+    "hi_deva": {
+        "low_adj": ["उदास", "परेशान", "अकेला", "दुखी", "टेंशन में", "बेचैन", "थका हुआ"],
+        "when": ["आज", "आज रात", "इस हफ्ते", "कुछ दिनों से", "अभी", "सुबह से"],
+        "reason": ["असाइनमेंट", "प्लेसमेंट", "प्रोजेक्ट", "डेडलाइन", "कॉलेज", "मार्क्स", "वाइवा", "परीक्षा"],
+        "good_adj": ["खुश", "उत्साहित", "गर्व महसूस", "रिलैक्स", "मस्त"],
+        "achieved": ["टेस्ट अच्छा गया", "प्रोजेक्ट पूरा हो गया", "इंटर्नशिप मिल गई", "सब समय पर जमा हो गया",
+                     "हैकाथॉन जीत गए", "बग ठीक हो गया", "सिलेक्शन हो गया"],
+    },
+}
+
+# Compliments and plain "bahut" facts: without these the head learned "bahut … ho/hai" = sad.
+for script, fill in {
+    "en": {"nice": ["cute", "sweet", "smart", "funny", "helpful", "adorable", "kind", "clever"],
+           "thing": ["the weather", "this movie", "the tea", "this room", "my code", "the traffic"],
+           "fact": ["really hot", "very long", "too sweet", "super crowded", "very quiet", "so slow"]},
+    "hi_roman": {"nice": ["cute", "sweet", "smart", "funny", "helpful", "pyare", "achhe", "mast", "samajhdar"],
+                 "thing": ["aaj", "bahar", "ye movie", "chai", "ye kamra", "traffic"],
+                 "fact": ["bahut garmi hai", "bahut lambi hai", "bahut meethi hai", "bahut thanda hai", "bahut bheed hai", "bahut slow hai"]},
+    "hi_deva": {"nice": ["प्यारे", "अच्छे", "क्यूट", "स्मार्ट", "मज़ेदार", "समझदार", "मीठे"],
+                "thing": ["आज", "बाहर", "ये फिल्म", "चाय", "ये कमरा", "ट्रैफिक"],
+                "fact": ["बहुत गर्मी है", "बहुत लंबी है", "बहुत मीठी है", "बहुत ठंडा है", "बहुत भीड़ है"]},
+}.items():
+    MOOD_FILL[script].update(fill)
+
+T_MOOD_EXTRA = {
+    "en": [("good", "you are so {nice} pebble"), ("good", "pebble you're really {nice}"), ("good", "aww you're {nice}"),
+           ("neutral", "{thing} is {fact} today"), ("neutral", "{thing} is {fact}")],
+    "hi_roman": [("good", "pebble tum bahut {nice} ho"), ("good", "tu kitna {nice} hai yaar"), ("good", "tum sach mein {nice} ho"),
+                 ("good", "pebble tu bada {nice} hai"), ("neutral", "{thing} {fact}"), ("neutral", "yaar {thing} {fact}")],
+    "hi_deva": [("good", "पेबल तुम बहुत {nice} हो"), ("good", "तू कितना {nice} है"), ("good", "तुम सच में {nice} हो"),
+                ("neutral", "{thing} {fact}"), ("neutral", "यार {thing} {fact}")],
+}
+
+T_MOOD = {
+    "en": [
+        ("low", "i feel {low_adj} {when}"), ("low", "{when} has been {bad}"), ("low", "i'm so {low_adj} about {reason}"),
+        ("low", "{reason} is stressing me out"), ("low", "i don't feel like doing anything {when}"),
+        ("low", "ugh {reason} again, i hate this"), ("low", "i messed up {reason} and feel {low_adj}"),
+        ("low", "not in a good place {when}"), ("low", "everything about {reason} feels too much"),
+        ("good", "i'm so {good_adj} {when}"), ("good", "{when} was {great}"), ("good", "i {achieved}!"),
+        ("good", "{achieved} and i feel {good_adj}"), ("good", "yay i {achieved}"), ("good", "feeling {good_adj} {when}"),
+        ("good", "life is {great} {when}"),
+    ],
+    "hi_roman": [
+        ("low", "{when} bahut {low_adj} feel ho raha hai"), ("low", "{reason} ki wajah se bahut tension hai"),
+        ("low", "{reason} se {low_adj} hu yaar"), ("low", "kisi cheez mein mann nahi lag raha {when}"),
+        ("low", "{when} se dil bhaari hai"), ("low", "{reason} kharab ho gaya, ab kya karu"),
+        ("low", "main {when} thoda {low_adj} hu"), ("low", "sab kuch galat ho raha hai {when}"),
+        ("good", "{when} bahut {good_adj} hu"), ("good", "{achieved}, maza aa gaya"), ("good", "yaar {achieved}!"),
+        ("good", "{when} full {good_adj} mood hai"), ("good", "{achieved} toh {good_adj} feel ho raha hai"),
+        ("good", "{when} ka din zabardast raha"),
+    ],
+    "hi_deva": [
+        ("low", "{when} बहुत {low_adj} महसूस हो रहा है"), ("low", "{reason} की वजह से बहुत टेंशन है"),
+        ("low", "{reason} से {low_adj} हूं"), ("low", "किसी चीज़ में मन नहीं लग रहा {when}"),
+        ("low", "{when} से दिल भारी है"), ("low", "मैं {when} थोड़ा {low_adj} हूं"), ("low", "सब कुछ गलत हो रहा है {when}"),
+        ("good", "{when} बहुत {good_adj} हूं"), ("good", "{achieved}, मज़ा आ गया"), ("good", "अरे {achieved}!"),
+        ("good", "{when} मूड एकदम {good_adj} है"), ("good", "{achieved} तो बहुत अच्छा लग रहा है"),
+        ("good", "{when} का दिन ज़बरदस्त रहा"),
+    ],
+}
+
+
+#: Warm words in small talk: compliments and thanks are a good mood, not a low one.
+_WARM = {"cute", "love", "best", "awesome", "thank", "thanks", "favourite", "nice", "job", "shukriya", "badhiya", "mast",
+         "pyare", "क्यूट", "प्यारे", "धन्यवाद", "शुक्रिया", "बढ़िया", "अच्छे"}
+
+
+def small_talk_mood(intent: str, tokens: list[str]) -> str | None:
+    """Mood label for template small talk (commands get "neutral" in train_intent.mood_of)."""
+    if intent not in ("general_greet", "general_joke", "general_quirky"):
+        return None
+    return "good" if any(t.lower().strip("!?.,") in _WARM for t in tokens) else "neutral"
+
+
 _FIELD = re.compile(r"\{(\w+)\}")
 
 
@@ -279,10 +377,13 @@ def _words(t: str) -> set[str]:
     return set(re.sub(r"[^\w\s]", " ", t.lower()).split())
 
 
+EVAL_FILES = ("pebble_commands_v0.jsonl", "pebble_commands_v1.jsonl", "mood_v1.jsonl")
+
+
 def eval_texts() -> list[set[str]]:
     out = []
-    for name in ("v0", "v1"):
-        p = ROOT / "eval" / f"pebble_commands_{name}.jsonl"
+    for name in EVAL_FILES:
+        p = ROOT / "eval" / name
         if p.exists():
             out += [_words(json.loads(l)["text"]) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     return out
@@ -311,7 +412,26 @@ def generate(per_template: int = 30, seed: int = 0, leak_threshold: float = 0.6)
                     dropped += 1
                     continue
                 part = "dev" if rng.random() < 0.1 else "train"
-                out.append(Example(tokens, tags, intent, script, part))
+                out.append(Example(tokens, tags, intent, script, part, small_talk_mood(intent, tokens)))
+    # Mood sentences: small talk to the command model, labelled for the mood head.
+    for script, templates in ((k, T_MOOD[k] + T_MOOD_EXTRA[k]) for k in T_MOOD):
+        fill = MOOD_FILL[script]
+        for mood, template in templates:
+            for _ in range(per_template):
+                text = _FIELD.sub(lambda m: rng.choice(fill[m.group(1)]), template)
+                tokens = text.split()
+                if script == "hi_roman":
+                    tokens = chatify(tokens, rng)
+                key = " ".join(tokens).lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                w = _words(key)
+                if any(len(w & e) / len(w | e) >= leak_threshold for e in held_out):
+                    dropped += 1
+                    continue
+                part = "dev" if rng.random() < 0.1 else "train"
+                out.append(Example(tokens, ["O"] * len(tokens), "general_quirky", script, part, mood))
     print(f"pebble data: {len(out)} sentences ({dropped} dropped as too close to the eval sets)")
     return out
 

@@ -5,6 +5,7 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import dev.pebble.core.brain.IntentGuess
+import dev.pebble.core.brain.MoodGuess
 import dev.pebble.core.brain.Understanding
 import dev.pebble.core.brain.Understood
 import kotlinx.serialization.json.Json
@@ -32,6 +33,9 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
     private val tags: List<String>
     /** Calibration temperature from labels.json (brain/calibrate.py); 1.0 for uncalibrated models. */
     private val temperature: Float
+    /** Mood head labels and temperature; null for models trained before the mood head. */
+    private val moods: List<String>?
+    private val moodTemperature: Float
 
     init {
         System.setProperty("offline", "true") // DJL: never try to download a native library
@@ -43,6 +47,8 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
         intents = labels.getValue("intents").jsonArray.map { it.jsonPrimitive.content }
         tags = labels.getValue("tags").jsonArray.map { it.jsonPrimitive.content }
         temperature = labels["temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
+        moods = labels["moods"]?.jsonArray?.map { it.jsonPrimitive.content }
+        moodTemperature = labels["mood_temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(threads)
             setInterOpNumThreads(1)
@@ -76,7 +82,14 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
                         if (wid >= 1 && wid <= words.size && firstPiece[(wid - 1).toInt()] == -1) firstPiece[(wid - 1).toInt()] = pos
                     }
                     val wordTags = firstPiece.map { pos -> if (pos < 0) "O" else tags[argmax(slotLogits[pos])] }
-                    return Understood(words, guesses, wordTags)
+                    val mood = moods?.takeIf { out.size() >= 3 }?.let { names ->
+                        @Suppress("UNCHECKED_CAST")
+                        val z = (out[2].value as Array<FloatArray>)[0]
+                        val p = softmax(FloatArray(z.size) { z[it] / moodTemperature })
+                        val k = argmax(p)
+                        MoodGuess(names[k], p[k])
+                    }
+                    return Understood(words, guesses, wordTags, mood)
                 }
             }
         }

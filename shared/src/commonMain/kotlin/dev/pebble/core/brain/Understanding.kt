@@ -3,6 +3,11 @@ package dev.pebble.core.brain
 /** One intent the model considered, with its probability. */
 data class IntentGuess(val intent: String, val confidence: Float)
 
+/** The mood head's reading of a sentence: low | neutral | good, calibrated. */
+data class MoodGuess(val mood: String, val confidence: Float) {
+    val isLow: Boolean get() = mood == "low"
+}
+
 /** A Pebble action with the summed probability of every intent that maps to it, plus its best intent. */
 data class ActionGuess(val action: String, val confidence: Float, val bestIntent: String)
 
@@ -14,6 +19,8 @@ data class Understood(
     val words: List<String>,
     val guesses: List<IntentGuess>,
     val tags: List<String>,
+    /** Null for models without a mood head. */
+    val mood: MoodGuess? = null,
 ) {
     val top: IntentGuess get() = guesses.first()
 

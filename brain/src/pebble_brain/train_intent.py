@@ -17,7 +17,7 @@ import torch
 from torch import nn
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
-from .intent_model import BASE, IntentSlotModel, Labels, encode_words
+from .intent_model import BASE, MOODS, IntentSlotModel, Labels, encode_words
 from .massive import Example, label_sets, load
 from .pebble_data import chatify, generate
 
@@ -32,14 +32,26 @@ def batches(examples: list[Example], size: int, shuffle: bool, seed: int = 0):
         yield [examples[j] for j in order[i:i + size]]
 
 
+#: Small-talk intents can carry feelings ("i'm so tired"), so without a template label their mood is unknown.
+SMALL_TALK = {"general_quirky", "general_greet", "general_joke"}
+
+
+def mood_of(e: Example) -> str | None:
+    """Template mood if given; commands are neutral; unlabelled small talk is left out of the mood loss."""
+    if e.mood:
+        return e.mood
+    return None if e.intent in SMALL_TALK or e.script == "feedback" else "neutral"
+
+
 def make_targets(batch, firsts, labels: Labels, seq_len: int):
     intents = torch.tensor([labels.intents.index(e.intent) for e in batch])
+    moods = torch.tensor([MOODS.index(m) if (m := mood_of(e)) else -100 for e in batch])
     tags = torch.full((len(batch), seq_len), -100)  # -100 = ignored by the loss (sub-pieces, padding, prefix)
     for i, e in enumerate(batch):
         for w, pos in enumerate(firsts[i]):
             if e.tags[w]:  # "" = slot unknown (feedback examples): leave it out of the slot loss
                 tags[i, pos] = labels.tags.index(e.tags[w])
-    return intents, tags
+    return intents, tags, moods
 
 
 def main() -> None:
@@ -49,6 +61,7 @@ def main() -> None:
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--no-pebble", action="store_true", help="MASSIVE only (the v0 recipe)")
+    ap.add_argument("--mood-weight", type=float, default=0.5, help="weight of the mood head's loss")
     ap.add_argument("--pebble-repeat", type=int, default=3, help="times each Pebble template sentence is seen per epoch")
     ap.add_argument("--chat", type=float, default=0.3, help="share of Roman-Hindi MASSIVE words given chat spelling")
     ap.add_argument("--feedback", default=None,
@@ -86,11 +99,14 @@ def main() -> None:
     # Heads learn fast from scratch; the pretrained encoder gets a gentler learning rate.
     opt = torch.optim.AdamW([
         {"params": model.encoder.parameters(), "lr": args.lr},
-        {"params": list(model.intent_head.parameters()) + list(model.slot_head.parameters()), "lr": args.lr * 20},
+        {"params": [p for head in (model.intent_head, model.slot_head, model.mood_head) for p in head.parameters()], "lr": args.lr * 20},
     ], weight_decay=0.01)
     steps = args.epochs * ((len(train) + args.batch - 1) // args.batch)
     sched = get_linear_schedule_with_warmup(opt, int(0.06 * steps), steps)
     ce = nn.CrossEntropyLoss(ignore_index=-100)
+    counts = torch.tensor([sum(mood_of(e) == m for e in train) for m in MOODS], dtype=torch.float)
+    mood_ce = nn.CrossEntropyLoss(weight=(counts.sum() / (len(MOODS) * counts.clamp(min=1))).to(device), ignore_index=-100)
+    print(f"mood labels: {dict(zip(MOODS, counts.int().tolist()))}")
     scaler = torch.amp.GradScaler(enabled=device == "cuda")
 
     for epoch in range(args.epochs):
@@ -98,10 +114,13 @@ def main() -> None:
         t0, total, n = time.time(), 0.0, 0
         for batch in batches(train, args.batch, shuffle=True, seed=epoch):
             enc, firsts = encode_words(tokenizer, [e.tokens for e in batch])
-            intents, tags = make_targets(batch, firsts, labels, enc["input_ids"].shape[1])
+            intents, tags, moods = make_targets(batch, firsts, labels, enc["input_ids"].shape[1])
             with torch.autocast(device_type=device, dtype=torch.float16, enabled=device == "cuda"):
-                il, sl = model(enc["input_ids"].to(device), enc["attention_mask"].to(device))
+                il, sl, ml = model(enc["input_ids"].to(device), enc["attention_mask"].to(device))
                 loss = ce(il.float(), intents.to(device)) + ce(sl.float().transpose(1, 2), tags.to(device))
+                if (moods != -100).any():
+                    # Class-balanced: neutral commands outnumber feelings ~50:1.
+                    loss = loss + args.mood_weight * mood_ce(ml.float(), moods.to(device))
             opt.zero_grad()
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
@@ -129,7 +148,7 @@ def dev_intent_accuracy(model, tokenizer, dev, labels: Labels, device: str) -> f
     right = 0
     for batch in batches(dev, 128, shuffle=False):
         enc, _ = encode_words(tokenizer, [e.tokens for e in batch])
-        il, _ = model(enc["input_ids"].to(device), enc["attention_mask"].to(device))
+        il, _, _ = model(enc["input_ids"].to(device), enc["attention_mask"].to(device))
         right += sum(labels.intents[k] == e.intent for k, e in zip(il.argmax(-1).tolist(), batch))
     model.train()
     return right / len(dev)

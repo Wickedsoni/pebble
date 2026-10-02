@@ -29,6 +29,8 @@ class Example:
     intent: str
     script: str
     partition: str  # train | dev | test
+    #: low | neutral | good, or None = no mood label (left out of the mood loss)
+    mood: str | None = None
 
     @property
     def text(self) -> str:

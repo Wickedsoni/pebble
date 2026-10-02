@@ -32,6 +32,7 @@ class OnnxParityTest {
         val rows = Json.parseToJsonElement(Files.readString(ref)).jsonArray
         OnnxIntentModel(dir).use { model ->
             var tokens = 0; var intents = 0; var tags = 0; var maxDp = 0f
+            var moods = 0; var moodRows = 0
             for (row in rows) {
                 val r = row.jsonObject
                 val text = r.getValue("text").jsonPrimitive.content
@@ -41,8 +42,14 @@ class OnnxParityTest {
                 if (got.top.intent == r.getValue("intent").jsonPrimitive.content) intents++
                 if (got.tags == r.getValue("tags").jsonArray.map { it.jsonPrimitive.content }) tags++
                 maxDp = maxOf(maxDp, abs(got.top.confidence - r.getValue("p").jsonPrimitive.float))
+                r["mood"]?.let { want ->
+                    moodRows++
+                    if (got.mood?.mood == want.jsonPrimitive.content) moods++
+                    maxDp = maxOf(maxDp, abs((got.mood?.confidence ?: 0f) - r.getValue("mood_p").jsonPrimitive.float))
+                }
             }
-            println("parity over ${rows.size}: tokens $tokens, intents $intents, slot tags $tags, max |Δp| $maxDp")
+            println("parity over ${rows.size}: tokens $tokens, intents $intents, slot tags $tags, moods $moods/$moodRows, max |Δp| $maxDp")
+            assertEquals(moodRows, moods, "moods differ")
             assertEquals(rows.size, tokens, "token ids differ")
             assertEquals(rows.size, intents, "intents differ")
             assertEquals(rows.size, tags, "slot tags differ")

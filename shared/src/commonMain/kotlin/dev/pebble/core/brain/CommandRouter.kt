@@ -39,13 +39,23 @@ class CommandRouter(
         val text = input.trim()
         if (text.isEmpty()) return null
         QuickAddParser.parseStrict(text, today())?.let { return Routed.Run(it, Source.RULES) }
-        // Feelings first: a low mood deserves a caring reply, never a joke or a "did you mean".
-        if (Replies.isLowMood(text)) return Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
-
+        val lowByWords = Replies.isLowMood(text)
         val understood = model()?.understand(text)
-            ?: return Routed.Run(QuickCommand.AddNote(text), Source.FALLBACK)
+            ?: return if (lowByWords) Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
+            else Routed.Run(QuickCommand.AddNote(text), Source.FALLBACK)
+        // Feelings: a low mood (word list, or the mood head for what words miss — "sab galat ho raha hai")
+        // gets a caring reply instead of a joke or a "did you mean". A real command still runs:
+        // "tension hai, kal 5 baje yaad dila dena" sets the reminder.
+        val decision = policy.decide(understood)
+        val lowByModel = understood.mood?.let { it.isLow && it.confidence >= LOW_MOOD_BAR } == true
+        if (lowByWords || lowByModel) {
+            val action = (decision as? DecisionPolicy.Decision.Act)?.guess?.action
+            if (action == null || action == A.CHITCHAT || action == A.OTHER) {
+                return Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), if (lowByWords) Source.RULES else Source.MODEL, understood)
+            }
+        }
 
-        return when (val d = policy.decide(understood)) {
+        return when (val d = decision) {
             is DecisionPolicy.Decision.Act -> {
                 val cmd = toCommand(d.guess.action, understood, text, d.guess.bestIntent)
                 if (cmd != null) Routed.Run(cmd, Source.MODEL, understood, d.guess.action) else askWhen(text, understood)
@@ -157,6 +167,9 @@ class CommandRouter(
     }
 
     companion object {
+        /** Calibrated mood-head probability needed to answer with care instead of acting. */
+        const val LOW_MOOD_BAR = 0.7f
+
         private val weekdayNames = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
         /** "Today", "Tomorrow", or the weekday name [offset] days from [today]. */

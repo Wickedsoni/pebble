@@ -79,6 +79,21 @@ def evaluate(ckpt: pathlib.Path, eval_set: str = EVAL_SET) -> dict:
         report["pebble"][script] = {"n": s["n"], "action_acc": s["right"] / max(1, s["n"]), "misses": s["misses"]}
     report["pebble_only"] = pebble_only
 
+    # Mood head on the frozen mood set (models from before the head have none).
+    mood_path = ROOT / "eval" / "mood_v1.jsonl"
+    if getattr(pred, "has_mood", False) and mood_path.exists():
+        mrows = [json.loads(l) for l in mood_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+        got = pred.moods([r["text"].split() for r in mrows])
+        by = defaultdict(lambda: [0, 0])
+        misses = []
+        for r, (m, p) in zip(mrows, got):
+            by[r["script"]][0] += m == r["mood"]
+            by[r["script"]][1] += 1
+            if m != r["mood"]:
+                misses.append({"text": r["text"], "want": r["mood"], "got": m, "p": round(p, 2)})
+        report["mood"] = {"acc": sum(v[0] for v in by.values()) / len(mrows),
+                          "by_script": {k: v[0] / v[1] for k, v in by.items()}, "misses": misses}
+
     # Latency on CPU for a single command — the number that matters on an 8 GB, no-GPU laptop.
     cpu = Predictor(ckpt, device="cpu")
     import torch
@@ -106,6 +121,11 @@ def print_report(r: dict) -> None:
     print("\nPebble-only actions (handled by rules today, prototypes in M2):")
     for x in r["pebble_only"]:
         print(f"     {x['want']:<14} {x['text']!r} -> model says {x['model_says']}")
+    if "mood" in r:
+        m = r["mood"]
+        print(f"\nMood head (eval/mood_v1): {m['acc']:.0%}  " + "  ".join(f"{k} {v:.0%}" for k, v in m["by_script"].items()))
+        for x in m["misses"]:
+            print(f"     x {x['text']!r} -> {x['got']} ({x['p']}) want {x['want']}")
     print(f"\nCPU latency: {r['cpu_ms_per_command_4_threads']:.1f} ms per command (4 threads, unquantised PyTorch)")
 
 

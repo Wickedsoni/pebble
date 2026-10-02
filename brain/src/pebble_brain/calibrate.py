@@ -23,7 +23,7 @@ import onnxruntime as ort
 import torch
 from transformers import AutoTokenizer
 
-from .intent_model import Labels, encode_words
+from .intent_model import MOODS, Labels, encode_words
 from .massive import load
 from .pebble_data import generate
 from .pebble_intents import to_pebble
@@ -41,7 +41,8 @@ def ece(probs: np.ndarray, correct: np.ndarray, bins: int = 15) -> float:
     return float(total)
 
 
-def logits_for(ckpt: pathlib.Path, sentences: list[list[str]], batch: int = 64) -> np.ndarray:
+def logits_for(ckpt: pathlib.Path, sentences: list[list[str]], batch: int = 64, output: int = 0) -> np.ndarray:
+    """One output of the int8 model for every sentence: 0 = intent logits, 2 = mood logits."""
     tok = AutoTokenizer.from_pretrained(ckpt / "tokenizer")
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = 4
@@ -49,9 +50,9 @@ def logits_for(ckpt: pathlib.Path, sentences: list[list[str]], batch: int = 64) 
     out = []
     for i in range(0, len(sentences), batch):
         enc, _ = encode_words(tok, sentences[i:i + batch])
-        il, _ = sess.run(None, {"input_ids": enc["input_ids"].numpy().astype(np.int64),
-                                "attention_mask": enc["attention_mask"].numpy().astype(np.int64)})
-        out.append(il)
+        outs = sess.run(None, {"input_ids": enc["input_ids"].numpy().astype(np.int64),
+                               "attention_mask": enc["attention_mask"].numpy().astype(np.int64)})
+        out.append(outs[output])
     return np.concatenate(out)
 
 
@@ -77,6 +78,27 @@ def fit_temperature(logits: np.ndarray, gold: np.ndarray, to_action: np.ndarray)
 def softmax(z: np.ndarray) -> np.ndarray:
     e = np.exp(z - z.max(1, keepdims=True))
     return e / e.sum(1, keepdims=True)
+
+
+def calibrate_mood(ckpt: pathlib.Path, report: dict) -> float | None:
+    """Mood temperature on mood dev sentences + as many neutral MASSIVE dev commands. None if no mood head."""
+    sess = ort.InferenceSession(str(ckpt / "intent.int8.onnx"), providers=["CPUExecutionProvider"])
+    if len(sess.get_outputs()) < 3:
+        return None
+    mood_dev = [e for e in generate() if e.partition == "dev" and e.mood]
+    neutral = [e for e in load() if e.partition == "dev" and e.intent not in ("general_quirky", "general_greet", "general_joke")]
+    neutral = neutral[:: max(1, len(neutral) // len(mood_dev))][: len(mood_dev)]
+    dev = mood_dev + neutral
+    gold = np.array([MOODS.index(e.mood or "neutral") for e in dev])
+    z = logits_for(ckpt, [e.tokens for e in dev], output=2)
+    t = fit_temperature(z, gold, np.eye(len(MOODS)))
+    p = softmax(z / t)
+    right = p.argmax(1) == gold
+    report["mood_temperature"] = round(t, 4)
+    report["mood"] = {"n": len(dev), "acc": float(right.mean()), "ece_before": ece(softmax(z).max(1), right),
+                      "ece_after": ece(p.max(1), right)}
+    print(f"mood T = {t:.3f}  dev acc {right.mean():.1%}  ECE {report['mood']['ece_before']:.3f} -> {report['mood']['ece_after']:.3f}  (n={len(dev)})")
+    return t
 
 
 def calibrate(ckpt: pathlib.Path) -> dict:
@@ -111,9 +133,14 @@ def calibrate(ckpt: pathlib.Path) -> dict:
         report["by_script"][script] = row
         print(f"{script:<10} {row['n']:>5} {row['action_acc']:>10.1%} {row['ece_old']:>8.3f} {row['ece_new']:>8.3f}")
 
+    mood_t = calibrate_mood(ckpt, report)
+
     path = ckpt / "labels.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     data["temperature"] = round(t, 4)
+    if mood_t is not None:
+        data["moods"] = MOODS
+        data["mood_temperature"] = round(mood_t, 4)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     (ckpt / "calibration.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
     return report

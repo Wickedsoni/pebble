@@ -2,63 +2,60 @@
   "models": [
     {
       "name": "intent",
-      "version": "v1-pruned",
-      "task": "command intent + slots (en / hi_deva / hi_roman)",
+      "version": "v2-pruned",
+      "task": "command intent + slots + mood (en / hi_deva / hi_roman)",
       "base": "intfloat/multilingual-e5-small (MIT), vocab pruned 250002 -> 26649",
-      "trained_on": "Amazon MASSIVE 1.1 en-US + hi-IN (CC BY 4.0) + rule-based Roman transliteration with chat spelling + Pebble template data (pebble_data.py, ~1.7k sentences x3)",
+      "trained_on": "Amazon MASSIVE 1.1 en-US + hi-IN (CC BY 4.0) + rule-based Roman transliteration with chat spelling + Pebble template data (pebble_data.py, ~1.7k sentences x3) + mood templates (low/neutral/good, incl. compliments) + in-app feedback when present",
       "files": {
         "model": {
-          "path": "intent-v1-pruned/intent.int8.onnx",
-          "bytes": 32636152,
-          "sha256": "481111ae4f8c077311f1b03d068506fb299670439c6adebed6386ffaf7e25699"
+          "path": "intent-v2-pruned/intent.int8.onnx",
+          "bytes": 32654499,
+          "sha256": "8139782cfd76aa58f1eebfb3701872098aed9cd6a87150f6d1d84246c2fd2c36"
         },
         "tokenizer": {
-          "path": "intent-v1-pruned/tokenizer/tokenizer.json",
-          "bytes": 2028413,
-          "sha256": "0b0444329266f372549d89deeb89af5cb0b4dba6a7e3a4984f96b32dc09cf7a5"
+          "path": "intent-v2-pruned/tokenizer/tokenizer.json",
+          "bytes": 2031133,
+          "sha256": "21404126790c79c4cdf98671b277b8de0103d42cbbf742106a5e35714272ee3d"
         },
         "labels": {
-          "path": "intent-v1-pruned/labels.json",
-          "bytes": 3520,
-          "sha256": "7ec0a4720ef38e0d59b07e48a1e6dd70500e19406425405b6570d893b9e16749"
-        }
-      },
-      "metrics": {
-        "massive_test_intent_acc_pytorch": {
-          "en": 0.8823,
-          "hi_deva": 0.8638,
-          "hi_roman": 0.7983
-        },
-        "massive_test_slot_f1_pytorch": {
-          "en": 0.7269,
-          "hi_deva": 0.6457,
-          "hi_roman": 0.5447
-        },
-        "pebble_v1_model_action_acc_pytorch": {
-          "en": 1.0,
-          "hi_roman": 0.9474,
-          "hi_deva": 0.9474
-        },
-        "pebble_v1_router_int8": {
-          "right": 61,
-          "right_or_first_choice": 65,
-          "of": 68
-        },
-        "cpu_latency_ms_int8_4_threads_median": 4.8
-      },
-      "previous": {
-        "version": "v0-pruned",
-        "pebble_v1_router_int8": {
-          "right": 58,
-          "right_or_first_choice": 61,
-          "of": 68
+          "path": "intent-v2-pruned/labels.json",
+          "bytes": 3601,
+          "sha256": "e2ea6f79d0e8c58f7aeea03c27859b3eec05e1967d8c3b22dc5b6ba312b48256"
         }
       },
       "calibration": {
-        "temperature": 1.0854,
-        "level": "pebble action (summed intent probs; unsupported intents kept separate)",
-        "ece_before": 0.0251,
-        "ece_after": 0.0109
+        "temperature": 1.095,
+        "mood_temperature": 1.0394,
+        "ece_after": 0.0116
+      },
+      "metrics": {
+        "massive_test_intent_acc_pytorch": {
+          "en": 0.8853,
+          "hi_deva": 0.8605,
+          "hi_roman": 0.7986
+        },
+        "pebble_v1_model_action_acc_pytorch": {
+          "en": 1.0,
+          "hi_roman": 1.0,
+          "hi_deva": 0.9474
+        },
+        "mood_v1_acc_pytorch": 0.8667,
+        "pebble_v1_router_int8": {
+          "right": 65,
+          "right_or_first_choice": 67,
+          "acted_wrongly": 0,
+          "of": 68
+        },
+        "cpu_latency_ms_int8_4_threads_median": 3.8
+      },
+      "previous": {
+        "version": "v1-pruned",
+        "pebble_v1_router_int8": {
+          "right": 64,
+          "right_or_first_choice": 65,
+          "acted_wrongly": 2,
+          "of": 68
+        }
       }
     }
   ]

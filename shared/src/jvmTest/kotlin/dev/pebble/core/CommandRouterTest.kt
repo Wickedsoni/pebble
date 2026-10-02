@@ -5,6 +5,7 @@ import dev.pebble.core.brain.CommandRouter
 import dev.pebble.core.brain.CommandRouter.Routed
 import dev.pebble.core.brain.CommandRouter.Source
 import dev.pebble.core.brain.IntentGuess
+import dev.pebble.core.brain.MoodGuess
 import dev.pebble.core.brain.Replies
 import dev.pebble.core.brain.Understanding
 import dev.pebble.core.brain.Understood
@@ -115,14 +116,13 @@ class CommandRouterTest {
     }
 
     @Test
-    fun lowMoodGetsACaringReplyBeforeTheModel() {
-        var asked = false
-        val router = CommandRouter({ asked = true; null })
+    fun lowMoodGetsACaringReply() {
+        // With no model (or the model reading small talk), a low mood always gets care, never a joke.
+        val router = CommandRouter({ null })
         for (t in listOf("aaj mood thoda off hai", "आज मेरा मूड ठीक नहीं है", "i'm feeling a bit low today", "padhai me mann nhi lag rha", "आज किसी काम में मन नहीं है")) {
             val r = router.route(t) as Routed.Run
             assertEquals(QuickCommand.Chitchat(t, Replies.LOW_MOOD), r.command)
         }
-        assertTrue(!asked)
         assertTrue(!Replies.isLowMood("my phone battery is low"))
         assertTrue(Replies.chitchat("aaj mood thoda off hai", Replies.LOW_MOOD).isNotBlank())
     }
@@ -175,5 +175,25 @@ class CommandRouterTest {
         repo.record("y", "remind", null, at = 2)
         repo.markWrong(id)
         assertEquals(listOf("wrong", "picked"), repo.all().map { it.outcome })
+    }
+
+    @Test
+    fun moodHeadCatchesLowMoodWithoutTheWordList() {
+        val text = "sab kuch galat ho raha hai"
+        val reading = Understood(text.split(" "), listOf(IntentGuess("general_quirky", 0.8f)), List(5) { "O" }, MoodGuess("low", 0.9f))
+        val r = CommandRouter({ model(text to reading) }).route(text) as Routed.Run
+        assertEquals(QuickCommand.Chitchat(text, Replies.LOW_MOOD), r.command)
+        // Not sure enough about the mood: normal small talk.
+        val unsure = reading.copy(mood = MoodGuess("low", 0.55f))
+        assertEquals("general_quirky", ((CommandRouter({ model(text to unsure) }).route(text) as Routed.Run).command as QuickCommand.Chitchat).intent)
+    }
+
+    @Test
+    fun aRealCommandStillRunsWhenTheMoodIsLow() {
+        val text = "tension hai kal 7 baje padhai yaad dila dena"
+        val tags = listOf("O", "O", "B-date", "B-time", "I-time", "O", "O", "O", "O")
+        val reading = Understood(text.split(" "), listOf(IntentGuess("calendar_set", 0.9f)), tags, MoodGuess("low", 0.95f))
+        val r = CommandRouter({ model(text to reading) }).route(text) as Routed.Run
+        assertIs<QuickCommand.RemindAt>(r.command)
     }
 }

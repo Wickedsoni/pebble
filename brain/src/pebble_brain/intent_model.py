@@ -1,7 +1,8 @@
 """M1: the common base (a multilingual encoder) with two heads trained together.
 
     tokens ─► encoder (multilingual-e5-small) ─► per-token states ─┬─► slot head   (B-time, I-date, O …)
-                                                                     └─► mean pool ─► intent head (60 MASSIVE intents)
+                                                                     └─► mean pool ─┬► intent head (60 MASSIVE intents)
+                                                                                    └► mood head   (low / neutral / good)
 
 Multi-task learning: one loss = intent loss + slot loss, so the shared encoder has to learn both
 *what* you want and *which words* carry the details (times, dates, items). That fixes notebook 02's
@@ -19,6 +20,7 @@ from torch import nn
 from transformers import AutoModel, AutoTokenizer
 
 BASE = "intfloat/multilingual-e5-small"
+MOODS = ["low", "neutral", "good"]
 
 
 class IntentSlotModel(nn.Module):
@@ -29,12 +31,14 @@ class IntentSlotModel(nn.Module):
         self.dropout = nn.Dropout(0.1)
         self.intent_head = nn.Linear(hidden, n_intents)
         self.slot_head = nn.Linear(hidden, n_tags)
+        self.mood_head = nn.Linear(hidden, len(MOODS))
 
     def forward(self, input_ids, attention_mask):
         h = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         mask = attention_mask.unsqueeze(-1).to(h.dtype)
         pooled = (h * mask).sum(1) / mask.sum(1).clamp(min=1)  # mean over real tokens
-        return self.intent_head(self.dropout(pooled)), self.slot_head(self.dropout(h))
+        pooled = self.dropout(pooled)
+        return self.intent_head(pooled), self.slot_head(self.dropout(h)), self.mood_head(pooled)
 
 
 @dataclass
@@ -80,14 +84,17 @@ class Predictor:
         rows = state["encoder.embeddings.word_embeddings.weight"].shape[0]
         if rows != self.model.encoder.get_input_embeddings().num_embeddings:
             self.model.encoder.resize_token_embeddings(rows)
-        self.model.load_state_dict(state)
+        # Checkpoints from before the mood head (intent-v0/v1) load with an untrained mood head.
+        missing, unexpected = self.model.load_state_dict(state, strict=False)
+        assert not unexpected and set(missing) <= {"mood_head.weight", "mood_head.bias"}, (missing, unexpected)
+        self.has_mood = not missing
         self.model.to(self.device).eval()
 
     @torch.no_grad()
     def predict(self, words_batch: list[list[str]]):
         enc, firsts = encode_words(self.tokenizer, words_batch)
         enc = {k: v.to(self.device) for k, v in enc.items() if k in ("input_ids", "attention_mask")}
-        intent_logits, slot_logits = self.model(enc["input_ids"], enc["attention_mask"])
+        intent_logits, slot_logits, _ = self.model(enc["input_ids"], enc["attention_mask"])
         probs = intent_logits.softmax(-1).cpu()
         slot_ids = slot_logits.argmax(-1).cpu()
         out = []
@@ -97,3 +104,11 @@ class Predictor:
             tags += ["O"] * (len(words) - len(tags))  # words cut by truncation
             out.append((self.labels.intents[k], float(p), tags))
         return out
+
+    @torch.no_grad()
+    def moods(self, words_batch: list[list[str]]) -> list[tuple[str, float]]:
+        """Mood head reading per sentence: (low | neutral | good, probability)."""
+        enc, _ = encode_words(self.tokenizer, words_batch)
+        _, _, mood_logits = self.model(enc["input_ids"].to(self.device), enc["attention_mask"].to(self.device))
+        p = mood_logits.softmax(-1).cpu()
+        return [(MOODS[int(row.argmax())], float(row.max())) for row in p]

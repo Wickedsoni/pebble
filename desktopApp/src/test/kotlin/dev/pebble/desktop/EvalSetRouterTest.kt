@@ -75,9 +75,9 @@ class EvalSetRouterTest {
     }
 
     companion object {
-        /** intent-v1-pruned, 2026-10-02. Raise this when a better model ships. */
+        /** intent-v2-pruned, 2026-10-02. Raise this when a better model ships. */
         /** Doing the wrong thing without asking; may never go up. */
-        const val MAX_ACTED_WRONGLY = 2
-        const val BASELINE_RIGHT_OR_ASKED = 65 // intent-v1-pruned + DecisionPolicy: 64 right + 1 asked, of 68
+        const val MAX_ACTED_WRONGLY = 0
+        const val BASELINE_RIGHT_OR_ASKED = 67 // intent-v2-pruned: 65 right + 2 asked, of 68
     }
 }

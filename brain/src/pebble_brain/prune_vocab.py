@@ -7,7 +7,9 @@ Why: multilingual-e5-small has 250k sentencepiece tokens for ~100 languages; the
 
 What we keep (the tokenizer has no byte fallback, so coverage matters):
   1. special tokens (<s> <pad> </s> <unk> <mask>)
-  2. every piece used to tokenise MASSIVE train+dev in all three scripts
+  2. every piece used to tokenise the training data: MASSIVE train+dev in all three scripts, the same
+     Roman Hindi in chat spelling (krna, rha, h), Pebble's template sentences and your feedback —
+     anything the model learned from must tokenise exactly as it did in training
   3. every 1–2 character piece made only of Latin / Devanagari / digits / punctuation — so any
      unseen word in those scripts can still be spelled out, never becoming <unk>
   4. the top-K highest-scoring pieces in those scripts, so unseen words get natural splits
@@ -21,6 +23,7 @@ identical-tokenisation rate, <unk> rate, then the normal evaluation of the prune
 from __future__ import annotations
 
 import argparse
+import random
 import json
 import pathlib
 import re
@@ -29,7 +32,9 @@ import shutil
 import torch
 from transformers import AutoTokenizer
 
+from .feedback import from_db
 from .massive import load
+from .pebble_data import chatify, generate
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 _ALLOWED = re.compile(r"^[▁A-Za-z0-9ऀ-ॿ‌‍\s.,!?'\"()\-:;/&%+@#₹$*=<>\[\]{}|_~`^]+$")
@@ -37,7 +42,12 @@ _ALLOWED = re.compile(r"^[▁A-Za-z0-9ऀ-ॿ‌‍\s.,!?'\"()\-:;/&%+@#₹$*=<>
 
 def choose(tokenizer, vocab: list, top_k: int) -> list[int]:
     keep = {0, 1, 2, 3, len(vocab) - 1}  # specials incl. <mask> (last)
-    texts = [e.tokens for e in load() if e.partition in ("train", "dev")]
+    massive = [e for e in load() if e.partition in ("train", "dev")]
+    rng = random.Random(0)
+    texts = [e.tokens for e in massive]
+    texts += [chatify(e.tokens, rng, p=1.0) for e in massive if e.script == "hi_roman"]
+    texts += [e.tokens for e in generate()]
+    texts += [e.tokens for e in from_db()[0]]
     for i in range(0, len(texts), 512):
         for ids in tokenizer(texts[i:i + 512], is_split_into_words=True)["input_ids"]:
             keep.update(ids)

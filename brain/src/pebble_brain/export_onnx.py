@@ -22,7 +22,7 @@ import torch
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from .evaluate import EVAL_SET, pebble_eval
-from .intent_model import Predictor, encode_words
+from .intent_model import MOODS, Predictor, encode_words
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -42,9 +42,9 @@ def export(ckpt: pathlib.Path) -> None:
     fp32 = ckpt / "intent.onnx"
     torch.onnx.export(
         _Graph(pred.model), (enc["input_ids"], enc["attention_mask"]), str(fp32),
-        input_names=["input_ids", "attention_mask"], output_names=["intent_logits", "slot_logits"],
+        input_names=["input_ids", "attention_mask"], output_names=["intent_logits", "slot_logits", "mood_logits"],
         dynamic_axes={"input_ids": {0: "batch", 1: "seq"}, "attention_mask": {0: "batch", 1: "seq"},
-                      "intent_logits": {0: "batch"}, "slot_logits": {0: "batch", 1: "seq"}},
+                      "intent_logits": {0: "batch"}, "slot_logits": {0: "batch", 1: "seq"}, "mood_logits": {0: "batch"}},
         opset_version=17, dynamo=False,
     )
     int8 = ckpt / "intent.int8.onnx"
@@ -63,32 +63,39 @@ def export(ckpt: pathlib.Path) -> None:
         e, _ = encode_words(pred.tokenizer, [r["text"].split()])
         feeds = {"input_ids": e["input_ids"].numpy().astype(np.int64), "attention_mask": e["attention_mask"].numpy().astype(np.int64)}
         t0 = time.perf_counter()
-        il, _ = sess.run(None, feeds)
+        il = sess.run(None, feeds)[0]
         times.append((time.perf_counter() - t0) * 1000)
         agree += pred.labels.intents[int(il[0].argmax())] == want
     print(f"int8 agrees with PyTorch on {agree}/{len(rows)} Pebble commands")
 
     # Calibrate the int8 model (writes "temperature" into labels.json); parity below uses the same T.
     from .calibrate import calibrate
-    temperature = calibrate(ckpt)["temperature"]
+    cal = calibrate(ckpt)
+    temperature, mood_t = cal["temperature"], cal.get("mood_temperature")
 
     # parity.json: what the int8 model says for every eval sentence, so Kotlin can prove it reads
-    # commands identically (OnnxParityTest): token ids, intent, confidence, slot tags.
+    # commands identically (OnnxParityTest): token ids, intent, confidence, slot tags, mood.
     parity = []
-    for name in ("v0", "v1"):
-        path = ROOT / "eval" / f"pebble_commands_{name}.jsonl"
+    for name in ("pebble_commands_v0.jsonl", "pebble_commands_v1.jsonl", "mood_v1.jsonl"):
+        path = ROOT / "eval" / name
         for line in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
             if not line.strip():
                 continue
             words = json.loads(line)["text"].split()
             e, firsts = encode_words(pred.tokenizer, [words])
-            il, sl = sess.run(None, {"input_ids": e["input_ids"].numpy().astype(np.int64),
-                                     "attention_mask": e["attention_mask"].numpy().astype(np.int64)})
+            il, sl, *rest = sess.run(None, {"input_ids": e["input_ids"].numpy().astype(np.int64),
+                                            "attention_mask": e["attention_mask"].numpy().astype(np.int64)})
             z = il[0] / temperature
             probs = np.exp(z - z.max()); probs /= probs.sum()
             k = int(probs.argmax())
             parity.append({"text": " ".join(words), "input_ids": e["input_ids"][0].tolist(), "intent": pred.labels.intents[k],
                            "p": float(probs[k]), "tags": [pred.labels.tags[int(sl[0, i].argmax())] for i in firsts[0]]})
+            if rest and mood_t:
+                mz = rest[0][0] / mood_t
+                mp = np.exp(mz - mz.max())
+                mp /= mp.sum()
+                parity[-1]["mood"] = MOODS[int(mp.argmax())]
+                parity[-1]["mood_p"] = float(mp.max())
     (ckpt / "parity.json").write_text(json.dumps(parity, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"parity.json: {len(parity)} reference readings")
     print(f"ONNX Runtime int8 CPU latency (4 threads): median {np.median(times):.1f} ms, p95 {np.percentile(times, 95):.1f} ms")
