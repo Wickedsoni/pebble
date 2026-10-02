@@ -11,6 +11,7 @@ import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserGtcrnModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserModelConfig
 import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import com.k2fsa.sherpa.onnx.WaveReader
+import dev.pebble.desktop.voice.WhisperText
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.math.sqrt
@@ -66,7 +67,9 @@ fun main(args: Array<String>) {
     val dump = Files.newBufferedWriter(asr.resolve("asr-hyps.jsonl"))
     fun js(x: String) = "\"" + x.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     for (size in models) {
-        val dir = asr.resolve("sherpa-onnx-whisper-$size")
+        // Packaged by brain prepare_asr.py: hex token table, so Devanagari survives (see WhisperText).
+        val dir = brain.resolve("models/asr-whisper-$size")
+        val hex = Files.exists(dir.resolve("HEX_TOKENS"))
         val recognizer = OfflineRecognizer(
             OfflineRecognizerConfig.builder().setOfflineModelConfig(
                 OfflineModelConfig.builder().setWhisper(
@@ -95,7 +98,7 @@ fun main(args: Array<String>) {
                     val t0 = System.nanoTime()
                     recognizer.decode(s)
                     decodeMs += (System.nanoTime() - t0) / 1_000_000
-                    val hyp = recognizer.getResult(s).text
+                    val hyp = recognizer.getResult(s).text.let { if (hex) WhisperText.fromHex(it) else it }
                     s.release()
                     audioMs += x.size * 1000L / w.sampleRate
                     dump.write(
