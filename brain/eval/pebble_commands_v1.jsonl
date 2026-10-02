@@ -1,0 +1,68 @@
+{"text": "remind me abt the dbms viva tmrw 10am", "script": "en", "action": "remind"}
+{"text": "ping me in 15 mins to take the clothes off the line", "script": "en", "action": "remind"}
+{"text": "wake me at 6:30 pls", "script": "en", "action": "remind"}
+{"text": "dont let me forget to pay the wifi bill on monday", "script": "en", "action": "remind"}
+{"text": "need to submit the os lab file by friday evening, remind me", "script": "en", "action": "remind"}
+{"text": "add eggs and bread to my shopping list", "script": "en", "action": "add_note"}
+{"text": "jot this down ask sir about internal marks", "script": "en", "action": "add_note"}
+{"text": "what did i write in my notes", "script": "en", "action": "notes_query"}
+{"text": "which reminders r left for today", "script": "en", "action": "reminders_query"}
+{"text": "anything scheduled for tomorrow?", "script": "en", "action": "reminders_query"}
+{"text": "cancel the 6:30 alarm", "script": "en", "action": "reminder_remove"}
+{"text": "clear my shopping list", "script": "en", "action": "note_remove"}
+{"text": "yo whats the time rn", "script": "en", "action": "time_query"}
+{"text": "hey pebble wassup", "script": "en", "action": "chitchat"}
+{"text": "make me laugh pebble say smth funny", "script": "en", "action": "chitchat"}
+{"text": "youre the best little buddy", "script": "en", "action": "chitchat"}
+{"text": "play some lofi", "script": "en", "action": "other"}
+{"text": "hows the weather outside", "script": "en", "action": "other"}
+{"text": "just had 2 glasses of water", "script": "en", "action": "log_water"}
+{"text": "remember that my roll number is 21CS045", "script": "en", "action": "remember_fact"}
+{"text": "ugh im so tired and stressed today", "script": "en", "action": "mood"}
+{"text": "stretch reminder every hour gentle", "script": "en", "action": "set_interval"}
+{"text": "kal subah 8 bje yaad dila dena DBMS viva h", "script": "hi_roman", "action": "remind"}
+{"text": "aadhe ghante baad chai banana yaad dilana", "script": "hi_roman", "action": "remind"}
+{"text": "friday wali meeting yaad dila dena 4 baje", "script": "hi_roman", "action": "remind"}
+{"text": "mujhe 6 baje utha dena", "script": "hi_roman", "action": "remind"}
+{"text": "raat 10 baje mummy ko call krna h remind krdena", "script": "hi_roman", "action": "remind"}
+{"text": "tmrw 9am class h, remind kr dena", "script": "hi_roman", "action": "remind"}
+{"text": "list me doodh aur atta daal do", "script": "hi_roman", "action": "add_note"}
+{"text": "ek note bana lo project ka topic finalize krna h", "script": "hi_roman", "action": "add_note"}
+{"text": "meri notes dikhao", "script": "hi_roman", "action": "notes_query"}
+{"text": "aaj ke reminders kya h", "script": "hi_roman", "action": "reminders_query"}
+{"text": "kal ka kya plan h mera", "script": "hi_roman", "action": "reminders_query"}
+{"text": "subah wala alarm hata do", "script": "hi_roman", "action": "reminder_remove"}
+{"text": "shopping list saaf kr do", "script": "hi_roman", "action": "note_remove"}
+{"text": "abhi time kya ho rha h", "script": "hi_roman", "action": "time_query"}
+{"text": "kya haal h pebble", "script": "hi_roman", "action": "chitchat"}
+{"text": "ek joke sunao na", "script": "hi_roman", "action": "chitchat"}
+{"text": "tum bahut cute ho yaar", "script": "hi_roman", "action": "chitchat"}
+{"text": "arijit ke gaane bajao", "script": "hi_roman", "action": "other"}
+{"text": "bahar baarish ho rhi h kya", "script": "hi_roman", "action": "other"}
+{"text": "abhi 2 glass paani piya", "script": "hi_roman", "action": "log_water"}
+{"text": "yaad rakhna ki mera exam 20 tareekh ko h", "script": "hi_roman", "action": "remember_fact"}
+{"text": "aaj mann nahi lag rha kuch bhi krne ka", "script": "hi_roman", "action": "mood"}
+{"text": "har 40 minute me paani yaad dilana", "script": "hi_roman", "action": "set_interval"}
+{"text": "कल सुबह आठ बजे याद दिला देना", "script": "hi_deva", "action": "remind"}
+{"text": "आधे घंटे बाद चाय बनाने की याद दिलाना", "script": "hi_deva", "action": "remind"}
+{"text": "शुक्रवार को चार बजे मीटिंग है याद दिला देना", "script": "hi_deva", "action": "remind"}
+{"text": "मुझे सुबह छह बजे उठा देना", "script": "hi_deva", "action": "remind"}
+{"text": "रात दस बजे मम्मी को कॉल करना है", "script": "hi_deva", "action": "remind"}
+{"text": "कल 9 बजे DBMS की क्लास है याद दिलाना", "script": "hi_deva", "action": "remind"}
+{"text": "लिस्ट में दूध और आटा जोड़ दो", "script": "hi_deva", "action": "add_note"}
+{"text": "नोट बना लो प्रोजेक्ट का टॉपिक फाइनल करना है", "script": "hi_deva", "action": "add_note"}
+{"text": "मेरे नोट्स दिखाओ", "script": "hi_deva", "action": "notes_query"}
+{"text": "आज के लिए कितने रिमाइंडर बचे हैं", "script": "hi_deva", "action": "reminders_query"}
+{"text": "कल के लिए मैंने क्या क्या सेट किया है", "script": "hi_deva", "action": "reminders_query"}
+{"text": "सुबह वाला अलार्म हटा दो", "script": "hi_deva", "action": "reminder_remove"}
+{"text": "शॉपिंग लिस्ट खाली कर दो", "script": "hi_deva", "action": "note_remove"}
+{"text": "अभी टाइम क्या हो रहा है", "script": "hi_deva", "action": "time_query"}
+{"text": "क्या हाल है पेबल", "script": "hi_deva", "action": "chitchat"}
+{"text": "पेबल कुछ मज़ेदार बोलो ना", "script": "hi_deva", "action": "chitchat"}
+{"text": "तुम सच में बहुत क्यूट हो यार", "script": "hi_deva", "action": "chitchat"}
+{"text": "अरिजीत के गाने चलाओ", "script": "hi_deva", "action": "other"}
+{"text": "आज छाता ले जाऊं क्या, मौसम कैसा है", "script": "hi_deva", "action": "other"}
+{"text": "अभी दो गिलास पानी पिया", "script": "hi_deva", "action": "log_water"}
+{"text": "याद रखना मेरा एग्जाम बीस तारीख को है", "script": "hi_deva", "action": "remember_fact"}
+{"text": "आज कुछ भी करने का मन नहीं है", "script": "hi_deva", "action": "mood"}
+{"text": "हर चालीस मिनट में पानी की याद दिलाना", "script": "hi_deva", "action": "set_interval"}

@@ -1,10 +1,10 @@
 """Frozen evaluation for the M1 command model. Never train on what's evaluated here.
 
-Run:  uv run python -m pebble_brain.evaluate models/intent-v0
+Run:  uv run python -m pebble_brain.evaluate models/intent-v0 [v1|v0]
 
 Reports, per script (en / hi_deva / hi_roman):
   * MASSIVE test: intent accuracy and slot span F1 (exact match of slot type + words)
-  * Pebble commands (eval/pebble_commands_v0.jsonl): action accuracy after mapping MASSIVE → Pebble,
+  * Pebble commands (eval/pebble_commands_<set>.jsonl, default v1): action accuracy after mapping MASSIVE → Pebble,
     for actions the model can produce; Pebble-only actions are listed separately (rules / M2 prototypes)
 Writes eval.json next to the checkpoint so models can be compared over time.
 """
@@ -22,7 +22,13 @@ from .massive import load
 from .pebble_intents import MODEL_ACTIONS, PEBBLE_ONLY_ACTIONS, to_pebble
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-PEBBLE_EVAL = ROOT / "eval" / "pebble_commands_v0.jsonl"
+# v1 is the frozen gate: messy, code-mixed phrasing, checked to share no sentence with v0 or MASSIVE.
+# v0 (clean draft) is kept so old numbers stay comparable.
+EVAL_SET = "v1"
+
+
+def pebble_eval(name: str) -> pathlib.Path:
+    return ROOT / "eval" / f"pebble_commands_{name}.jsonl"
 
 
 def spans(tags: list[str]) -> set[tuple[str, int, int]]:
@@ -35,9 +41,9 @@ def spans(tags: list[str]) -> set[tuple[str, int, int]]:
     return out
 
 
-def evaluate(ckpt: pathlib.Path) -> dict:
+def evaluate(ckpt: pathlib.Path, eval_set: str = EVAL_SET) -> dict:
     pred = Predictor(ckpt)
-    report: dict = {"checkpoint": str(ckpt), "massive_test": {}, "pebble": {}}
+    report: dict = {"checkpoint": str(ckpt), "eval_set": eval_set, "massive_test": {}, "pebble": {}}
 
     test = [e for e in load() if e.partition == "test"]
     by_script = defaultdict(list)
@@ -54,7 +60,7 @@ def evaluate(ckpt: pathlib.Path) -> dict:
         f1 = 2 * tp / max(1, 2 * tp + fp + fn)
         report["massive_test"][script] = {"n": len(exs), "intent_acc": right / len(exs), "slot_f1": f1}
 
-    rows = [json.loads(l) for l in PEBBLE_EVAL.read_text(encoding="utf-8").splitlines() if l.strip()]
+    rows = [json.loads(l) for l in pebble_eval(eval_set).read_text(encoding="utf-8").splitlines() if l.strip()]
     results = pred.predict([r["text"].split() for r in rows])
     per = defaultdict(lambda: {"n": 0, "right": 0, "misses": []})
     pebble_only = []
@@ -83,7 +89,7 @@ def evaluate(ckpt: pathlib.Path) -> dict:
         cpu.predict([r["text"].split()])
     report["cpu_ms_per_command_4_threads"] = (time.perf_counter() - t0) / 30 * 1000
 
-    (ckpt / "eval.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ckpt / ("eval.json" if eval_set == "v0" else f"eval-{eval_set}.json")).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     print_report(report)
     return report
 
@@ -92,7 +98,7 @@ def print_report(r: dict) -> None:
     print("\nMASSIVE test            intent acc   slot F1")
     for s, m in r["massive_test"].items():
         print(f"  {s:<10} (n={m['n']:<4})   {m['intent_acc']:>8.1%}   {m['slot_f1']:>7.1%}")
-    print(f"\nPebble commands (actions the model covers: {', '.join(MODEL_ACTIONS)})")
+    print(f"\nPebble commands, eval set {r.get('eval_set', 'v0')} (actions the model covers: {', '.join(MODEL_ACTIONS)})")
     for s, m in r["pebble"].items():
         print(f"  {s:<10} {m['action_acc']:.0%} of {m['n']}")
         for miss in m["misses"]:
@@ -104,4 +110,4 @@ def print_report(r: dict) -> None:
 
 
 if __name__ == "__main__":
-    evaluate(ROOT / (sys.argv[1] if len(sys.argv) > 1 else "models/intent-v0"))
+    evaluate(ROOT / (sys.argv[1] if len(sys.argv) > 1 else "models/intent-v0"), sys.argv[2] if len(sys.argv) > 2 else EVAL_SET)

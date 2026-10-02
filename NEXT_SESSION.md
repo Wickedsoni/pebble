@@ -49,12 +49,18 @@ Then refresh `models/manifest.json` (checksum) and `parity.json` before running 
 ## Known weak spots
 - Hindi chit-chat ("tum bahut cute ho") and some short Hinglish lines still trigger "Did you mean".
 - Roman-Hindi slot F1 is only 52%, because its training data is machine-transliterated.
-- The eval set (`brain/eval/pebble_commands_v0.jsonl`) is a draft I wrote, not your real phrasing.
+- Eval set v1 (`brain/eval/pebble_commands_v1.jsonl`, 68 lines) is written to *look* like real use (typos, "h"/"krna",
+  mixed scripts), but it's still Claude's phrasing, not yours. Add your own lines anytime; keep them out of training.
 - The model is only found in the dev layout (`brain/models/...`); the installer doesn't ship it yet.
 
 ## Next session plan (in order)
-1. **Your real commands:** about 50 sentences you'd actually type or say, in all three scripts.
-   They become eval set v1 and replace my draft.
+1. ~~Eval set v1~~ — done: 68 lines (22 en / 23 Roman / 23 Devanagari), no sentence shared with v0 or MASSIVE
+   (word-overlap check < 0.75). Baselines for intent-v0-pruned:
+   - model alone (`python -m pebble_brain.evaluate models/intent-v0 v1`): 47/56 = 84% (en 83, Roman 79, Deva 89)
+   - full router (`EvalSetRouterTest`): 54/68 right, 59/68 right or right-first-choice. **Gate: ≥ 59.**
+   Misses to target in step 2: "aadhe ghante baad" (HinglishTime has no "half an hour"), Hindi mood without the
+   word "mood" ("mann nahi lag rha"), "kya haal h", "note bana lo", "jot this down", "dont let me forget … monday"
+   (read as calendar_remove, 0.92).
 2. **Retrain with feedback (active learning):** export `command_feedback` from `%APPDATA%\Pebble\pebble.db`,
    add those pairs plus a small set of hand-labelled Hinglish chit-chat, retrain, and keep the new model only if it
    beats the current one on the frozen eval set.
