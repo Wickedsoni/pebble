@@ -34,7 +34,7 @@ class MigrationTest {
         val db = DatabaseFactory.create(copy)
         CommandFeedbackRepository(db).all() // reads the new column: fails if the migration didn't run
         DriverManager.getConnection("jdbc:sqlite:${copy.absolutePath}").use { c ->
-            c.createStatement().use { s -> s.executeQuery("PRAGMA user_version").use { r -> r.next(); assertEquals(5, r.getInt(1)) } }
+            c.createStatement().use { s -> s.executeQuery("PRAGMA user_version").use { r -> r.next(); assertEquals(dev.pebble.db.PebbleDatabase.Schema.version.toInt(), r.getInt(1)) } }
         }
     }
 }

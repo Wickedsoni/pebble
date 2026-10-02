@@ -115,4 +115,21 @@ class MemoryEngineTest {
         assertEquals("my exam is on 20 Oct", memory.byKey(key)!!.text)
         assertTrue(memory.byKey(key)!!.fromUser)
     }
+
+    @Test
+    fun learnedNudgeTimingBecomesAMemoryOnlyWithEvidence() {
+        val policy = dev.pebble.core.brain.NudgePolicy(dev.pebble.core.brain.InMemoryNudgeStore())
+        engine.nudge = policy
+        val ctx = dev.pebble.core.brain.NudgeContext.of(dev.pebble.core.reminders.ReminderKind.WATER, 13, busy = false)
+        repeat(3) { policy.learn(ctx, dev.pebble.core.brain.NudgeArm.WAIT_30, 1.0) }
+        engine.learn()
+        assertTrue(memory.visible().none { it.key.startsWith(MemoryEngine.NUDGE_PREFIX) }, "3 reactions are not enough")
+        repeat(6) {
+            policy.learn(ctx, dev.pebble.core.brain.NudgeArm.WAIT_30, 1.0)
+            policy.learn(ctx, dev.pebble.core.brain.NudgeArm.NOW, 0.0)
+        }
+        engine.learn()
+        val m = memory.visible().single { it.key.startsWith(MemoryEngine.NUDGE_PREFIX) }
+        assertTrue("30 min with water reminders between 12 PM and 4 PM" in m.text, m.text)
+    }
 }

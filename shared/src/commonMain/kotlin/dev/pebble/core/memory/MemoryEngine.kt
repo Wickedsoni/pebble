@@ -1,5 +1,8 @@
 package dev.pebble.core.memory
 
+import dev.pebble.core.brain.NudgeArm
+import dev.pebble.core.brain.NudgeContext
+import dev.pebble.core.brain.NudgePolicy
 import dev.pebble.core.event.PebbleEvent
 import dev.pebble.core.reminders.ReminderAction
 import dev.pebble.core.reminders.ReminderKind
@@ -23,6 +26,8 @@ class MemoryEngine(
     /** Local calendar day number (e.g. epoch day) for a timestamp. */
     private val dayOf: (Long) -> Long,
     private val waterGoalMl: () -> Int,
+    /** The nudge policy, whose learned timing is shown as a memory. Set after construction (it reads [quietHours]). */
+    var nudge: NudgePolicy? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -39,6 +44,34 @@ class MemoryEngine(
         learnStreaks(now)
         learnMood(now)
         learnMedia(now)
+        learnNudgeTiming(now)
+    }
+
+    /**
+     * What the nudge policy learned, in words, once there's real evidence (≥ 5 reactions): "I wait a
+     * bit with water reminders around 12–4 pm". Forgetting it resets that context (PebbleApp.forget).
+     */
+    private fun learnNudgeTiming(now: Long) {
+        val policy = nudge ?: return
+        for (kind in listOf(ReminderKind.WATER, ReminderKind.STRETCH, ReminderKind.EYES)) {
+            for (bucket in 0 until 6) {
+                val ctx = NudgeContext(kind, bucket, busy = false)
+                val key = nudgeMemoryKey(ctx)
+                val e = policy.expected(ctx)
+                val best = e.maxBy { it.value }
+                if (policy.observations(ctx) >= 5 && best.key != NudgeArm.NOW && best.value - e.getValue(NudgeArm.NOW) >= 0.15) {
+                    val from = formatHour(bucket * 4)
+                    val to = formatHour((bucket * 4 + 4) % 24)
+                    memory.putDerived(
+                        MemoryKind.HABIT, key,
+                        "I wait about ${best.key.waitMinutes} min with ${kindName(kind)} reminders between $from and $to — they land better then.",
+                        best.key.name, now,
+                    )
+                } else {
+                    memory.dropDerived(key)
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------------ habits & timing
@@ -175,6 +208,9 @@ class MemoryEngine(
 
         const val KEY_WATER_HOURS = "habit.water.hours"
         const val KEY_QUIET = "habit.quietHours"
+        const val NUDGE_PREFIX = "habit.nudge."
+
+        fun nudgeMemoryKey(ctx: NudgeContext) = "$NUDGE_PREFIX${ctx.kind.name}:${ctx.hourBucket}"
         const val KEY_ACTIVE = "habit.activeHours"
         const val KEY_WATER_STREAK = "streak.water"
         const val KEY_NOTES_DONE = "streak.notes"

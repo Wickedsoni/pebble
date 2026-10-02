@@ -1,0 +1,7 @@
+-- Phase M3: the nudge policy (contextual bandit) learns when repeating reminders land best.
+
+CREATE TABLE nudge_stats (
+    key TEXT NOT NULL PRIMARY KEY,
+    alpha REAL NOT NULL,
+    beta REAL NOT NULL
+);

@@ -58,7 +58,21 @@ class PebbleApp(db: PebbleDatabase) {
         dayOf = { java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() },
         waterGoalMl = { waterGoalGlasses * GLASS_ML },
     )
-    val engine = ReminderEngine(reminders, bus, clock = ::now, minuteOfDay = ::minuteOfDay, quietHours = brain::quietHours)
+    /** Learns when repeating reminders land best (contextual bandit); beliefs persist in the database. */
+    val nudge = dev.pebble.core.brain.NudgePolicy(dev.pebble.core.brain.SqlNudgeStore(db), quietHours = brain::quietHours)
+        .also { brain.nudge = it }
+    val engine = ReminderEngine(
+        reminders, bus, clock = ::now, minuteOfDay = ::minuteOfDay, quietHours = brain::quietHours,
+        nudge = nudge, busy = dev.pebble.desktop.platform.UserActivity::isFullscreenBusy,
+    )
+
+    /** "Forget this" on the Memory page; forgetting a learned nudge timing also resets what was learned there. */
+    fun forget(m: dev.pebble.core.memory.Memory) {
+        memory.forget(m)
+        if (m.key.startsWith(dev.pebble.core.memory.MemoryEngine.NUDGE_PREFIX)) {
+            nudge.resetContext(m.key.removePrefix(dev.pebble.core.memory.MemoryEngine.NUDGE_PREFIX))
+        }
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 

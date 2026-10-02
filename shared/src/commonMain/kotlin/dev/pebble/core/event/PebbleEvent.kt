@@ -73,6 +73,20 @@ sealed interface PebbleEvent {
     @SerialName("mood_logged")
     data class MoodLogged(val score: Int, override val atMillis: Long) : PebbleEvent
 
+    /**
+     * The nudge policy's choice for a repeating reminder that came due, with the probability it had of
+     * choosing that arm — logged so a new policy can later be evaluated offline on real history (IPS).
+     */
+    @Serializable
+    @SerialName("nudge_decided")
+    data class NudgeDecided(
+        val key: String,
+        val context: String,
+        val arm: String,
+        val propensity: Double,
+        override val atMillis: Long,
+    ) : PebbleEvent
+
     @Serializable
     @SerialName("fact_remembered")
     data class FactRemembered(val memoryKey: String, override val atMillis: Long) : PebbleEvent

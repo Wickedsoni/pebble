@@ -11,6 +11,22 @@ CREATE TABLE command_feedback (
     outcome TEXT NOT NULL DEFAULT 'picked'
 );
 
+-- The nudge policy's beliefs (NudgePolicy): Beta(alpha, beta) per "context|arm". Local, resettable.
+CREATE TABLE nudge_stats (
+    key TEXT NOT NULL PRIMARY KEY,
+    alpha REAL NOT NULL,
+    beta REAL NOT NULL
+);
+
+allNudgeStats:
+SELECT * FROM nudge_stats;
+
+saveNudgeStat:
+INSERT OR REPLACE INTO nudge_stats(key, alpha, beta) VALUES (?, ?, ?);
+
+clearNudgeStats:
+DELETE FROM nudge_stats;
+
 insertFeedback:
 INSERT INTO command_feedback(text, chosen_action, model_intent, model_confidence, at_millis, outcome) VALUES (?, ?, ?, ?, ?, ?);
 

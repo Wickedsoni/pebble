@@ -68,7 +68,7 @@ fun MemoryPage(app: PebbleApp) {
                             Text(kind.label, color = c.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
                         }
-                        items(group, key = { it.id }) { MemoryRow(it) { app.memory.forget(it) } }
+                        items(group, key = { it.id }) { MemoryRow(it) { app.forget(it) } }
                     }
                 }
             }
