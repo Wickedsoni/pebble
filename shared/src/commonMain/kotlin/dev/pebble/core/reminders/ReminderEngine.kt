@@ -51,7 +51,7 @@ class ReminderEngine(
             if (!quiet) {
                 repo.rules().filter { it.enabled }.forEach { rule ->
                     val key = ruleKey(rule.id)
-                    val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * 60_000L)
+                    val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * backOff(key) * 60_000L)
                     if (now >= dueAt && inWindow(rule, now) && !deferredByPolicy(key, rule.kind, now)) {
                         add(ActiveReminder(key, rule.kind, rule.title, rule.strictness, dueAt))
                     }
@@ -84,7 +84,7 @@ class ReminderEngine(
     fun upcoming(limit: Int = 5): List<ActiveReminder> {
         val rules = repo.rules().filter { it.enabled }.map { rule ->
             val key = ruleKey(rule.id)
-            val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * 60_000L)
+            val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * backOff(key) * 60_000L)
             ActiveReminder(key, rule.kind, rule.title, rule.strictness, dueAt)
         }
         val once = repo.pendingOneOffs().map {
@@ -109,6 +109,8 @@ class ReminderEngine(
 
             ReminderAction.DONE, ReminderAction.DISMISSED -> {
                 snoozedUntil.remove(key)
+                // Each skip in a row pushes the next one further out (x2, then x3); doing it resets that.
+                if (action == ReminderAction.DISMISSED) skips[key] = (skips[key] ?: 0) + 1 else skips.remove(key)
                 when {
                     key.startsWith(RULE) -> repo.markRuleDone(key.removePrefix(RULE), now)
                     key.startsWith(ONCE) -> repo.markOneOffDone(key.removePrefix(ONCE).toLong(), now)
@@ -151,6 +153,29 @@ class ReminderEngine(
         if (choice.arm == NudgeArm.NOW) return false
         snoozedUntil[key] = now + choice.arm.waitMinutes * 60_000L
         return true
+    }
+
+    private val skips = mutableMapOf<String, Int>()
+
+    private fun backOff(key: String): Int = 1 + (skips[key] ?: 0).coerceAtMost(2)
+
+    /**
+     * Holds a due reminder back for [minutes] without counting it as a reaction — used while you're
+     * watching a video or a fullscreen app, or when a gentle reminder went unanswered.
+     */
+    fun defer(key: String, minutes: Int) {
+        snoozedUntil[key] = clock() + minutes * 60_000L
+        tick()
+    }
+
+    /** "Less often": this repeating reminder's gap grows by half (max 4 h), and this one counts as done. */
+    fun lessOften(key: String): Int? {
+        if (!key.startsWith(RULE)) return null
+        val rule = repo.rules().firstOrNull { it.id == key.removePrefix(RULE) } ?: return null
+        val minutes = (rule.intervalMinutes * 3 / 2).coerceAtMost(240)
+        repo.updateRule(rule.id, minutes, rule.strictness, rule.enabled)
+        act(key, ReminderAction.DONE)
+        return minutes
     }
 
     private fun inWindow(rule: ReminderRule, now: Long): Boolean {

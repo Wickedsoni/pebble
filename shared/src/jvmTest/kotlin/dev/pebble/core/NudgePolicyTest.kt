@@ -87,13 +87,13 @@ class NudgePolicyTest {
         val bus = EventBus()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { bus.events.collect { events += it } }
         val engine = ReminderEngine(repo, bus, clock = { now }, minuteOfDay = { 12 * 60 }, nudge = waiter())
-        repo.addOneOff("Call mom", now + 20 * minute)
+        repo.addOneOff("Call mom", now + 60 * minute)
         fun advance(m: Int) { now += m * minute; engine.tick() }
         fun active() = engine.active.value.map { it.key }.toSet()
 
-        advance(20) // eyes rule (20 min) and the one-off are both due now
-        assertEquals(setOf("once:1"), active(), "the one-off fires on time; the rule waits")
-        val decided = events.filterIsInstance<PebbleEvent.NudgeDecided>().single()
+        advance(60) // eyes + water rules (60 min) and the one-off are all due now
+        assertEquals(setOf("once:1"), active(), "the one-off fires on time; the rules wait")
+        val decided = events.filterIsInstance<PebbleEvent.NudgeDecided>().single { it.key == "rule:eyes" }
         assertEquals("WAIT_30" to "rule:eyes", decided.arm to decided.key)
         advance(29)
         assertTrue("rule:eyes" !in active())
@@ -109,7 +109,7 @@ class NudgePolicyTest {
         val policy = NudgePolicy(store, random = Random(5))
         val engine = ReminderEngine(repo, EventBus(), clock = { now }, minuteOfDay = { 9 * 60 }, nudge = policy)
         fun advance(m: Int) { now += m * minute; engine.tick() }
-        advance(20) // eyes due; a fresh policy starts on time
+        advance(60) // eyes due; a fresh policy starts on time
         val ctx = NudgeContext.of(ReminderKind.EYES, 9, false)
         val before = policy.expected(ctx).getValue(NudgeArm.NOW)
         advance(2)

@@ -11,7 +11,9 @@ import dev.pebble.core.reminders.ActiveReminder
 import dev.pebble.core.reminders.Escalation
 import dev.pebble.core.reminders.EscalationPolicy
 import dev.pebble.core.reminders.ReminderAction
+import dev.pebble.core.reminders.ReminderCopy
 import dev.pebble.core.reminders.ReminderKind
+import dev.pebble.core.reminders.Strictness
 import dev.pebble.core.settings.SettingsRepository.Keys
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.PetLine
@@ -29,7 +31,13 @@ import kotlin.random.Random
 /** A button inside the pet's speech bubble. */
 data class BubbleAction(val label: String, val onClick: () -> Unit)
 
-data class Speech(val text: String, val actions: List<BubbleAction> = emptyList(), val untilMillis: Long? = null)
+/** What the pet says: [text] as the headline, an optional smaller [detail] line, and buttons. */
+data class Speech(
+    val text: String,
+    val actions: List<BubbleAction> = emptyList(),
+    val untilMillis: Long? = null,
+    val detail: String? = null,
+)
 
 /**
  * The pet's behaviour, advanced by [update]. It wanders along the taskbar, naps when you're
@@ -52,6 +60,10 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     var y by mutableFloatStateOf(Float.NaN)
         private set
     var hidden by mutableStateOf(false)
+        private set
+
+    /** A video is in front (even windowed): the pet stays, but reminders wait. */
+    var watching = false
         private set
     var pose by mutableStateOf(PetPose())
         private set
@@ -248,12 +260,22 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         if (time - lastSystemPoll > 2f) {
             lastSystemPoll = time
             area = UserActivity.workArea()
-            hidden = UserActivity.isFullscreenBusy()
+            val fg = UserActivity.foreground()
+            hidden = UserActivity.isFullscreenBusy() || fg.coversScreen
+            // A video app or site in front (YouTube, Netflix, Prime, Hotstar, VLC…): stay quiet, even windowed.
+            watching = fg.title?.let { dev.pebble.desktop.platform.MediaWatcher.match(it) } != null
             idleMillis = UserActivity.idleMillis()
             if (idleMillis < 60_000) noteActivity()
             power = Power.state()
         }
-        if (hidden) return
+        if (hidden || watching) {
+            // Don't pop up over a movie or a fullscreen app: due reminders wait (no reaction counted) and
+            // come back once you're done.
+            app.engine.active.value.forEach { app.engine.defer(it.key, minutes = 5) }
+            if (reminderBubble != null && speech?.text == reminderBubble) speech = null
+            reminderBubble = null
+            if (hidden) return
+        }
 
         val nowMs = now()
         if (transient != null && nowMs > transientUntil) transient = null
@@ -341,13 +363,21 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
     private fun showReminder(r: ActiveReminder, escalation: Escalation) {
         menuOpen = false
-        val text = r.title + if (escalation == Escalation.FOLLOW) "\nI'll stay with you until it's done." else ""
-        val actions = listOf(
-            BubbleAction("Done") { act(r, ReminderAction.DONE) },
-            BubbleAction("Snooze 10m") { act(r, ReminderAction.SNOOZED) },
+        // A gentle reminder you didn't answer in 3 minutes steps aside for half an hour instead of staying up.
+        if (r.strictness == Strictness.GENTLE && now() - r.dueAt > 3 * 60_000L) {
+            app.engine.defer(r.key, minutes = 30)
+            return
+        }
+        val line = copyFor(r)
+        val text = line.headline + if (escalation == Escalation.FOLLOW) "\nI'll stay with you until it's done." else ""
+        val repeating = r.key.startsWith("rule:")
+        val actions = listOfNotNull(
+            BubbleAction("Done ✓") { act(r, ReminderAction.DONE) },
+            BubbleAction("15 min") { act(r, ReminderAction.SNOOZED) },
             BubbleAction("Skip") { act(r, ReminderAction.DISMISSED) },
+            if (repeating) BubbleAction("Less often") { lessOften(r) } else null,
         )
-        if (speech?.text != text) speech = Speech(text, actions)
+        if (speech?.text != text) speech = Speech(text, actions, detail = line.tip)
         reminderBubble = text
         if (escalation == Escalation.TOAST && toasted.add(r.key + r.dueAt)) {
             app.notifier("Pebble", r.title)
@@ -356,14 +386,43 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
     private fun act(r: ActiveReminder, action: ReminderAction) {
         speech = null
-        if (r.kind == ReminderKind.WATER && action == ReminderAction.DONE) app.logWater(1) else app.engine.act(r.key, action)
+        if (r.kind == ReminderKind.WATER && action == ReminderAction.DONE) {
+            app.logWater(1)
+        } else {
+            app.engine.act(r.key, action, snoozeMinutes = 15)
+        }
         react(
             when (action) {
                 ReminderAction.DONE -> PetLine("Nice.", Mood.CELEBRATE, 2_200)
-                ReminderAction.SNOOZED -> PetLine("Okay, in 10 minutes.", Mood.IDLE, 1_800)
+                ReminderAction.SNOOZED -> PetLine("Okay, in 15 minutes.", Mood.IDLE, 1_800)
                 ReminderAction.DISMISSED -> PetLine("", Mood.SAD, 1_200)
             },
         )
+    }
+
+    private fun lessOften(r: ActiveReminder) {
+        speech = null
+        val minutes = app.engine.lessOften(r.key) ?: return
+        react(PetLine("Okay — every ${dev.pebble.desktop.formatMinutes(minutes)} from now on.", Mood.IDLE, 3_000))
+    }
+
+    /** Which line of a reminder kind's copy to use next, so it isn't the same words every time. */
+    private val copyTurn = mutableMapOf<ReminderKind, Int>()
+    private var lastCopyKey: String? = null
+    private var lastCopy: ReminderCopy.Line? = null
+
+    private fun copyFor(r: ActiveReminder): ReminderCopy.Line {
+        val id = r.key + r.dueAt
+        if (id == lastCopyKey) lastCopy?.let { return it }
+        val n = copyTurn.merge(r.kind, 1, Int::plus) ?: 0
+        // Talk the way you talk to Pebble: the script of your last message.
+        val script = app.conversation.recent(1).firstOrNull()?.let { dev.pebble.core.brain.Script.detect(it.said) }
+            ?: dev.pebble.core.brain.Script.EN
+        val line = if (r.key.startsWith("rule:")) ReminderCopy.line(r.kind, n, script) else null
+        return (line ?: ReminderCopy.Line(r.title, "")).also {
+            lastCopyKey = id
+            lastCopy = it
+        }
     }
 
     private fun reminderPose(kind: ReminderKind, escalation: Escalation): PetPose {

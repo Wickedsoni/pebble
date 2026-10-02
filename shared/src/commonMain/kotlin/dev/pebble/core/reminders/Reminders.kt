@@ -79,7 +79,7 @@ enum class ReminderAction { DONE, SNOOZED, DISMISSED }
 
 /** Built-in health reminders, created on first launch. */
 val DefaultRules = listOf(
-    ReminderRule("water", ReminderKind.WATER, "Sip some water", 45, Strictness.NORMAL, true, 8 * 60, 23 * 60, null),
-    ReminderRule("stretch", ReminderKind.STRETCH, "Stand up & stretch", 60, Strictness.GENTLE, true, 8 * 60, 23 * 60, null),
-    ReminderRule("eyes", ReminderKind.EYES, "20-20-20: look 20 ft away for 20 s", 20, Strictness.GENTLE, true, 8 * 60, 23 * 60, null),
+    ReminderRule("water", ReminderKind.WATER, "Sip some water", 60, Strictness.GENTLE, true, 8 * 60, 23 * 60, null),
+    ReminderRule("stretch", ReminderKind.STRETCH, "Stand up & stretch", 90, Strictness.GENTLE, true, 8 * 60, 23 * 60, null),
+    ReminderRule("eyes", ReminderKind.EYES, "Rest your eyes", 60, Strictness.GENTLE, true, 8 * 60, 23 * 60, null),
 )

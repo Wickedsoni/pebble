@@ -1,0 +1,7 @@
+-- v0.1.0 calmer defaults (first real use: "the reminders are very frequent, irritating").
+-- Only rules still at the old defaults change; anything you set yourself is kept.
+
+UPDATE reminder_rule SET interval_minutes = 60, title = 'Rest your eyes' WHERE id = 'eyes' AND interval_minutes = 20;
+UPDATE reminder_rule SET interval_minutes = 60, strictness = 'GENTLE' WHERE id = 'water' AND interval_minutes = 45 AND strictness = 'NORMAL';
+UPDATE reminder_rule SET interval_minutes = 90 WHERE id = 'stretch' AND interval_minutes = 60;
+UPDATE reminder_rule SET title = 'Rest your eyes' WHERE id = 'eyes' AND title LIKE '20-20-20%';

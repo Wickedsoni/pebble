@@ -13,7 +13,7 @@ Pebble is a small pet that lives on your taskbar. It nudges you to drink water, 
 **Requirements:** Windows 10 or 11 (64-bit), about 1 GB of disk space, 8 GB RAM recommended, and a microphone if you want to talk to it.
 
 1. **Download** `Pebble-<version>.msi` from the [latest release](https://github.com/Wickedsoni/pebble/releases/latest). The models are inside, so there's nothing else to download.
-2. **Optional: check the download.** In PowerShell, run `Get-FileHash .\Pebble-0.1.0.msi` and compare the hash with `SHA256SUMS` on the release page.
+2. **Optional: check the download.** In PowerShell, run `Get-FileHash .\Pebble-<version>.msi` and compare the hash with `SHA256SUMS` on the release page.
 3. **Run the installer.** It installs just for you, so no admin rights are needed. Windows may show **"Windows protected your PC"**. That's because the installer isn't code-signed yet (signing certificates are paid, and this is a free project). Click **More info → Run anyway**.
 4. **Start Pebble** from the Start menu. The pet appears on your taskbar.
    - Press **Ctrl+Alt+Space** to type to it.

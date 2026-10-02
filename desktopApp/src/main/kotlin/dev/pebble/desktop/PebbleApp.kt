@@ -314,7 +314,7 @@ class PebbleApp(db: PebbleDatabase) {
                 Mood.IDLE,
             )
 
-            is QuickCommand.Chitchat -> PetLine(dev.pebble.core.brain.Replies.chitchat(cmd.text, cmd.intent), Mood.HAPPY, 5_000)
+            is QuickCommand.Chitchat -> PetLine(dev.pebble.core.brain.Replies.chitchat(cmd.text, cmd.intent, cmd.mood), Mood.HAPPY, 5_000)
 
             is QuickCommand.Unsupported -> PetLine(dev.pebble.core.brain.Replies.unsupported(cmd.text), Mood.IDLE, 5_000)
 

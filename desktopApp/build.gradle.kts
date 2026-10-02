@@ -119,7 +119,7 @@ compose.desktop {
             appResourcesRootDir.set(layout.buildDirectory.dir("model-resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Pebble"
-            packageVersion = "0.1.0"
+            packageVersion = "0.1.1"
             description = "Desktop pet and glass widgets"
             modules("java.sql", "jdk.unsupported")
             windows {

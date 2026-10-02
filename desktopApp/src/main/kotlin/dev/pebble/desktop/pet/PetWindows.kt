@@ -57,7 +57,7 @@ import kotlinx.coroutines.delay
 import java.awt.Cursor
 
 val PET_SIZE = DpSize(96.dp, 100.dp)
-private val BUBBLE_SIZE = DpSize(260.dp, 140.dp)
+private val BUBBLE_SIZE = DpSize(300.dp, 150.dp)
 
 /** The always-on-top, unfocusable window the pet lives in, plus its speech bubble. */
 @Composable
@@ -192,11 +192,21 @@ private fun BubbleCard(speech: Speech, tailShift: Float) {
         Text(
             speech.text,
             color = c.content,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
-            lineHeight = 17.sp,
+            lineHeight = 18.sp,
         )
+        speech.detail?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                it,
+                color = c.secondary,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
         if (speech.actions.isNotEmpty()) {
             FlowRow(
                 Modifier.padding(top = 8.dp),
