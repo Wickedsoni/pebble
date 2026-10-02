@@ -211,4 +211,13 @@ class CommandRouterTest {
         val r = CommandRouter({ model(text to reading) }).route(text) as Routed.Run
         assertIs<QuickCommand.RemindAt>(r.command)
     }
+
+    @Test
+    fun aReminderWithOnlyATimeGetsAPlainTitle() {
+        // Heard by voice in the first real install: the title came out as "Around".
+        val text = "Remind me around 7 o'clock."
+        val reading = u(text, List(5) { "O" }, "calendar_set" to 0.88f)
+        val cmd = (CommandRouter({ model(text to reading) }).route(text) as Routed.Run).command as QuickCommand.RemindAt
+        assertEquals("Reminder" to 7, cmd.title to cmd.hour)
+    }
 }

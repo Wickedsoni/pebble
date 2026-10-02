@@ -44,6 +44,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import dev.pebble.desktop.PebbleApp
+import dev.pebble.desktop.app.pages.ChatPage
 import dev.pebble.desktop.app.pages.CompanionPage
 import dev.pebble.desktop.app.pages.MemoryPage
 import dev.pebble.desktop.app.pages.NotesPage
@@ -65,6 +66,7 @@ import java.awt.Frame
 
 enum class Page(val title: String, val subtitle: String, val icon: ImageVector) {
     TODAY("Today", "Your day at a glance", PebbleIcons.Home),
+    CHAT("Chat", "Everything you've said to Pebble", PebbleIcons.Spark),
     WATER("Water", "Hydration and history", PebbleIcons.Water),
     NOTES("Notes", "Quick thoughts and to-dos", PebbleIcons.Notes),
     REMINDERS("Reminders", "What Pebble nudges you about", PebbleIcons.Bell),
@@ -153,6 +155,8 @@ fun PebbleWindow(
                                     scene = it
                                     app.settings.set(dev.pebble.core.settings.SettingsRepository.Keys.APP_SCENE, it.name)
                                 }
+
+                                Page.CHAT -> ChatPage(app)
 
                                 Page.MEMORY -> MemoryPage(app)
                             }

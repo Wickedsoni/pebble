@@ -132,11 +132,14 @@ fun main(args: Array<String>) {
             quickAddOpen,
             dark,
             quickAddRetry,
-            onRetry = { quickAddRetry = it; quickAddOpen = true },
-        ) { line ->
+            onRetry = {
+                quickAddRetry = it
+                quickAddOpen = true
+            },
+            onPet = pet::react,
+        ) {
             quickAddOpen = false
             quickAddRetry = null
-            line?.let(pet::react)
         }
     }
 }

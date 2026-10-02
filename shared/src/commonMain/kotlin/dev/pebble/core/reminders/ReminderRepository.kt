@@ -1,6 +1,11 @@
 package dev.pebble.core.reminders
 
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
 import dev.pebble.db.PebbleDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 data class OneOffReminder(val id: Long, val title: String, val dueAt: Long, val strictness: Strictness)
 
@@ -44,6 +49,10 @@ class ReminderRepository(private val db: PebbleDatabase) {
 
     /** Removes a reminder outright (used to undo one Pebble created by mistake). */
     fun deleteOneOff(id: Long) = q.deleteOneOff(id)
+
+    /** Live list of one-off reminders still to come, for the Reminders page. */
+    fun pendingOneOffsFlow(): Flow<List<OneOffReminder>> = q.pendingOneOffs().asFlow().mapToList(Dispatchers.Default)
+        .map { rows -> rows.map { OneOffReminder(it.id, it.title, it.due_at, Strictness.parse(it.strictness)) } }
 
     fun markOneOffDone(id: Long, at: Long) = q.markOneOffDone(at, id)
 

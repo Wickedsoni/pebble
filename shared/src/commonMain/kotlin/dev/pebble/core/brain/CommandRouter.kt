@@ -213,6 +213,7 @@ class CommandRouter(
         /** Words that frame a reminder rather than describe it, in all three scripts. */
         private val filler = setOf(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
+            "around", "approximately", "by", "pls", "plz", "dont", "lagbhag", "लगभग",
             "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "dila", "do", "karo", "kar", "ki", "ka", "ke", "ko",
             "reminder", "laga", "lagao", "set", "utha",
             "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "की", "का", "के", "को", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",

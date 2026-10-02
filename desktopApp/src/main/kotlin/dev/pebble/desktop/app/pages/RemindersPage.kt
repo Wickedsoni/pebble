@@ -47,7 +47,9 @@ fun RemindersPage(app: PebbleApp) {
     var version by remember { mutableIntStateOf(0) }
     val rules = remember(version) { app.reminders.rules() }
     val active by app.engine.active.collectAsState()
-    val upcoming = remember(version, active) { app.engine.upcoming(8) }
+    // Live: a reminder added from Quick Add or by voice shows up here at once.
+    val oneOffs by remember { app.reminders.pendingOneOffsFlow() }.collectAsState(initial = app.reminders.pendingOneOffs())
+    val upcoming = remember(version, active, oneOffs) { app.engine.upcoming(8).filter { it.key.startsWith("rule:") } }
     fun update(r: ReminderRule, interval: Int = r.intervalMinutes, strictness: Strictness = r.strictness, enabled: Boolean = r.enabled) {
         app.reminders.updateRule(r.id, interval.coerceIn(5, 240), strictness, enabled)
         app.engine.tick()
@@ -85,7 +87,34 @@ fun RemindersPage(app: PebbleApp) {
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             GlassCard(Modifier.weight(1.4f).fillMaxHeight()) {
-                CardLabel("Coming up", PebbleIcons.Clock)
+                CardLabel("Your reminders · ${oneOffs.size}", PebbleIcons.Clock)
+                if (oneOffs.isEmpty()) {
+                    Text("None yet. Say or type “kal 7 baje mummy ko call” (Ctrl + Alt + Space).", color = c.secondary, fontSize = 12.sp)
+                }
+                oneOffs.forEach { r ->
+                    Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            r.title,
+                            color = c.content,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            Instant.ofEpochMilli(r.dueAt).atZone(ZoneId.systemDefault()).format(dueFormat),
+                            color = c.secondary,
+                            fontSize = 12.sp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(PebbleIcons.Close, size = 22.dp) {
+                            app.reminders.deleteOneOff(r.id)
+                            app.engine.tick()
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                CardLabel("Repeating, next", PebbleIcons.Bell)
                 upcoming.forEach { r ->
                     Row(Modifier.padding(vertical = 5.dp)) {
                         Text(
@@ -104,8 +133,6 @@ fun RemindersPage(app: PebbleApp) {
                         )
                     }
                 }
-                Spacer(Modifier.weight(1f))
-                Text("Add one-off reminders with quick add (Ctrl + Alt + Space): “call mom at 7pm”.", color = c.secondary, fontSize = 12.sp)
             }
             GlassCard(Modifier.weight(1f).fillMaxHeight()) {
                 CardLabel("Learned timing", PebbleIcons.Memory, c.calm)

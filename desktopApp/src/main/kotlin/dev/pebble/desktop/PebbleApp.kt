@@ -205,6 +205,32 @@ class PebbleApp(db: PebbleDatabase) {
 
     fun addNote(text: String): Long = notes.add(text, now()).also { bus.publish(PebbleEvent.NoteCreated(it, now())) }
 
+    /** Your conversation with Pebble (Quick Add and voice), shown in Quick Add and on the Chat page. */
+    val conversation = dev.pebble.core.brain.ConversationRepository(db)
+
+    /**
+     * Everything you say to Pebble goes through here: runs it (with "Not what I meant" when the model chose),
+     * remembers the exchange, and returns Pebble's reply. [via] is "typed" or "voice".
+     */
+    fun converse(text: String, via: String, routed: CommandRouter.Routed.Run, retry: (text: String, wrongAction: String) -> Unit): PetLine {
+        val line = if (routed.source == CommandRouter.Source.MODEL) executeFromModel(text, routed, retry) else execute(routed.command)
+        remember(text, via, routed.command, line)
+        return line
+    }
+
+    /** You picked [option] from "Did you mean…": a strong label for the next model, and a turn in the chat. */
+    fun converseChoice(text: String, via: String, option: CommandRouter.Option, understood: dev.pebble.core.brain.Understood?): PetLine {
+        commandFeedback.record(text.trim(), option.action, understood, now())
+        val line = execute(option.command)
+        remember(text, via, option.command, line)
+        return line
+    }
+
+    private fun remember(text: String, via: String, cmd: QuickCommand, line: PetLine) {
+        val did = describe(cmd)
+        conversation.add(dev.pebble.core.brain.Turn(now(), text.trim(), via, did, line.text.ifBlank { did }))
+    }
+
     /** How to take back what the last [execute] created (a note or reminder); null if nothing to undo. */
     private var lastUndo: (() -> Unit)? = null
 
