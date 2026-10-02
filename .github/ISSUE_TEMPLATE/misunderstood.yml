@@ -1,0 +1,35 @@
+name: Pebble misunderstood me
+description: You typed or said something and Pebble got it wrong. These become test sentences and training data.
+labels: [language]
+body:
+  - type: markdown
+    attributes:
+      value: "Thank you — this is the most useful feedback we get. Please don't include real names, numbers or addresses."
+  - type: input
+    id: said
+    attributes:
+      label: What you typed or said (exactly)
+      placeholder: "friday wali meeting 4 baje yaad dilana"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: Typed or spoken?
+      options: [Typed, Spoken]
+    validations:
+      required: true
+  - type: input
+    id: did
+    attributes:
+      label: What Pebble did
+      placeholder: "Asked 'Did you mean…' / saved it as a note / ..."
+    validations:
+      required: true
+  - type: input
+    id: meant
+    attributes:
+      label: What you meant
+      placeholder: "A reminder on Friday at 4 PM"
+    validations:
+      required: true

@@ -150,8 +150,11 @@ private fun SpeechBubble(controller: PetController, dark: Boolean) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                 AnimatedVisibility(
                     visibleState,
-                    enter = scaleIn(spring(dampingRatio = 0.75f, stiffness = 600f), initialScale = 0.85f,
-                        transformOrigin = TransformOrigin(0.5f, 1f)) + fadeIn(tween(120)),
+                    enter = scaleIn(
+                        spring(dampingRatio = 0.75f, stiffness = 600f),
+                        initialScale = 0.85f,
+                        transformOrigin = TransformOrigin(0.5f, 1f),
+                    ) + fadeIn(tween(120)),
                     exit = fadeOut(tween(150)),
                 ) {
                     shown?.let { BubbleCard(it, tailShift) }
@@ -186,7 +189,14 @@ private fun BubbleCard(speech: Speech, tailShift: Float) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(speech.text, color = c.content, fontSize = 13.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, lineHeight = 17.sp)
+        Text(
+            speech.text,
+            color = c.content,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            lineHeight = 17.sp,
+        )
         if (speech.actions.isNotEmpty()) {
             FlowRow(
                 Modifier.padding(top = 8.dp),

@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,12 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import dev.pebble.desktop.app.CardLabel
-import dev.pebble.desktop.app.Scene
 import dev.pebble.desktop.app.GlassCard
 import dev.pebble.desktop.app.PebbleIcons
+import dev.pebble.desktop.app.Scene
 import dev.pebble.desktop.pet.Character
 import dev.pebble.desktop.pet.Mood
 import dev.pebble.desktop.pet.PetController
@@ -67,10 +67,20 @@ fun CompanionPage(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Canvas(Modifier.size(96.dp)) {
-                            drawPet(ch, pet.stage, if (selected) Mood.HAPPY.defaultPose().copy(motion = dev.pebble.desktop.pet.Motion.STILL) else PetPose(), PetFrame())
+                            drawPet(
+                                ch,
+                                pet.stage,
+                                if (selected) Mood.HAPPY.defaultPose().copy(motion = dev.pebble.desktop.pet.Motion.STILL) else PetPose(),
+                                PetFrame(),
+                            )
                         }
                         Spacer(Modifier.weight(1f))
-                        Text(ch.displayName, color = c.content, fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                        Text(
+                            ch.displayName,
+                            color = c.content,
+                            fontSize = 14.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
                     }
                 }
             }
@@ -79,7 +89,9 @@ fun CompanionPage(
             GlassCard(Modifier.weight(1f).fillMaxHeight()) {
                 CardLabel("Growth stage", PebbleIcons.Spark, c.warm)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Stage.entries.forEach { s -> Chip(s.name.lowercase().replaceFirstChar { it.uppercase() }, s == pet.stage) { pet.chooseStage(s) } }
+                    Stage.entries.forEach { s ->
+                        Chip(s.name.lowercase().replaceFirstChar { it.uppercase() }, s == pet.stage) { pet.chooseStage(s) }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Later, stages unlock as you keep your streaks going.", color = c.secondary, fontSize = 12.sp)
@@ -94,7 +106,8 @@ fun CompanionPage(
                 SettingRow("Show ${pet.character.displayName} on the desktop", petVisible, onPetVisible)
                 SettingRow(
                     if (Autostart.isSupported) "Start with Windows" else "Start with Windows (installed app only)",
-                    autostart, onAutostart,
+                    autostart,
+                    onAutostart,
                 )
             }
         }

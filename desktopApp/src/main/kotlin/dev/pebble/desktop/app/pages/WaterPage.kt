@@ -46,7 +46,9 @@ import java.util.Locale
 @Composable
 fun WaterPage(app: PebbleApp) {
     val c = LocalGlass.current
-    val today by remember { app.water.totalSinceFlow(app.startOfToday()) }.collectAsState(initial = app.water.totalSince(app.startOfToday()))
+    val today by remember {
+        app.water.totalSinceFlow(app.startOfToday())
+    }.collectAsState(initial = app.water.totalSince(app.startOfToday()))
     var goal by remember { mutableIntStateOf(app.waterGoalGlasses) }
     val level by animateFloatAsState((today / GLASS_ML).toFloat() / goal, spring(dampingRatio = 0.45f, stiffness = 120f))
     // Re-read the week whenever today's total changes.
@@ -66,8 +68,13 @@ fun WaterPage(app: PebbleApp) {
             CardLabel("Today", PebbleIcons.Water, c.water)
             Canvas(Modifier.width(110.dp).weight(1f).align(Alignment.CenterHorizontally)) { drawBottle(level.coerceIn(0f, 1f), goal, c) }
             Spacer(Modifier.height(16.dp))
-            Text("${today / GLASS_ML} of $goal glasses", color = c.content, fontSize = 18.sp, fontWeight = FontWeight.Medium,
-                modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(
+                "${today / GLASS_ML} of $goal glasses",
+                color = c.content,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
             Text("$today ml", color = c.secondary, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(14.dp))
             Row(Modifier.align(Alignment.CenterHorizontally), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -82,8 +89,13 @@ fun WaterPage(app: PebbleApp) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth()) {
                     week.forEach { (d, _) ->
-                        Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()), color = c.secondary, fontSize = 11.sp,
-                            textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Text(
+                            d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                            color = c.secondary,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             }
@@ -91,9 +103,20 @@ fun WaterPage(app: PebbleApp) {
                 GlassCard(Modifier.weight(1f).fillMaxHeight()) {
                     CardLabel("Daily goal")
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(PebbleIcons.Minus) { goal = (goal - 1).coerceAtLeast(4); app.settings.set(Keys.WATER_GOAL_GLASSES, "$goal") }
-                        Text("$goal", color = c.content, fontSize = 28.sp, fontWeight = FontWeight.Light, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
-                        IconButton(PebbleIcons.Plus) { goal = (goal + 1).coerceAtMost(16); app.settings.set(Keys.WATER_GOAL_GLASSES, "$goal") }
+                        IconButton(PebbleIcons.Minus) {
+                            goal = (goal - 1).coerceAtLeast(4); app.settings.set(Keys.WATER_GOAL_GLASSES, "$goal")
+                        }
+                        Text(
+                            "$goal",
+                            color = c.content,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Light,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.width(56.dp),
+                        )
+                        IconButton(PebbleIcons.Plus) {
+                            goal = (goal + 1).coerceAtMost(16); app.settings.set(Keys.WATER_GOAL_GLASSES, "$goal")
+                        }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text("glasses of ${GLASS_ML} ml", color = c.secondary, fontSize = 12.sp)
@@ -101,8 +124,18 @@ fun WaterPage(app: PebbleApp) {
                 GlassCard(Modifier.weight(1.4f).fillMaxHeight()) {
                     CardLabel("What I've noticed", PebbleIcons.Memory, c.calm)
                     if (streak != null) BigStat("$streak days", "goal streak", c.warm)
-                    Text(habit ?: "Log a few glasses and I'll learn when you usually drink.", color = if (habit != null) c.content else c.secondary,
-                        fontSize = 13.sp, lineHeight = 18.sp)
+                    Text(
+                        habit ?: "Log a few glasses and I'll learn when you usually drink.",
+                        color = if (habit !=
+                            null
+                        ) {
+                            c.content
+                        } else {
+                            c.secondary
+                        },
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
                 }
             }
         }

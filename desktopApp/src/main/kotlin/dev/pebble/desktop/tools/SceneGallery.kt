@@ -20,8 +20,12 @@ fun main(args: Array<String>) {
             val tile = Surface.makeRasterN32Premul(w * 2, h * 2) // render at window-like size, then shrink
             drawScene(tile.canvas, scene, w * 2, h * 2, dark)
             sheet.canvas.drawImageRect(
-                tile.makeImageSnapshot(), Rect.makeWH(w * 2f, h * 2f),
-                Rect.makeXYWH(col * w.toFloat(), row * h.toFloat(), w.toFloat(), h.toFloat()), SamplingMode.LINEAR, null, true,
+                tile.makeImageSnapshot(),
+                Rect.makeWH(w * 2f, h * 2f),
+                Rect.makeXYWH(col * w.toFloat(), row * h.toFloat(), w.toFloat(), h.toFloat()),
+                SamplingMode.LINEAR,
+                null,
+                true,
             )
         }
     }

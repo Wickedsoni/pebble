@@ -29,7 +29,7 @@ def batches(examples: list[Example], size: int, shuffle: bool, seed: int = 0):
     if shuffle:
         random.Random(seed).shuffle(order)
     for i in range(0, len(order), size):
-        yield [examples[j] for j in order[i:i + size]]
+        yield [examples[j] for j in order[i : i + size]]
 
 
 #: Small-talk intents can carry feelings ("i'm so tired"), so without a template label their mood is unknown.
@@ -64,8 +64,9 @@ def main() -> None:
     ap.add_argument("--mood-weight", type=float, default=0.5, help="weight of the mood head's loss")
     ap.add_argument("--pebble-repeat", type=int, default=3, help="times each Pebble template sentence is seen per epoch")
     ap.add_argument("--chat", type=float, default=0.3, help="share of Roman-Hindi MASSIVE words given chat spelling")
-    ap.add_argument("--feedback", default=None,
-                    help="'auto' (= %%APPDATA%%\Pebble\pebble.db) or a path: train on your in-app labels too")
+    ap.add_argument(
+        "--feedback", default=None, help=r"'auto' (= %%APPDATA%%\Pebble\pebble.db) or a path: train on your in-app labels too"
+    )
     args = ap.parse_args()
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -75,8 +76,12 @@ def main() -> None:
     data = load()
     if args.chat > 0:
         rng = random.Random(0)
-        data = [Example(chatify(e.tokens, rng, args.chat), e.tags, e.intent, e.script, e.partition)
-                if e.script == "hi_roman" and e.partition == "train" else e for e in data]
+        data = [
+            Example(chatify(e.tokens, rng, args.chat), e.tags, e.intent, e.script, e.partition)
+            if e.script == "hi_roman" and e.partition == "train"
+            else e
+            for e in data
+        ]
     labels = Labels(*label_sets(data))
     train = [e for e in data if e.partition == "train"]
     dev = [e for e in data if e.partition == "dev"]
@@ -89,6 +94,7 @@ def main() -> None:
         assert not unknown, f"Pebble data uses tags MASSIVE doesn't have: {unknown}"
     if args.feedback:
         from .feedback import from_db
+
         fb, report = from_db(None if args.feedback == "auto" else pathlib.Path(args.feedback))
         print(f"feedback: {report}")
         train += fb
@@ -97,10 +103,16 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(BASE)
     model = IntentSlotModel(len(labels.intents), len(labels.tags)).to(device)
     # Heads learn fast from scratch; the pretrained encoder gets a gentler learning rate.
-    opt = torch.optim.AdamW([
-        {"params": model.encoder.parameters(), "lr": args.lr},
-        {"params": [p for head in (model.intent_head, model.slot_head, model.mood_head) for p in head.parameters()], "lr": args.lr * 20},
-    ], weight_decay=0.01)
+    opt = torch.optim.AdamW(
+        [
+            {"params": model.encoder.parameters(), "lr": args.lr},
+            {
+                "params": [p for head in (model.intent_head, model.slot_head, model.mood_head) for p in head.parameters()],
+                "lr": args.lr * 20,
+            },
+        ],
+        weight_decay=0.01,
+    )
     steps = args.epochs * ((len(train) + args.batch - 1) // args.batch)
     sched = get_linear_schedule_with_warmup(opt, int(0.06 * steps), steps)
     ce = nn.CrossEntropyLoss(ignore_index=-100)
@@ -128,10 +140,13 @@ def main() -> None:
             scaler.step(opt)
             scaler.update()
             sched.step()
-            total += loss.item(); n += 1
+            total += loss.item()
+            n += 1
         acc = dev_intent_accuracy(model, tokenizer, dev, labels, device)
         pacc = dev_intent_accuracy(model, tokenizer, pebble_dev, labels, device) if pebble_dev else float("nan")
-        print(f"epoch {epoch + 1}: loss {total / n:.3f}  dev intent acc {acc:.1%}  pebble dev {pacc:.1%}  ({time.time() - t0:.0f}s)")
+        print(
+            f"epoch {epoch + 1}: loss {total / n:.3f}  dev intent acc {acc:.1%}  pebble dev {pacc:.1%}  ({time.time() - t0:.0f}s)"
+        )
 
     torch.save(model.state_dict(), out / "model.pt")
     labels.save(out / "labels.json")
@@ -139,6 +154,7 @@ def main() -> None:
     print("saved", out)
 
     from .evaluate import evaluate
+
     evaluate(out, "v1")
 
 

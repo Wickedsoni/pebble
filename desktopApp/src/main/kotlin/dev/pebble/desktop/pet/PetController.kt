@@ -135,8 +135,11 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
                     speech = null
                     app.logMood(i + 1)
                     react(
-                        if (i <= 1) PetLine("Thanks for telling me. Tomorrow's a new one.", Mood.LOVE, 3_500)
-                        else PetLine("Glad to hear it.", Mood.HAPPY, 2_500),
+                        if (i <= 1) {
+                            PetLine("Thanks for telling me. Tomorrow's a new one.", Mood.LOVE, 3_500)
+                        } else {
+                            PetLine("Glad to hear it.", Mood.HAPPY, 2_500)
+                        },
                     )
                 }
             },
@@ -168,14 +171,18 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         }
         if (currentReminder() != null) return // the reminder bubble is already showing
         menuOpen = !menuOpen
-        speech = if (menuOpen) Speech(
-            "What do you need?",
-            listOf(
-                BubbleAction("+1 water") { closeMenu(); react(app.execute(QuickCommand.LogWater(1))) },
-                BubbleAction("Quick add") { closeMenu(); openQuickAdd() },
-                BubbleAction("Open Pebble") { closeMenu(); openApp() },
-            ),
-        ) else null
+        speech = if (menuOpen) {
+            Speech(
+                "What do you need?",
+                listOf(
+                    BubbleAction("+1 water") { closeMenu(); react(app.execute(QuickCommand.LogWater(1))) },
+                    BubbleAction("Quick add") { closeMenu(); openQuickAdd() },
+                    BubbleAction("Open Pebble") { closeMenu(); openApp() },
+                ),
+            )
+        } else {
+            null
+        }
     }
 
     private fun closeMenu() { menuOpen = false; speech = null }
@@ -217,8 +224,11 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
             pose.animated || squash > 0.01f
         return when {
             hidden -> 1_000
+
             behaviour == Behaviour.SLEEPING && speech == null -> 1_000
+
             moving -> if (power.onBattery) 50 else 42
+
             // Still: wake for the next blink edge (open or close) or a 4 Hz gaze check, whichever is first.
             else -> {
                 val toBlinkEdge = ((if (time < blinkUntil) blinkUntil else nextBlink) - time) * 1000f
@@ -251,8 +261,9 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
         val reminder = currentReminder()
         val escalation = reminder?.let { EscalationPolicy.stage(it.strictness, nowMs - it.dueAt) }
-        if (reminder != null) showReminder(reminder, escalation!!)
-        else if (reminderBubble != null) {
+        if (reminder != null) {
+            showReminder(reminder, escalation!!)
+        } else if (reminderBubble != null) {
             // The reminder was handled elsewhere (water widget, quick add, another device): drop its bubble.
             if (speech?.text == reminderBubble) speech = null
             reminderBubble = null
@@ -260,6 +271,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
         when (behaviour) {
             Behaviour.DRAGGING -> Unit
+
             Behaviour.FALLING -> {
                 vy += 2600f * dt
                 y += vy * dt
@@ -270,7 +282,9 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
                     nextDecision = time + 3f
                 }
             }
+
             Behaviour.SLEEPING -> if (idleMillis < 5_000 || reminder != null) behaviour = Behaviour.IDLE
+
             Behaviour.IDLE, Behaviour.WALKING -> {
                 if (y < groundY - 1f) { behaviour = Behaviour.FALLING; vy = 0f }
                 if (escalation == Escalation.FOLLOW) {
@@ -308,12 +322,16 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
         if (time > nextBlink) { blinkUntil = time + 0.15f; nextBlink = time + 3f + Random.nextFloat() * 4f }
         val blink = if (time < blinkUntil) 0.12f else 1f
-        val (lx, ly) = if (behaviour == Behaviour.SLEEPING) 0f to 0f else UserActivity.cursor()?.let { c ->
-            // Quantise gaze so tiny mouse moves don't trigger redraws.
-            val gx = ((c.x - (x + sizeW / 2f)) / 400f).coerceIn(-1f, 1f)
-            val gy = ((c.y - (y + sizeH / 2f)) / 300f).coerceIn(-1f, 1f)
-            (gx * 4).roundToInt() / 4f to (gy * 4).roundToInt() / 4f
-        } ?: (0f to 0f)
+        val (lx, ly) = if (behaviour == Behaviour.SLEEPING) {
+            0f to 0f
+        } else {
+            UserActivity.cursor()?.let { c ->
+                // Quantise gaze so tiny mouse moves don't trigger redraws.
+                val gx = ((c.x - (x + sizeW / 2f)) / 400f).coerceIn(-1f, 1f)
+                val gy = ((c.y - (y + sizeH / 2f)) / 300f).coerceIn(-1f, 1f)
+                (gx * 4).roundToInt() / 4f to (gy * 4).roundToInt() / 4f
+            } ?: (0f to 0f)
+        }
         // Time only matters to animated poses; freezing it otherwise keeps the frame equal so nothing redraws.
         val next = PetFrame(if (pose.animated || squash > 0f) time else 0f, blink, lx, ly, squash)
         if (next != frame) frame = next

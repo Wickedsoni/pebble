@@ -34,7 +34,9 @@ class MemoryEngineTest {
     private val day0 = 20_000 * day // an arbitrary UTC midnight
     private var now = day0 + 10 * day + 12 * hour
     private val engine = MemoryEngine(
-        db, memory, clock = { now },
+        db,
+        memory,
+        clock = { now },
         hourOf = { ((it / hour) % 24).toInt() },
         dayOf = { it / day },
         waterGoalMl = { 2000 },
@@ -66,7 +68,8 @@ class MemoryEngineTest {
         // The reminder engine holds repeating reminders during a learned quiet hour…
         val reminders = ReminderRepository(db).apply { seedDefaults() }
         var t = at(10, 14)
-        val reminderEngine = ReminderEngine(reminders, EventBus(), { t }, { ((it / hour % 24) * 60 + it / 60_000 % 60).toInt() }, engine::quietHours)
+        val reminderEngine =
+            ReminderEngine(reminders, EventBus(), { t }, { ((it / hour % 24) * 60 + it / 60_000 % 60).toInt() }, engine::quietHours)
         t += 3 * hour + 1 // well past every interval, but 17:00 is not quiet…
         reminderEngine.tick()
         assertTrue(reminderEngine.active.value.isNotEmpty())

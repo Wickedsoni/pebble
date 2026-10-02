@@ -34,8 +34,15 @@ class MemoryRepository(private val db: PebbleDatabase) {
     private val q get() = db.memoryQueries
 
     private fun map(
-        id: Long, kind: String, key: String, text: String, data: String?, source: String,
-        @Suppress("UNUSED_PARAMETER") hidden: Long, @Suppress("UNUSED_PARAMETER") created: Long, updated: Long,
+        id: Long,
+        kind: String,
+        key: String,
+        text: String,
+        data: String?,
+        source: String,
+        @Suppress("UNUSED_PARAMETER") hidden: Long,
+        @Suppress("UNUSED_PARAMETER") created: Long,
+        updated: Long,
     ) = Memory(id, MemoryKind.entries.firstOrNull { it.name == kind } ?: MemoryKind.FACT, key, text, data, source == "user", updated)
 
     fun visible(): List<Memory> = q.visibleMemories(::map).executeAsList()

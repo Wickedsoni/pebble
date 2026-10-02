@@ -76,19 +76,31 @@ fun RemindersPage(app: PebbleApp) {
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Text("Gentle: a speech bubble. Normal: then a nudge and a notification. Strict: Pebble follows your cursor until it's done.",
-                color = c.secondary, fontSize = 12.sp, lineHeight = 17.sp)
+            Text(
+                "Gentle: a speech bubble. Normal: then a nudge and a notification. Strict: Pebble follows your cursor until it's done.",
+                color = c.secondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             GlassCard(Modifier.weight(1.4f).fillMaxHeight()) {
                 CardLabel("Coming up", PebbleIcons.Clock)
                 upcoming.forEach { r ->
                     Row(Modifier.padding(vertical = 5.dp)) {
-                        Text(r.title, color = c.content, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(
+                            r.title,
+                            color = c.content,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
                         val overdue = r.dueAt <= dev.pebble.desktop.now()
                         Text(
                             if (overdue) "Due now" else Instant.ofEpochMilli(r.dueAt).atZone(ZoneId.systemDefault()).format(dueFormat),
-                            color = if (overdue) c.warm else c.secondary, fontSize = 12.sp,
+                            color = if (overdue) c.warm else c.secondary,
+                            fontSize = 12.sp,
                         )
                     }
                 }
@@ -98,8 +110,12 @@ fun RemindersPage(app: PebbleApp) {
             GlassCard(Modifier.weight(1f).fillMaxHeight()) {
                 CardLabel("Learned timing", PebbleIcons.Memory, c.calm)
                 val quiet = app.memory.byKey(MemoryEngine.KEY_QUIET)?.text
-                Text(quiet ?: "When you keep skipping reminders at a certain hour, I'll learn to stay quiet then.",
-                    color = if (quiet != null) c.content else c.secondary, fontSize = 13.sp, lineHeight = 18.sp)
+                Text(
+                    quiet ?: "When you keep skipping reminders at a certain hour, I'll learn to stay quiet then.",
+                    color = if (quiet != null) c.content else c.secondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
             }
         }
     }

@@ -48,8 +48,12 @@ def load_rows(db: pathlib.Path) -> list[dict]:
     con.row_factory = sqlite3.Row
     cols = {r[1] for r in con.execute("PRAGMA table_info(command_feedback)")}
     outcome = "outcome" if "outcome" in cols else "'picked' AS outcome"  # databases from before the migration
-    rows = [dict(r) for r in con.execute(
-        f"SELECT text, chosen_action, model_intent, model_confidence, at_millis, {outcome} FROM command_feedback ORDER BY at_millis")]
+    rows = [
+        dict(r)
+        for r in con.execute(
+            f"SELECT text, chosen_action, model_intent, model_confidence, at_millis, {outcome} FROM command_feedback ORDER BY at_millis"
+        )
+    ]
     con.close()
     return rows
 

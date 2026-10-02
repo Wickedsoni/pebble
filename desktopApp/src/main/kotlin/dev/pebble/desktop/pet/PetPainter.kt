@@ -55,7 +55,9 @@ object PetPainter {
                 sx = 1f + land
                 sy = 1f - land
             }
+
             Motion.SHAKE -> rot = 2.5f * sin(t * 2f * PI.toFloat() / 0.8f)
+
             Motion.STILL -> Unit
         }
         sx += 0.07f * f.squash
@@ -136,7 +138,14 @@ object PetPainter {
         val dy = f.lookY * 3f
         when (pose.mood) {
             Mood.HAPPY, Mood.CELEBRATE, Mood.LOVE -> for (x in listOf(82f, 118f)) chevron(x + dx, 114f + dy, glow)
-            Mood.SLEEPY, Mood.SAD -> for (x in listOf(82f, 118f)) drawLine(glow, Offset(x - 7 + dx, 115f), Offset(x + 7 + dx, 115f), 3.5f, StrokeCap.Round)
+
+            Mood.SLEEPY, Mood.SAD -> for (x in listOf(
+                82f,
+                118f,
+            )) {
+                drawLine(glow, Offset(x - 7 + dx, 115f), Offset(x + 7 + dx, 115f), 3.5f, StrokeCap.Round)
+            }
+
             else -> for (x in listOf(82f, 118f)) {
                 val h = 16f * f.blink.coerceIn(0.12f, 1f)
                 drawRoundRect(glow, Offset(x - 4.5f + dx, 114f - h / 2 + dy), Size(9f, h), CornerRadius(3f))
@@ -167,16 +176,20 @@ object PetPainter {
         val r = right + 4f
         when (arms) {
             Arms.DOWN -> { nub(l, y + 6f, 0f, c); nub(r, y + 6f, 0f, c) }
+
             Arms.UP -> { nub(l - 4f, y - 24f, -30f, c); nub(r + 4f, y - 24f, 30f, c) }
+
             Arms.WAVE -> {
                 nub(l, y + 6f, 0f, c)
                 rotate(18f * sin(t * 2f * PI.toFloat() / 0.8f), Offset(r, y)) { nub(r + 4f, y - 24f, 30f, c) }
             }
+
             Arms.HOLD -> {
                 nub(l, y + 6f, 0f, c)
                 waterGlass(r - 2f, y - 4f)
                 nub(r - 6f, y + 10f, -40f, c)
             }
+
             Arms.HUG -> { nub(left + 16f, y + 20f, 60f, c); nub(right - 16f, y + 20f, -60f, c) }
         }
     }
@@ -189,12 +202,16 @@ object PetPainter {
         val ey = y + dy
         when (mood) {
             Mood.HAPPY, Mood.CELEBRATE, Mood.LOVE -> { chevron(l, ey, ink); chevron(r, ey, ink) }
+
             Mood.SLEEPY -> for (x in listOf(l, r)) drawLine(ink, Offset(x - 7f, ey), Offset(x + 7f, ey), 4f, StrokeCap.Round)
+
             Mood.SAD -> {
                 drawLine(ink, Offset(l - 7f, ey + 3f), Offset(l + 7f, ey - 1f), 4f, StrokeCap.Round)
                 drawLine(ink, Offset(r - 7f, ey - 1f), Offset(r + 7f, ey + 3f), 4f, StrokeCap.Round)
             }
+
             Mood.WORKING -> for (x in listOf(l, r)) drawLine(ink, Offset(x - 7f, ey), Offset(x + 7f, ey), 5f, StrokeCap.Butt)
+
             else -> {
                 val h = (if (mood == Mood.WORRIED) 12f else 17f) * f.blink.coerceIn(0.12f, 1f)
                 for (x in listOf(l, r)) drawRoundRect(ink, Offset(x - 5f, ey - h / 2), Size(10f, h), CornerRadius(3.5f))
@@ -219,11 +236,14 @@ object PetPainter {
     private fun DrawScope.accessory(stage: Stage, top: Float, antenna: Boolean = true) {
         when (stage) {
             Stage.BABY -> Unit
+
             Stage.TEEN -> if (antenna) {
                 drawLine(ink.copy(alpha = 0.7f), Offset(100f, top), Offset(104f, top - 16f), 3f, StrokeCap.Round)
                 drawCircle(ink.copy(alpha = 0.7f), 4f, Offset(104f, top - 18f))
             }
+
             Stage.ADULT -> drawRoundRect(Color(0xFF5B6B7F), Offset(60f, top - 8f), Size(80f, 10f), CornerRadius(5f))
+
             Stage.LEGENDARY -> translate(76f, top - 22f) {
                 val crown = path("M0 20 L4 4 L14 13 L24 0 L34 13 L44 4 L48 20 Z")
                 drawPath(crown, Color(0xFFE2B84A))
@@ -234,27 +254,34 @@ object PetPainter {
 
     private fun DrawScope.extras(pose: PetPose, t: Float) {
         val muted = Color(0xFF8A8F98)
-        for (e in pose.extras) when (e) {
-            Extra.ZZZ -> {
-                zee(148f, 66f, 14f, muted)
-                zee(164f, 48f, 10f, muted.copy(alpha = 0.7f))
-            }
-            Extra.SWEAT -> drawPath(path("M154 76 C156 82 160 85 160 89 a6 6 0 0 1 -12 0 c0 -4 4 -7 6 -13z"), Color(0xFF8FC1E3))
-            Extra.HARDHAT -> {
-                drawPath(path("M58 72 Q100 30 142 72 Z"), Color(0xFFE6B84A))
-                drawRoundRect(Color(0xFFCF9F33), Offset(50f, 68f), Size(100f, 8f), CornerRadius(4f))
-            }
-            Extra.BANG -> {
-                drawCircle(Color(0xFFD9534F), 11f, Offset(170f, 60f))
-                drawRoundRect(Color.White, Offset(168f, 52f), Size(4f, 10f), CornerRadius(2f))
-                drawCircle(Color.White, 2.2f, Offset(170f, 66.5f))
-            }
-            Extra.SPARKLES -> {
-                sparkle(34f, 62f, 0.8f, t)
-                sparkle(168f, 52f, 0.7f, t + 0.6f)
-            }
-            Extra.HEART -> translate(150f, 58f) {
-                drawPath(path("M0 6 C-9 -3 -4 -10 0 -5 C4 -10 9 -3 0 6Z"), Color(0xFFD9707F))
+        for (e in pose.extras) {
+            when (e) {
+                Extra.ZZZ -> {
+                    zee(148f, 66f, 14f, muted)
+                    zee(164f, 48f, 10f, muted.copy(alpha = 0.7f))
+                }
+
+                Extra.SWEAT -> drawPath(path("M154 76 C156 82 160 85 160 89 a6 6 0 0 1 -12 0 c0 -4 4 -7 6 -13z"), Color(0xFF8FC1E3))
+
+                Extra.HARDHAT -> {
+                    drawPath(path("M58 72 Q100 30 142 72 Z"), Color(0xFFE6B84A))
+                    drawRoundRect(Color(0xFFCF9F33), Offset(50f, 68f), Size(100f, 8f), CornerRadius(4f))
+                }
+
+                Extra.BANG -> {
+                    drawCircle(Color(0xFFD9534F), 11f, Offset(170f, 60f))
+                    drawRoundRect(Color.White, Offset(168f, 52f), Size(4f, 10f), CornerRadius(2f))
+                    drawCircle(Color.White, 2.2f, Offset(170f, 66.5f))
+                }
+
+                Extra.SPARKLES -> {
+                    sparkle(34f, 62f, 0.8f, t)
+                    sparkle(168f, 52f, 0.7f, t + 0.6f)
+                }
+
+                Extra.HEART -> translate(150f, 58f) {
+                    drawPath(path("M0 6 C-9 -3 -4 -10 0 -5 C4 -10 9 -3 0 6Z"), Color(0xFFD9707F))
+                }
             }
         }
     }

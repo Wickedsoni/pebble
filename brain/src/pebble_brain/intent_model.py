@@ -50,7 +50,7 @@ class Labels:
         path.write_text(json.dumps({"intents": self.intents, "tags": self.tags}, ensure_ascii=False, indent=1), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: pathlib.Path) -> "Labels":
+    def load(cls, path: pathlib.Path) -> Labels:
         d = json.loads(path.read_text(encoding="utf-8"))
         return cls(d["intents"], d["tags"])
 
@@ -58,8 +58,14 @@ class Labels:
 def encode_words(tokenizer, words_batch: list[list[str]], max_len: int = 64):
     """Tokenises pre-split words; returns the batch plus, per row, the sub-token index of each word's first piece."""
     # e5 was trained with a "query: " prefix; we add it as an extra leading word and ignore its labels.
-    enc = tokenizer([["query:"] + w for w in words_batch], is_split_into_words=True, truncation=True,
-                    max_length=max_len, padding=True, return_tensors="pt")
+    enc = tokenizer(
+        [["query:"] + w for w in words_batch],
+        is_split_into_words=True,
+        truncation=True,
+        max_length=max_len,
+        padding=True,
+        return_tensors="pt",
+    )
     firsts = []
     for i in range(len(words_batch)):
         seen, idx = set(), []

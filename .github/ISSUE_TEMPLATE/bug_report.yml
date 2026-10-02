@@ -1,0 +1,28 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Press Ctrl+Alt+Space\n2. Type ...\n3. ..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Pebble version / commit and Windows version
+      placeholder: "0.1.0 on Windows 11 23H2"
+  - type: textarea
+    id: log
+    attributes:
+      label: Logs (optional)
+      description: "If the brain is involved, paste %APPDATA%\Pebble\brain.log. Remove anything personal."
+      render: text

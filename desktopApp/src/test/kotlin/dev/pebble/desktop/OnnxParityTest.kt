@@ -26,7 +26,7 @@ class OnnxParityTest {
     fun kotlinMatchesPython() {
         val ref = dir.resolve("parity.json")
         if (!Files.exists(ref)) {
-            println("SKIPPED: ${ref} not found (build the model in brain/ first)")
+            println("SKIPPED: $ref not found (build the model in brain/ first)")
             return
         }
         val rows = Json.parseToJsonElement(Files.readString(ref)).jsonArray

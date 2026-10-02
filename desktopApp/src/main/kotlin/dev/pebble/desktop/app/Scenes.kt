@@ -27,25 +27,52 @@ enum class Scene(val label: String) {
     ;
 
     /** Auto follows the time of day: soft bloom in the morning, ocean by day, dusk, then aurora at night. */
-    fun resolve(now: LocalTime = LocalTime.now()): Scene = if (this != AUTO) this else when (now.hour) {
-        in 5..10 -> BLOOM
-        in 11..16 -> OCEAN
-        in 17..20 -> DUSK
-        else -> AURORA
+    fun resolve(now: LocalTime = LocalTime.now()): Scene = if (this != AUTO) {
+        this
+    } else {
+        when (now.hour) {
+            in 5..10 -> BLOOM
+            in 11..16 -> OCEAN
+            in 17..20 -> DUSK
+            else -> AURORA
+        }
     }
 }
 
 private class Palette(val base: Int, val fields: List<Int>, val ribbons: List<Int>)
 
 private fun palette(scene: Scene, dark: Boolean): Palette = when (scene) {
-    Scene.BLOOM -> if (dark) Palette(0xFF1A1024.argb, listOf(0xFF7A2E5B, 0xFF3B2A6E, 0xFFB4553F, 0xFF2B1840).argb, listOf(0xFFFF9EC7, 0xFFFFC38A).argb)
-    else Palette(0xFFFDE8EF.argb, listOf(0xFFFFB3C9, 0xFFC8B6FF, 0xFFFFD3A8, 0xFFFFE4F1).argb, listOf(0xFFFFFFFF, 0xFFFF8FB8).argb)
-    Scene.OCEAN -> if (dark) Palette(0xFF07141F.argb, listOf(0xFF0B4F6C, 0xFF123B7A, 0xFF0E6E6A, 0xFF0A2540).argb, listOf(0xFF5EEAD4, 0xFF60A5FA).argb)
-    else Palette(0xFFE6F6FB.argb, listOf(0xFF9BE3F0, 0xFFA5C8FF, 0xFFB8F2E0, 0xFFDDEFFF).argb, listOf(0xFFFFFFFF, 0xFF7DD3FC).argb)
-    Scene.DUSK -> if (dark) Palette(0xFF160D1C.argb, listOf(0xFF8A2C3B, 0xFF4A2A7A, 0xFFB45A2A, 0xFF2A1840).argb, listOf(0xFFFFA36C, 0xFFFF5E8A).argb)
-    else Palette(0xFFFFEDE2.argb, listOf(0xFFFFB199, 0xFFD9B8FF, 0xFFFFD08A, 0xFFFFC2D4).argb, listOf(0xFFFFFFFF, 0xFFFF9466).argb)
-    Scene.AURORA, Scene.AUTO, Scene.WALLPAPER -> if (dark) Palette(0xFF060B18.argb, listOf(0xFF0F2D52, 0xFF2A1452, 0xFF063F3A, 0xFF101A3A).argb, listOf(0xFF34F5C5, 0xFF8B5CF6, 0xFF38BDF8).argb)
-    else Palette(0xFFEAF0FF.argb, listOf(0xFFB9D4FF, 0xFFD6C4FF, 0xFFB7F5E3, 0xFFE3ECFF).argb, listOf(0xFFFFFFFF, 0xFF6EE7B7, 0xFFA78BFA).argb)
+    Scene.BLOOM -> if (dark) {
+        Palette(0xFF1A1024.argb, listOf(0xFF7A2E5B, 0xFF3B2A6E, 0xFFB4553F, 0xFF2B1840).argb, listOf(0xFFFF9EC7, 0xFFFFC38A).argb)
+    } else {
+        Palette(0xFFFDE8EF.argb, listOf(0xFFFFB3C9, 0xFFC8B6FF, 0xFFFFD3A8, 0xFFFFE4F1).argb, listOf(0xFFFFFFFF, 0xFFFF8FB8).argb)
+    }
+
+    Scene.OCEAN -> if (dark) {
+        Palette(0xFF07141F.argb, listOf(0xFF0B4F6C, 0xFF123B7A, 0xFF0E6E6A, 0xFF0A2540).argb, listOf(0xFF5EEAD4, 0xFF60A5FA).argb)
+    } else {
+        Palette(0xFFE6F6FB.argb, listOf(0xFF9BE3F0, 0xFFA5C8FF, 0xFFB8F2E0, 0xFFDDEFFF).argb, listOf(0xFFFFFFFF, 0xFF7DD3FC).argb)
+    }
+
+    Scene.DUSK -> if (dark) {
+        Palette(0xFF160D1C.argb, listOf(0xFF8A2C3B, 0xFF4A2A7A, 0xFFB45A2A, 0xFF2A1840).argb, listOf(0xFFFFA36C, 0xFFFF5E8A).argb)
+    } else {
+        Palette(0xFFFFEDE2.argb, listOf(0xFFFFB199, 0xFFD9B8FF, 0xFFFFD08A, 0xFFFFC2D4).argb, listOf(0xFFFFFFFF, 0xFFFF9466).argb)
+    }
+
+    Scene.AURORA, Scene.AUTO, Scene.WALLPAPER -> if (dark) {
+        Palette(
+            0xFF060B18.argb,
+            listOf(0xFF0F2D52, 0xFF2A1452, 0xFF063F3A, 0xFF101A3A).argb,
+            listOf(0xFF34F5C5, 0xFF8B5CF6, 0xFF38BDF8).argb,
+        )
+    } else {
+        Palette(
+            0xFFEAF0FF.argb,
+            listOf(0xFFB9D4FF, 0xFFD6C4FF, 0xFFB7F5E3, 0xFFE3ECFF).argb,
+            listOf(0xFFFFFFFF, 0xFF6EE7B7, 0xFFA78BFA).argb,
+        )
+    }
 }
 
 private val Long.argb get() = toInt()
@@ -65,7 +92,9 @@ fun drawScene(canvas: Canvas, scene: Scene, w: Int, h: Int, dark: Boolean) {
         val color = p.fields[i % p.fields.size]
         val r = fh * (0.45f + rnd.nextFloat() * 0.25f)
         canvas.drawCircle(
-            fw * ax + (rnd.nextFloat() - 0.5f) * fw * 0.1f, fh * ay + (rnd.nextFloat() - 0.5f) * fh * 0.1f, r,
+            fw * ax + (rnd.nextFloat() - 0.5f) * fw * 0.1f,
+            fh * ay + (rnd.nextFloat() - 0.5f) * fh * 0.1f,
+            r,
             Paint().apply {
                 this.color = color
                 alpha = if (dark) 230 else 200
@@ -81,21 +110,27 @@ fun drawScene(canvas: Canvas, scene: Scene, w: Int, h: Int, dark: Boolean) {
             // Each ribbon gets its own sweep and tilt, so they cross and fan out instead of stacking.
             .moveTo(-fw * 0.1f, y0 + fh * (0.1f + rnd.nextFloat() * 0.3f))
             .cubicTo(
-                fw * (0.15f + rnd.nextFloat() * 0.25f), y0 - fh * (0.15f + rnd.nextFloat() * 0.35f),
-                fw * (0.5f + rnd.nextFloat() * 0.25f), y0 + fh * (0.1f + rnd.nextFloat() * 0.4f),
-                fw * 1.1f, y0 - fh * (rnd.nextFloat() * 0.45f),
+                fw * (0.15f + rnd.nextFloat() * 0.25f),
+                y0 - fh * (0.15f + rnd.nextFloat() * 0.35f),
+                fw * (0.5f + rnd.nextFloat() * 0.25f),
+                y0 + fh * (0.1f + rnd.nextFloat() * 0.4f),
+                fw * 1.1f,
+                y0 - fh * (rnd.nextFloat() * 0.45f),
             )
             .detach()
         listOf(fh * 0.22f to 0.35f, fh * 0.07f to 0.55f).forEach { (width, a) ->
-            canvas.drawPath(path, Paint().apply {
-                this.color = color
-                alpha = ((if (dark) a else a * 0.7f) * 255).toInt()
-                mode = PaintMode.STROKE
-                strokeWidth = width
-                strokeCap = PaintStrokeCap.ROUND
-                blendMode = BlendMode.SCREEN
-                imageFilter = ImageFilter.makeBlur(width * 0.6f, width * 0.6f, FilterTileMode.DECAL)
-            })
+            canvas.drawPath(
+                path,
+                Paint().apply {
+                    this.color = color
+                    alpha = ((if (dark) a else a * 0.7f) * 255).toInt()
+                    mode = PaintMode.STROKE
+                    strokeWidth = width
+                    strokeCap = PaintStrokeCap.ROUND
+                    blendMode = BlendMode.SCREEN
+                    imageFilter = ImageFilter.makeBlur(width * 0.6f, width * 0.6f, FilterTileMode.DECAL)
+                },
+            )
         }
     }
 

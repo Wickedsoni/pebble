@@ -23,9 +23,9 @@ identical-tokenisation rate, <unk> rate, then the normal evaluation of the prune
 from __future__ import annotations
 
 import argparse
-import random
 import json
 import pathlib
+import random
 import re
 import shutil
 
@@ -49,7 +49,7 @@ def choose(tokenizer, vocab: list, top_k: int) -> list[int]:
     texts += [e.tokens for e in generate()]
     texts += [e.tokens for e in from_db()[0]]
     for i in range(0, len(texts), 512):
-        for ids in tokenizer(texts[i:i + 512], is_split_into_words=True)["input_ids"]:
+        for ids in tokenizer(texts[i : i + 512], is_split_into_words=True)["input_ids"]:
             keep.update(ids)
     in_corpus = len(keep)
     allowed = [(i, piece, score) for i, (piece, score) in enumerate(vocab) if _ALLOWED.match(piece)]
@@ -95,7 +95,11 @@ def verify(src: pathlib.Path, dst: pathlib.Path, remap: dict[int, int]) -> None:
     unk = new.unk_token_id
     held_out = [e.tokens for e in load() if e.partition == "test"]
     for name in ("v0", "v1"):
-        held_out += [json.loads(l)["text"].split() for l in (ROOT / "eval" / f"pebble_commands_{name}.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        held_out += [
+            json.loads(l)["text"].split()
+            for l in (ROOT / "eval" / f"pebble_commands_{name}.jsonl").read_text(encoding="utf-8").splitlines()
+            if l.strip()
+        ]
     same = unks = 0
     for words in held_out:
         a = old(words, is_split_into_words=True)["input_ids"]

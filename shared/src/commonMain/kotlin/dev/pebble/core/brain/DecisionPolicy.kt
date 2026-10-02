@@ -33,13 +33,13 @@ class DecisionPolicy(
         val DEFAULT_THRESHOLDS = mapOf(
             A.REMINDER_REMOVE to 0.9f, // destructive
             A.NOTE_REMOVE to 0.9f,
-            A.REMIND to 0.7f,          // a wrong reminder is noise you have to clean up
+            A.REMIND to 0.7f, // a wrong reminder is noise you have to clean up
             A.ADD_NOTE to 0.6f,
             A.REMINDERS_QUERY to 0.6f, // read-only: a wrong answer costs a glance
             A.NOTES_QUERY to 0.6f,
             A.TIME_QUERY to 0.6f,
             A.CHITCHAT to 0.5f,
-            A.OTHER to 0.7f,           // "can't do that yet" is unhelpful if we misread a real command
+            A.OTHER to 0.7f, // "can't do that yet" is unhelpful if we misread a real command
         )
     }
 }

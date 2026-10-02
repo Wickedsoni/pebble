@@ -46,12 +46,25 @@ class MediaWatcher(private val app: PebbleApp) {
             fun clean(s: String) = s.replace(Regex("""^\(\d+\)\s*"""), "").trim().takeIf { it.length > 1 }
             return when {
                 t.endsWith(" - YouTube") -> clean(t.removeSuffix(" - YouTube"))?.let { "YouTube" to it }
+
                 t.startsWith("Prime Video: ") -> clean(t.removePrefix("Prime Video: "))?.let { "Prime Video" to it }
-                t.endsWith(" | Netflix") || t.endsWith(" - Netflix") -> clean(t.substringBeforeLast(" ").substringBeforeLast(" "))?.let { "Netflix" to it }
+
+                t.endsWith(" | Netflix") || t.endsWith(" - Netflix") -> clean(t.substringBeforeLast(" ").substringBeforeLast(" "))?.let {
+                    "Netflix" to
+                        it
+                }
+
                 t.contains("Hotstar") && t.contains(" - ") -> clean(t.substringBefore(" - "))?.let { "Hotstar" to it }
+
                 t.contains("JioCinema") && t.contains(" - ") -> clean(t.substringBefore(" - "))?.let { "JioCinema" to it }
-                t.endsWith(" - VLC media player") -> clean(t.removeSuffix(" - VLC media player").substringBeforeLast('.'))?.let { "VLC" to it }
+
+                t.endsWith(" - VLC media player") -> clean(t.removeSuffix(" - VLC media player").substringBeforeLast('.'))?.let {
+                    "VLC" to
+                        it
+                }
+
                 t.endsWith(" - Media Player") -> clean(t.removeSuffix(" - Media Player"))?.let { "Media Player" to it }
+
                 else -> null
             }
         }

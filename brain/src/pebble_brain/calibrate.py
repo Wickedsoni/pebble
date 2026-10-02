@@ -49,9 +49,14 @@ def logits_for(ckpt: pathlib.Path, sentences: list[list[str]], batch: int = 64, 
     sess = ort.InferenceSession(str(ckpt / "intent.int8.onnx"), opts, providers=["CPUExecutionProvider"])
     out = []
     for i in range(0, len(sentences), batch):
-        enc, _ = encode_words(tok, sentences[i:i + batch])
-        outs = sess.run(None, {"input_ids": enc["input_ids"].numpy().astype(np.int64),
-                               "attention_mask": enc["attention_mask"].numpy().astype(np.int64)})
+        enc, _ = encode_words(tok, sentences[i : i + batch])
+        outs = sess.run(
+            None,
+            {
+                "input_ids": enc["input_ids"].numpy().astype(np.int64),
+                "attention_mask": enc["attention_mask"].numpy().astype(np.int64),
+            },
+        )
         out.append(outs[output])
     return np.concatenate(out)
 
@@ -95,18 +100,26 @@ def calibrate_mood(ckpt: pathlib.Path, report: dict) -> float | None:
     p = softmax(z / t)
     right = p.argmax(1) == gold
     report["mood_temperature"] = round(t, 4)
-    report["mood"] = {"n": len(dev), "acc": float(right.mean()), "ece_before": ece(softmax(z).max(1), right),
-                      "ece_after": ece(p.max(1), right)}
-    print(f"mood T = {t:.3f}  dev acc {right.mean():.1%}  ECE {report['mood']['ece_before']:.3f} -> {report['mood']['ece_after']:.3f}  (n={len(dev)})")
+    report["mood"] = {
+        "n": len(dev),
+        "acc": float(right.mean()),
+        "ece_before": ece(softmax(z).max(1), right),
+        "ece_after": ece(p.max(1), right),
+    }
+    print(
+        f"mood T = {t:.3f}  dev acc {right.mean():.1%}  ECE {report['mood']['ece_before']:.3f} -> {report['mood']['ece_after']:.3f}  (n={len(dev)})"
+    )
     return t
 
 
 def calibrate(ckpt: pathlib.Path) -> dict:
     labels = Labels.load(ckpt / "labels.json")
+
     # Same grouping as Understood.actions in Kotlin: Pebble actions are summed, but every unsupported
     # ("other") intent is its own column — music and weather are different things, not one "other".
     def group(intent: str) -> str:
         return f"other:{intent}" if to_pebble(intent) == "other" else to_pebble(intent)
+
     actions = sorted({group(i) for i in labels.intents})
     to_action = np.zeros((len(labels.intents), len(actions)))
     for i, intent in enumerate(labels.intents):
@@ -128,8 +141,12 @@ def calibrate(ckpt: pathlib.Path) -> dict:
         old_right = old_right.argmax(1) == gold[m]
         new = softmax(logits[m] / t) @ to_action
         right = new.argmax(1) == gold[m]
-        row = {"n": int(m.sum()), "action_acc": float(right.mean()),
-               "ece_old": ece(old.max(1), old_right), "ece_new": ece(new.max(1), right)}
+        row = {
+            "n": int(m.sum()),
+            "action_acc": float(right.mean()),
+            "ece_old": ece(old.max(1), old_right),
+            "ece_new": ece(new.max(1), right),
+        }
         report["by_script"][script] = row
         print(f"{script:<10} {row['n']:>5} {row['action_acc']:>10.1%} {row['ece_old']:>8.3f} {row['ece_new']:>8.3f}")
 

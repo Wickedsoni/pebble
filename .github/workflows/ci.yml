@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kotlin:
+    name: Kotlin (format + tests)
+    # Windows: the app uses Win32 (JNA) and Windows-native speech libraries.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Format check (ktlint via Spotless)
+        run: ./gradlew spotlessCheck --console=plain
+      - name: Tests
+        # Tests that need trained models (not in git) skip themselves and print SKIPPED.
+        run: ./gradlew :shared:jvmTest :desktopApp:test --console=plain
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+
+  python:
+    name: Python brain (lint + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: brain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Ruff format
+        run: uvx ruff format --check .
+      - name: Ruff lint
+        run: uvx ruff check .
+      - name: Unit tests
+        # Light: only what the tests import (the full training env needs PyTorch + CUDA).
+        env:
+          PYTHONPATH: src
+        run: uv run --no-project --python 3.11 --with indic-transliteration python -m unittest tests/test_feedback.py

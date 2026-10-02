@@ -1,0 +1,5 @@
+# Every change is reviewed by a maintainer.
+*                @Wickedsoni
+# Model and eval changes affect what ships to users: extra care.
+/brain/eval/     @Wickedsoni
+/brain/models/manifest.json @Wickedsoni

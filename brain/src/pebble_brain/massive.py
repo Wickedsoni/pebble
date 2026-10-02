@@ -43,7 +43,7 @@ def parse_annotated(annot: str) -> tuple[list[str], list[str]]:
     tags: list[str] = []
     pos = 0
     for m in _SLOT.finditer(annot):
-        for w in annot[pos:m.start()].split():
+        for w in annot[pos : m.start()].split():
             tokens.append(w)
             tags.append("O")
         for i, w in enumerate(m.group("value").split()):

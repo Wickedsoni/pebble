@@ -1,0 +1,45 @@
+Pebble
+Copyright 2026 The Pebble authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It uses, or its models are trained on, the following third-party work. The model files themselves are not
+part of this repository; when they are distributed (installer, release downloads) these notices apply.
+
+Datasets
+--------
+Amazon MASSIVE 1.1 (en-US, hi-IN) - Creative Commons Attribution 4.0 International (CC BY 4.0)
+  FitzGerald et al., "MASSIVE: A 1M-Example Multilingual Natural Language Understanding Dataset", 2022.
+  https://github.com/alexa/massive
+  Used to train the command (intent + slot) model. Roman-Hindi variants are derived from it by
+  rule-based transliteration (indic_transliteration, MIT) and chat-style respelling.
+
+Google FLEURS (hi_in) - Creative Commons Attribution 4.0 International (CC BY 4.0)
+  Conneau et al., "FLEURS: Few-shot Learning Evaluation of Universal Representations of Speech", 2022.
+  https://huggingface.co/datasets/google/fleurs
+  Used only to evaluate speech recognition (not trained on, not shipped).
+
+Models
+------
+intfloat/multilingual-e5-small - MIT License
+  Wang et al., "Multilingual E5 Text Embeddings", 2024. Base encoder of the command model.
+
+OpenAI Whisper (base / small) - MIT License
+  Radford et al., "Robust Speech Recognition via Large-Scale Weak Supervision", 2022.
+  ONNX exports from the sherpa-onnx project.
+
+Silero VAD - MIT License
+  https://github.com/snakers4/silero-vad
+
+GTCRN speech enhancement - MIT License (evaluated; used only if it improves recognition)
+  https://github.com/Xiaobin-Rong/gtcrn
+
+Libraries
+---------
+sherpa-onnx - Apache License 2.0 - https://github.com/k2-fsa/sherpa-onnx
+ONNX Runtime - MIT License - https://github.com/microsoft/onnxruntime
+DJL HuggingFace tokenizers - Apache License 2.0 - https://github.com/deepjavalibrary/djl
+JetBrains Compose Multiplatform, Kotlin, kotlinx libraries - Apache License 2.0
+SQLDelight - Apache License 2.0 - https://github.com/cashapp/sqldelight
+JNA - Apache License 2.0 / LGPL 2.1 (used under Apache 2.0)
+indic_transliteration - MIT License

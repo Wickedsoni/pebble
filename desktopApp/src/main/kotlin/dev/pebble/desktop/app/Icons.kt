@@ -1,3 +1,6 @@
+// SVG path data reads best unbroken.
+@file:Suppress("ktlint:standard:max-line-length")
+
 package dev.pebble.desktop.app
 
 import androidx.compose.foundation.Image
@@ -48,9 +51,14 @@ object PebbleIcons {
     val Check = icon("check", "M5 12.5 L10 17 L19 7")
     val Minimize = icon("minimize", "M6 12 H18")
     val Clock = icon("clock", "M12 3.5 A8.5 8.5 0 1 1 11.99 3.5 Z", "M12 7.5 V12 L15 14")
-    val Flame = icon("flame", "M12 3 C13.5 6.5 17.5 8.5 17.5 13.5 A5.5 5.5 0 0 1 6.5 13.5 C6.5 11 8 9.2 9 8.4 C9.2 10 10 11 11 11.2 C11 8.4 11.2 5.5 12 3 Z")
+    val Flame =
+        icon(
+            "flame",
+            "M12 3 C13.5 6.5 17.5 8.5 17.5 13.5 A5.5 5.5 0 0 1 6.5 13.5 C6.5 11 8 9.2 9 8.4 C9.2 10 10 11 11 11.2 C11 8.4 11.2 5.5 12 3 Z",
+        )
     val Shield = icon("shield", "M12 3.5 L19 6.5 V11.5 C19 16 16 19.2 12 20.5 C8 19.2 5 16 5 11.5 V6.5 Z")
-    val Spark = icon("spark", "M12 4 V8", "M12 16 V20", "M4 12 H8", "M16 12 H20", "M6.5 6.5 L9 9", "M15 15 L17.5 17.5", "M17.5 6.5 L15 9", "M9 15 L6.5 17.5")
+    val Spark =
+        icon("spark", "M12 4 V8", "M12 16 V20", "M4 12 H8", "M16 12 H20", "M6.5 6.5 L9 9", "M15 15 L17.5 17.5", "M17.5 6.5 L15 9", "M9 15 L6.5 17.5")
 }
 
 @Composable

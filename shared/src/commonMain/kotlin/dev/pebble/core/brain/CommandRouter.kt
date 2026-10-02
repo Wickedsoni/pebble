@@ -1,8 +1,8 @@
 package dev.pebble.core.brain
 
-import dev.pebble.core.brain.PebbleActions as A
 import dev.pebble.core.quickadd.QuickAddParser
 import dev.pebble.core.quickadd.QuickCommand
+import dev.pebble.core.brain.PebbleActions as A
 
 /**
  * The command cascade — cheapest path first, as in the brain plan:
@@ -41,8 +41,11 @@ class CommandRouter(
         QuickAddParser.parseStrict(text, today())?.let { return Routed.Run(it, Source.RULES) }
         val lowByWords = Replies.isLowMood(text)
         val understood = model()?.understand(text)
-            ?: return if (lowByWords) Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
-            else Routed.Run(QuickCommand.AddNote(text), Source.FALLBACK)
+            ?: return if (lowByWords) {
+                Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
+            } else {
+                Routed.Run(QuickCommand.AddNote(text), Source.FALLBACK)
+            }
         // Feelings: a low mood (word list, or the mood head for what words miss — "sab galat ho raha hai")
         // gets a caring reply instead of a joke or a "did you mean". A real command still runs:
         // "tension hai, kal 5 baje yaad dila dena" sets the reminder.
@@ -60,11 +63,13 @@ class CommandRouter(
                 val cmd = toCommand(d.guess.action, understood, text, d.guess.bestIntent)
                 if (cmd != null) Routed.Run(cmd, Source.MODEL, understood, d.guess.action) else askWhen(text, understood)
             }
+
             DecisionPolicy.Decision.Ask -> didYouMean(text, understood)
         }
     }
 
     // Null for a reminder whose time we couldn't read.
+
     /**
      * Always asks: the choices for [input] without [exclude] — used after "Not what I meant", where
      * [exclude] is what Pebble wrongly did. Saving as a note is always offered (unless excluded).
@@ -72,8 +77,11 @@ class CommandRouter(
     fun ask(input: String, exclude: String? = null): Routed.Ask {
         val text = input.trim()
         val u = model()?.understand(text)
-        val options = (if (u != null) didYouMean(text, u, limit = 4).options else emptyList()).filter { it.action != exclude }.toMutableList()
-        if (exclude != A.ADD_NOTE && options.none { it.action == A.ADD_NOTE }) options += Option(labelFor(A.ADD_NOTE), A.ADD_NOTE, QuickCommand.AddNote(text))
+        val guesses = if (u != null) didYouMean(text, u, limit = 4).options else emptyList()
+        val options = guesses.filter { it.action != exclude }.toMutableList()
+        if (exclude != A.ADD_NOTE && options.none { it.action == A.ADD_NOTE }) {
+            options += Option(labelFor(A.ADD_NOTE), A.ADD_NOTE, QuickCommand.AddNote(text))
+        }
         return Routed.Ask("What did you mean?", options.take(3), u)
     }
 
@@ -95,17 +103,27 @@ class CommandRouter(
         val slotText = listOfNotNull(slots["date"], slots["timeofday"], slots["time"]).joinToString(" ")
         // The model sometimes tags only "shaam"/"kal" as the time. If the slot has no clock number,
         // read the whole sentence, which still contains "7 baje".
-        val timeText = if (slotText.isNotBlank() && HinglishTime.hasClock(slotText)) slotText
-        else if (HinglishTime.hasClock(text)) text
-        else slotText.ifBlank { text }
+        val timeText = if (slotText.isNotBlank() && HinglishTime.hasClock(slotText)) {
+            slotText
+        } else if (HinglishTime.hasClock(text)) {
+            text
+        } else {
+            slotText.ifBlank { text }
+        }
         val title = reminderTitle(u, text, intent)
         val weekday = today()
         return when (val w = HinglishTime.parse(timeText, weekday)) {
             // The day may sit outside the time slot ("friday wali meeting 5 baje"), so look in the whole sentence too.
             is HinglishTime.When.At -> QuickCommand.RemindAt(
-                title, w.hour, w.minute, w.dayOffset ?: HinglishTime.dayOf(text, weekday), w.flexibleHalfDay,
+                title,
+                w.hour,
+                w.minute,
+                w.dayOffset ?: HinglishTime.dayOf(text, weekday),
+                w.flexibleHalfDay,
             )
+
             is HinglishTime.When.In -> QuickCommand.RemindIn(title, w.minutes)
+
             null -> null
         }
     }
@@ -195,7 +213,8 @@ class CommandRouter(
         /** Words that frame a reminder rather than describe it, in all three scripts. */
         private val filler = setOf(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
-            "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "dila", "do", "karo", "kar", "ki", "ka", "ke", "ko", "reminder", "laga", "lagao", "set", "utha",
+            "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "dila", "do", "karo", "kar", "ki", "ka", "ke", "ko",
+            "reminder", "laga", "lagao", "set", "utha",
             "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "की", "का", "के", "को", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",
             // Time words the model may leave untagged — they belong to the time, never the title.
             "baje", "bje", "o'clock", "oclock", "am", "pm", "subah", "shaam", "sham", "raat", "dopahar", "kal", "aaj", "parso",

@@ -1,3 +1,6 @@
+// Regex patterns read best on one line each.
+@file:Suppress("ktlint:standard:max-line-length")
+
 package dev.pebble.core.quickadd
 
 import dev.pebble.core.brain.HinglishTime
@@ -28,10 +31,13 @@ sealed interface QuickCommand {
     data object ShowUpcoming : QuickCommand
     data object ShowNotes : QuickCommand
     data object TellTime : QuickCommand
+
     /** Small talk; [intent] is the model's finer label (greet / joke / quirky). */
     data class Chitchat(val text: String, val intent: String) : QuickCommand
+
     /** Something Pebble understands but can't do yet (music, weather, lights…). */
     data class Unsupported(val text: String, val intent: String) : QuickCommand
+
     /** Removing reminders/notes happens in the app for now. */
     data class OpenPage(val page: String) : QuickCommand
 }
@@ -47,14 +53,28 @@ object QuickAddParser {
         """^(?:remember(?:\s+that)?|yaad\s+rakh(?:na|o|iyo|ana)?(?:\s+ki)?|याद\s+रख(?:ना|ो|िए|ियो|ें)?(?:\s+कि)?)\s*[:\-]?\s+(.+)$""",
         RegexOption.IGNORE_CASE,
     )
+
     /** "har 45 minute", "हर पैंतालीस मिनट", "har ghante" — Hindi for "every". */
-    private val harRx = Regex("""(?:^|\s)(?:har|हर)\s+(?:(\S+)\s+)?(min|mins|minute|minutes|minat|मिनट|ghanta|ghante|घंटा|घंटे|hour|hours)(?=\s|$|[.,!?])""", RegexOption.IGNORE_CASE)
+    private val harRx =
+        Regex(
+            """(?:^|\s)(?:har|हर)\s+(?:(\S+)\s+)?(min|mins|minute|minutes|minat|मिनट|ghanta|ghante|घंटा|घंटे|hour|hours)(?=\s|$|[.,!?])""",
+            RegexOption.IGNORE_CASE,
+        )
     private val hiWaterRx = Regex("""(?:paani|pani|पानी)\s+(?:pi|pee|piya|पी|पिया)(?=\s|$|[.,!?])""", RegexOption.IGNORE_CASE)
-    private val enWaterRx = Regex("""\b(?:drank|had|finished)\s+(?:(a|an|one|two|three|four|\d+)\s+)?(?:glass(?:es)?|cups?|bottles?)\s+of\s+water\b""", RegexOption.IGNORE_CASE)
+    private val enWaterRx =
+        Regex(
+            """\b(?:drank|had|finished)\s+(?:(a|an|one|two|three|four|\d+)\s+)?(?:glass(?:es)?|cups?|bottles?)\s+of\s+water\b""",
+            RegexOption.IGNORE_CASE,
+        )
     private val noteRx = Regex("""^(?:note|n)\s*[:\-]?\s+(.+)$""", RegexOption.IGNORE_CASE)
     private val everyRx = Regex("""\bevery\s+(\d+(?:\.\d+)?)?\s*(m|min|mins|minutes?|h|hr|hrs|hours?)\b""", RegexOption.IGNORE_CASE)
-    private val waterLogRx = Regex("""^(?:\+|drank|had|log)?\s*(\d+)?\s*(?:x\s*)?(?:glass(?:es)?(?: of water)?|water|💧)\s*(?:\+\s*(\d+))?$""", RegexOption.IGNORE_CASE)
-    private val inRx = Regex("""^(?:remind me\s+(?:to\s+)?)?(.+?)\s+in\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$""", RegexOption.IGNORE_CASE)
+    private val waterLogRx =
+        Regex(
+            """^(?:\+|drank|had|log)?\s*(\d+)?\s*(?:x\s*)?(?:glass(?:es)?(?: of water)?|water|💧)\s*(?:\+\s*(\d+))?$""",
+            RegexOption.IGNORE_CASE,
+        )
+    private val inRx =
+        Regex("""^(?:remind me\s+(?:to\s+)?)?(.+?)\s+in\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$""", RegexOption.IGNORE_CASE)
     private const val DAY = """(today|tomorrow|tmrw|(?:next\s+)?(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*day)"""
     private val atRx = Regex(
         """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$DAY?$|""" +

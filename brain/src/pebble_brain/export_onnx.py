@@ -41,11 +41,20 @@ def export(ckpt: pathlib.Path) -> None:
     enc, _ = encode_words(pred.tokenizer, [["remind", "me", "at", "5"]])
     fp32 = ckpt / "intent.onnx"
     torch.onnx.export(
-        _Graph(pred.model), (enc["input_ids"], enc["attention_mask"]), str(fp32),
-        input_names=["input_ids", "attention_mask"], output_names=["intent_logits", "slot_logits", "mood_logits"],
-        dynamic_axes={"input_ids": {0: "batch", 1: "seq"}, "attention_mask": {0: "batch", 1: "seq"},
-                      "intent_logits": {0: "batch"}, "slot_logits": {0: "batch", 1: "seq"}, "mood_logits": {0: "batch"}},
-        opset_version=17, dynamo=False,
+        _Graph(pred.model),
+        (enc["input_ids"], enc["attention_mask"]),
+        str(fp32),
+        input_names=["input_ids", "attention_mask"],
+        output_names=["intent_logits", "slot_logits", "mood_logits"],
+        dynamic_axes={
+            "input_ids": {0: "batch", 1: "seq"},
+            "attention_mask": {0: "batch", 1: "seq"},
+            "intent_logits": {0: "batch"},
+            "slot_logits": {0: "batch", 1: "seq"},
+            "mood_logits": {0: "batch"},
+        },
+        opset_version=17,
+        dynamo=False,
     )
     int8 = ckpt / "intent.int8.onnx"
     # Per-channel scales keep accuracy (per-tensor int8 lost ~3 points on the Pebble eval set).
@@ -61,7 +70,10 @@ def export(ckpt: pathlib.Path) -> None:
     agree, times = 0, []
     for r, want in zip(rows, torch_preds):
         e, _ = encode_words(pred.tokenizer, [r["text"].split()])
-        feeds = {"input_ids": e["input_ids"].numpy().astype(np.int64), "attention_mask": e["attention_mask"].numpy().astype(np.int64)}
+        feeds = {
+            "input_ids": e["input_ids"].numpy().astype(np.int64),
+            "attention_mask": e["attention_mask"].numpy().astype(np.int64),
+        }
         t0 = time.perf_counter()
         il = sess.run(None, feeds)[0]
         times.append((time.perf_counter() - t0) * 1000)
@@ -70,6 +82,7 @@ def export(ckpt: pathlib.Path) -> None:
 
     # Calibrate the int8 model (writes "temperature" into labels.json); parity below uses the same T.
     from .calibrate import calibrate
+
     cal = calibrate(ckpt)
     temperature, mood_t = cal["temperature"], cal.get("mood_temperature")
 
@@ -83,13 +96,26 @@ def export(ckpt: pathlib.Path) -> None:
                 continue
             words = json.loads(line)["text"].split()
             e, firsts = encode_words(pred.tokenizer, [words])
-            il, sl, *rest = sess.run(None, {"input_ids": e["input_ids"].numpy().astype(np.int64),
-                                            "attention_mask": e["attention_mask"].numpy().astype(np.int64)})
+            il, sl, *rest = sess.run(
+                None,
+                {
+                    "input_ids": e["input_ids"].numpy().astype(np.int64),
+                    "attention_mask": e["attention_mask"].numpy().astype(np.int64),
+                },
+            )
             z = il[0] / temperature
-            probs = np.exp(z - z.max()); probs /= probs.sum()
+            probs = np.exp(z - z.max())
+            probs /= probs.sum()
             k = int(probs.argmax())
-            parity.append({"text": " ".join(words), "input_ids": e["input_ids"][0].tolist(), "intent": pred.labels.intents[k],
-                           "p": float(probs[k]), "tags": [pred.labels.tags[int(sl[0, i].argmax())] for i in firsts[0]]})
+            parity.append(
+                {
+                    "text": " ".join(words),
+                    "input_ids": e["input_ids"][0].tolist(),
+                    "intent": pred.labels.intents[k],
+                    "p": float(probs[k]),
+                    "tags": [pred.labels.tags[int(sl[0, i].argmax())] for i in firsts[0]],
+                }
+            )
             if rest and mood_t:
                 mz = rest[0][0] / mood_t
                 mp = np.exp(mz - mz.max())

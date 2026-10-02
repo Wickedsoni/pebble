@@ -93,8 +93,12 @@ class NudgePolicy(
         val quiet = (ctx.hourBucket * 4 until ctx.hourBucket * 4 + 4).count { it in quietHours() } >= 2
         return when {
             arm == NudgeArm.NOW && quiet -> 1.0 to 3.0
-            arm == NudgeArm.NOW -> 3.0 to 1.0 // start where Pebble is today: remind on time
+
+            arm == NudgeArm.NOW -> 3.0 to 1.0
+
+            // start where Pebble is today: remind on time
             quiet -> 2.0 to 2.0
+
             else -> 1.0 to 1.5
         }
     }
@@ -152,6 +156,5 @@ class NudgePolicy(
             ReminderAction.SNOOZED -> 0.3
             ReminderAction.DISMISSED, null -> 0.0 // null: ignored for 30 minutes
         }
-
     }
 }

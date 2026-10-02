@@ -52,11 +52,13 @@ def evaluate(ckpt: pathlib.Path, eval_set: str = EVAL_SET) -> dict:
     for script, exs in by_script.items():
         right, tp, fp, fn = 0, 0, 0, 0
         for i in range(0, len(exs), 128):
-            chunk = exs[i:i + 128]
+            chunk = exs[i : i + 128]
             for e, (intent, _, tags) in zip(chunk, pred.predict([x.tokens for x in chunk])):
                 right += intent == e.intent
                 gold, got = spans(e.tags), spans(tags)
-                tp += len(gold & got); fp += len(got - gold); fn += len(gold - got)
+                tp += len(gold & got)
+                fp += len(got - gold)
+                fn += len(gold - got)
         f1 = 2 * tp / max(1, 2 * tp + fp + fn)
         report["massive_test"][script] = {"n": len(exs), "intent_acc": right / len(exs), "slot_f1": f1}
 
@@ -91,12 +93,16 @@ def evaluate(ckpt: pathlib.Path, eval_set: str = EVAL_SET) -> dict:
             by[r["script"]][1] += 1
             if m != r["mood"]:
                 misses.append({"text": r["text"], "want": r["mood"], "got": m, "p": round(p, 2)})
-        report["mood"] = {"acc": sum(v[0] for v in by.values()) / len(mrows),
-                          "by_script": {k: v[0] / v[1] for k, v in by.items()}, "misses": misses}
+        report["mood"] = {
+            "acc": sum(v[0] for v in by.values()) / len(mrows),
+            "by_script": {k: v[0] / v[1] for k, v in by.items()},
+            "misses": misses,
+        }
 
     # Latency on CPU for a single command — the number that matters on an 8 GB, no-GPU laptop.
     cpu = Predictor(ckpt, device="cpu")
     import torch
+
     torch.set_num_threads(4)
     cpu.predict([["warm", "up"]])
     t0 = time.perf_counter()
@@ -104,7 +110,9 @@ def evaluate(ckpt: pathlib.Path, eval_set: str = EVAL_SET) -> dict:
         cpu.predict([r["text"].split()])
     report["cpu_ms_per_command_4_threads"] = (time.perf_counter() - t0) / 30 * 1000
 
-    (ckpt / ("eval.json" if eval_set == "v0" else f"eval-{eval_set}.json")).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ckpt / ("eval.json" if eval_set == "v0" else f"eval-{eval_set}.json")).write_text(
+        json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     print_report(report)
     return report
 

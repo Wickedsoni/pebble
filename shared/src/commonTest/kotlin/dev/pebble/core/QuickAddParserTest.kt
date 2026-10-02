@@ -2,8 +2,8 @@ package dev.pebble.core
 
 import dev.pebble.core.quickadd.QuickAddParser
 import dev.pebble.core.quickadd.QuickCommand.AddNote
-import dev.pebble.core.quickadd.QuickCommand.RememberFact
 import dev.pebble.core.quickadd.QuickCommand.LogWater
+import dev.pebble.core.quickadd.QuickCommand.RememberFact
 import dev.pebble.core.quickadd.QuickCommand.RemindAt
 import dev.pebble.core.quickadd.QuickCommand.RemindIn
 import dev.pebble.core.quickadd.QuickCommand.SetInterval

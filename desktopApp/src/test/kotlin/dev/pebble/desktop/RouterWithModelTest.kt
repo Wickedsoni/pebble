@@ -54,7 +54,9 @@ class RouterWithModelTest {
             assertIs<QuickCommand.RememberFact>((router.route("याद रखना कि मेरा एग्जाम बीस तारीख को है") as Routed.Run).command)
             assertIs<QuickCommand.LogWater>((router.route("maine ek glass paani pi liya") as Routed.Run).command)
             // The title keeps who and what ("Mummy call…"), never the time words.
-            val title = (router.route("shaam 7 baje mummy ko call karne ki yaad dila dena") as Routed.Run).command.let { (it as QuickCommand.RemindAt).title }
+            val title = (router.route("shaam 7 baje mummy ko call karne ki yaad dila dena") as Routed.Run).command.let {
+                (it as QuickCommand.RemindAt).title
+            }
             assertTrue(title.startsWith("Mummy call") && "baje" !in title, title)
             assertIs<QuickCommand.SetInterval>((router.route("water every 45m") as Routed.Run).command) // rules first
         }

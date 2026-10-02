@@ -31,8 +31,10 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
     private val session: OrtSession
     private val intents: List<String>
     private val tags: List<String>
+
     /** Calibration temperature from labels.json (brain/calibrate.py); 1.0 for uncalibrated models. */
     private val temperature: Float
+
     /** Mood head labels and temperature; null for models trained before the mood head. */
     private val moods: List<String>?
     private val moodTemperature: Float
@@ -71,6 +73,7 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
                 session.run(mapOf("input_ids" to idT, "attention_mask" to maskT)).use { out ->
                     @Suppress("UNCHECKED_CAST")
                     val intentLogits = (out[0].value as Array<FloatArray>)[0]
+
                     @Suppress("UNCHECKED_CAST")
                     val slotLogits = (out[1].value as Array<Array<FloatArray>>)[0]
                     val probs = softmax(FloatArray(intentLogits.size) { intentLogits[it] / temperature })

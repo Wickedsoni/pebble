@@ -86,7 +86,8 @@ fun GlassField(placeholder: String, modifier: Modifier = Modifier, onSubmit: (St
         Box(Modifier.weight(1f)) {
             if (text.isEmpty()) Text(placeholder, color = c.secondary, fontSize = 13.sp)
             BasicTextField(
-                text, { text = it },
+                text,
+                { text = it },
                 singleLine = true,
                 textStyle = TextStyle(color = c.content, fontSize = 13.sp),
                 cursorBrush = SolidColor(c.accent),
@@ -133,29 +134,50 @@ fun DrawScope.drawBottle(level: Float, goal: Int, c: GlassColors) {
         lineTo(left + r, bottom)
         quadraticTo(left, bottom, left, bottom - r)
         lineTo(left, shoulder)
-        cubicTo(left, shoulder - (shoulder - neckBottom) * 0.2f, left, neckBottom + (shoulder - neckBottom) * 0.25f, w / 2 - neckW / 2, neckBottom)
+        cubicTo(
+            left,
+            shoulder - (shoulder - neckBottom) * 0.2f,
+            left,
+            neckBottom + (shoulder - neckBottom) * 0.25f,
+            w / 2 - neckW / 2,
+            neckBottom,
+        )
         close()
     }
     drawPath(glass, Color.White.copy(alpha = if (c.dark) 0.06f else 0.30f))
     val maxH = bottom - neckBottom - 4f
     val surface = bottom - 3f - maxH * level
-    if (level > 0.001f) clipPath(glass) {
-        drawRect(
-            Brush.verticalGradient(listOf(Color(0xFF7DE3F4), Color(0xFF0EA5A4)), startY = surface, endY = bottom),
-            topLeft = Offset(0f, surface), size = Size(w, bottom - surface),
-        )
-        drawLine(Color.White.copy(alpha = 0.6f), Offset(0f, surface + 0.75f), Offset(w, surface + 0.75f), 1.5f)
+    if (level > 0.001f) {
+        clipPath(glass) {
+            drawRect(
+                Brush.verticalGradient(listOf(Color(0xFF7DE3F4), Color(0xFF0EA5A4)), startY = surface, endY = bottom),
+                topLeft = Offset(0f, surface),
+                size = Size(w, bottom - surface),
+            )
+            drawLine(Color.White.copy(alpha = 0.6f), Offset(0f, surface + 0.75f), Offset(w, surface + 0.75f), 1.5f)
+        }
     }
     val tick = Color.White.copy(alpha = if (c.dark) 0.3f else 0.7f)
     for (i in 1 until goal) {
         val y = bottom - 3f - maxH * i / goal
         if (y > shoulder) drawLine(tick, Offset(right - w * 0.14f, y), Offset(right - w * 0.05f, y), 1.2f)
     }
-    drawLine(Color.White.copy(alpha = if (c.dark) 0.35f else 0.8f), Offset(left + w * 0.1f, shoulder + 6f), Offset(left + w * 0.1f, bottom - r * 0.8f), w * 0.05f, StrokeCap.Round)
+    drawLine(
+        Color.White.copy(alpha = if (c.dark) 0.35f else 0.8f),
+        Offset(left + w * 0.1f, shoulder + 6f),
+        Offset(
+            left + w * 0.1f,
+            bottom - r * 0.8f,
+        ),
+        w * 0.05f,
+        StrokeCap.Round,
+    )
     drawPath(glass, Color.White.copy(alpha = if (c.dark) 0.45f else 0.85f), style = Stroke(1.6f))
     drawRoundRect(
         if (c.dark) Color(0xFFB0B4BC) else Color(0xFF4B5563),
-        topLeft = Offset(w / 2 - capW / 2, 0f), size = Size(capW, capH + 1f), cornerRadius = CornerRadius(3f),
+        topLeft = Offset(w / 2 - capW / 2, 0f),
+        size = Size(capW, capH + 1f),
+        cornerRadius = CornerRadius(3f),
     )
 }
 
@@ -168,10 +190,14 @@ fun DrawScope.drawWeekBars(values: List<Int>, goal: Int, c: GlassColors) {
         val bh = size.height * (v / max)
         val x = i * (barW + gap)
         drawRoundRect(c.well, Offset(x, 0f), Size(barW, size.height), CornerRadius(6f))
-        if (bh > 0f) drawRoundRect(
-            if (v >= goal) c.water else c.water.copy(alpha = 0.55f),
-            Offset(x, size.height - bh), Size(barW, bh), CornerRadius(6f),
-        )
+        if (bh > 0f) {
+            drawRoundRect(
+                if (v >= goal) c.water else c.water.copy(alpha = 0.55f),
+                Offset(x, size.height - bh),
+                Size(barW, bh),
+                CornerRadius(6f),
+            )
+        }
     }
     val gy = size.height * (1 - goal / max)
     var x = 0f

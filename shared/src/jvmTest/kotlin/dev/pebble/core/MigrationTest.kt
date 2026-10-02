@@ -1,3 +1,6 @@
+// Schema SQL copied verbatim from a released version.
+@file:Suppress("ktlint:standard:max-line-length")
+
 package dev.pebble.core
 
 import dev.pebble.core.brain.CommandFeedbackRepository
@@ -16,7 +19,9 @@ class MigrationTest {
         // A v4 database as the previous release left it: command_feedback without outcome.
         DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
             c.createStatement().use { s ->
-                s.execute("CREATE TABLE command_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, chosen_action TEXT NOT NULL, model_intent TEXT, model_confidence REAL, at_millis INTEGER NOT NULL)")
+                s.execute(
+                    "CREATE TABLE command_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, chosen_action TEXT NOT NULL, model_intent TEXT, model_confidence REAL, at_millis INTEGER NOT NULL)",
+                )
                 s.execute("INSERT INTO command_feedback(text, chosen_action, at_millis) VALUES ('tum cute ho', 'chitchat', 1)")
                 s.execute("PRAGMA user_version = 4")
             }
@@ -34,7 +39,11 @@ class MigrationTest {
         val db = DatabaseFactory.create(copy)
         CommandFeedbackRepository(db).all() // reads the new column: fails if the migration didn't run
         DriverManager.getConnection("jdbc:sqlite:${copy.absolutePath}").use { c ->
-            c.createStatement().use { s -> s.executeQuery("PRAGMA user_version").use { r -> r.next(); assertEquals(dev.pebble.db.PebbleDatabase.Schema.version.toInt(), r.getInt(1)) } }
+            c.createStatement().use { s ->
+                s.executeQuery("PRAGMA user_version").use { r ->
+                    r.next(); assertEquals(dev.pebble.db.PebbleDatabase.Schema.version.toInt(), r.getInt(1))
+                }
+            }
         }
     }
 }

@@ -48,11 +48,13 @@ class ReminderEngine(
         val now = clock()
         val quiet = nudge == null && (minuteOfDay(now) / 60) in quietHours()
         val due = buildList {
-            if (!quiet) repo.rules().filter { it.enabled }.forEach { rule ->
-                val key = ruleKey(rule.id)
-                val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * 60_000L)
-                if (now >= dueAt && inWindow(rule, now) && !deferredByPolicy(key, rule.kind, now)) {
-                    add(ActiveReminder(key, rule.kind, rule.title, rule.strictness, dueAt))
+            if (!quiet) {
+                repo.rules().filter { it.enabled }.forEach { rule ->
+                    val key = ruleKey(rule.id)
+                    val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * 60_000L)
+                    if (now >= dueAt && inWindow(rule, now) && !deferredByPolicy(key, rule.kind, now)) {
+                        add(ActiveReminder(key, rule.kind, rule.title, rule.strictness, dueAt))
+                    }
                 }
             }
             repo.pendingOneOffs().forEach { r ->
@@ -104,6 +106,7 @@ class ReminderEngine(
         }
         when (action) {
             ReminderAction.SNOOZED -> snoozedUntil[key] = now + snoozeMinutes * 60_000L
+
             ReminderAction.DONE, ReminderAction.DISMISSED -> {
                 snoozedUntil.remove(key)
                 when {
@@ -113,7 +116,16 @@ class ReminderEngine(
             }
         }
         bus.publish(
-            PebbleEvent.ReminderActed(key, reminder?.kind ?: ReminderKind.CUSTOM, action, snoozeMinutes.takeIf { action == ReminderAction.SNOOZED }, now),
+            PebbleEvent.ReminderActed(
+                key,
+                reminder?.kind ?: ReminderKind.CUSTOM,
+                action,
+                snoozeMinutes.takeIf {
+                    action ==
+                        ReminderAction.SNOOZED
+                },
+                now,
+            ),
         )
         tick()
     }
@@ -143,8 +155,11 @@ class ReminderEngine(
 
     private fun inWindow(rule: ReminderRule, now: Long): Boolean {
         val m = minuteOfDay(now)
-        return if (rule.activeFromMinute <= rule.activeToMinute) m in rule.activeFromMinute until rule.activeToMinute
-        else m >= rule.activeFromMinute || m < rule.activeToMinute // window crosses midnight
+        return if (rule.activeFromMinute <= rule.activeToMinute) {
+            m in rule.activeFromMinute until rule.activeToMinute
+        } else {
+            m >= rule.activeFromMinute || m < rule.activeToMinute // window crosses midnight
+        }
     }
 
     companion object {

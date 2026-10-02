@@ -119,7 +119,13 @@ class CommandRouterTest {
     fun lowMoodGetsACaringReply() {
         // With no model (or the model reading small talk), a low mood always gets care, never a joke.
         val router = CommandRouter({ null })
-        for (t in listOf("aaj mood thoda off hai", "आज मेरा मूड ठीक नहीं है", "i'm feeling a bit low today", "padhai me mann nhi lag rha", "आज किसी काम में मन नहीं है")) {
+        for (t in listOf(
+            "aaj mood thoda off hai",
+            "आज मेरा मूड ठीक नहीं है",
+            "i'm feeling a bit low today",
+            "padhai me mann nhi lag rha",
+            "आज किसी काम में मन नहीं है",
+        )) {
             val r = router.route(t) as Routed.Run
             assertEquals(QuickCommand.Chitchat(t, Replies.LOW_MOOD), r.command)
         }
@@ -185,7 +191,16 @@ class CommandRouterTest {
         assertEquals(QuickCommand.Chitchat(text, Replies.LOW_MOOD), r.command)
         // Not sure enough about the mood: normal small talk.
         val unsure = reading.copy(mood = MoodGuess("low", 0.55f))
-        assertEquals("general_quirky", ((CommandRouter({ model(text to unsure) }).route(text) as Routed.Run).command as QuickCommand.Chitchat).intent)
+        assertEquals(
+            "general_quirky",
+            (
+                (
+                    CommandRouter({
+                        model(text to unsure)
+                    }).route(text) as Routed.Run
+                    ).command as QuickCommand.Chitchat
+                ).intent,
+        )
     }
 
     @Test

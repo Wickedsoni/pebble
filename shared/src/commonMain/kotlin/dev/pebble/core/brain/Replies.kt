@@ -3,7 +3,11 @@ package dev.pebble.core.brain
 import kotlin.random.Random
 
 /** Which script a line was written in, so Pebble can mirror it (decided in the brain plan). */
-enum class Script { EN, HI_DEVA, HI_ROMAN;
+enum class Script {
+    EN,
+    HI_DEVA,
+    HI_ROMAN,
+    ;
 
     companion object {
         private val hinglishMarkers = setOf(
@@ -28,7 +32,8 @@ object Replies {
     const val LOW_MOOD = "mood_low"
 
     private val lowMoodWords = listOf(
-        "sad", "feeling low", "feel low", "feeling down", "a bit low", "upset", "lonely", "stressed", "tired of", "depressed", "anxious", "not okay", "not ok", "bad day",
+        "sad", "feeling low", "feel low", "feeling down", "a bit low", "upset", "lonely", "stressed", "tired of",
+        "depressed", "anxious", "not okay", "not ok", "bad day",
         "mood off", "mood kharab", "mood thoda off", "udaas", "udas", "dukhi", "pareshan", "akela", "tension",
         "mann nahi lag", "man nahi lag", "mann nhi lag", "man nhi lag", "dil nahi lag", "dil nhi lag", "kuch acha nahi lag",
         "thak gaya hu", "thak gayi hu", "thak gaya hoon", "thak gayi hoon", "so tired", "exhausted", "burnt out", "overwhelmed",

@@ -61,7 +61,9 @@ object Wallpaper {
 
     private fun registryPath(): String? = runCatching {
         com.sun.jna.platform.win32.Advapi32Util.registryGetStringValue(
-            com.sun.jna.platform.win32.WinReg.HKEY_CURRENT_USER, "Control Panel\\Desktop", "WallPaper",
+            com.sun.jna.platform.win32.WinReg.HKEY_CURRENT_USER,
+            "Control Panel\\Desktop",
+            "WallPaper",
         )
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
@@ -122,11 +124,19 @@ fun GlassCard(
                         if (w > 0 && h > 0) drawImage(img, IntOffset(x, y), IntSize(w, h), dstSize = IntSize(w, h))
                     }
                     drawRect(c.tint)
-                    drawRect(Brush.linearGradient(0f to c.reflection, 0.55f to Color.Transparent, end = Offset(size.width * 0.8f, size.height)))
+                    drawRect(
+                        Brush.linearGradient(0f to c.reflection, 0.55f to Color.Transparent, end = Offset(size.width * 0.8f, size.height)),
+                    )
                 }
                 drawRoundRect(
-                    Brush.verticalGradient(listOf(Color.White.copy(alpha = if (c.dark) 0.28f else 0.85f), Color.White.copy(alpha = if (c.dark) 0.06f else 0.35f))),
-                    cornerRadius = r, style = Stroke(1.dp.toPx()),
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = if (c.dark) 0.28f else 0.85f),
+                            Color.White.copy(alpha = if (c.dark) 0.06f else 0.35f),
+                        ),
+                    ),
+                    cornerRadius = r,
+                    style = Stroke(1.dp.toPx()),
                 )
             }
             .padding(padding),

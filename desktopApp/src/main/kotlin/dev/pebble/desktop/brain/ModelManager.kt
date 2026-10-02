@@ -29,7 +29,9 @@ import java.security.MessageDigest
  */
 class ModelManager(private val scope: CoroutineScope, private val idleMillis: Long = 10 * 60_000L) : Understanding {
     @Volatile private var model: OnnxIntentModel? = null
+
     @Volatile private var lastUse = 0L
+
     @Volatile var status: String = "not loaded"
         private set
     private var loading: Job? = null
@@ -62,8 +64,10 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
             val file = DatabaseFactory.defaultDataDir().toPath().resolve("brain.log")
             if (Files.exists(file) && Files.size(file) > 64_000) Files.delete(file)
             Files.writeString(
-                file, "${java.time.LocalDateTime.now().withNano(0)}  $status  $dir\n",
-                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND,
+                file,
+                "${java.time.LocalDateTime.now().withNano(0)}  $status  $dir\n",
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.APPEND,
             )
         }
     }
@@ -99,14 +103,19 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
             // Set by Compose Desktop in the installed app (and by `run`): <install>/app/resources.
             System.getProperty("compose.application.resources.dir")?.let { Path.of(it).resolve("models/intent") },
         ) + listOf(cwd.resolve("../brain/models"), cwd.resolve("brain/models")).mapNotNull { devModel(it.normalize()) }
-        return candidates.firstOrNull { Files.exists(it.resolve("intent.int8.onnx")) && Files.exists(it.resolve("tokenizer/tokenizer.json")) }
+        return candidates.firstOrNull {
+            Files.exists(it.resolve("intent.int8.onnx")) && Files.exists(it.resolve("tokenizer/tokenizer.json"))
+        }
     }
 
     /** The dev-layout model folder that `<models>/manifest.json` points at. */
     private fun devModel(models: Path): Path? {
         val manifest = models.resolve("manifest.json").takeIf(Files::exists) ?: return null
-        val path = runCatching { modelEntry(manifest)?.getValue("files")?.jsonObject?.getValue("model")?.jsonObject?.getValue("path")?.jsonPrimitive?.content }
-            .getOrNull() ?: return null
+        val path =
+            runCatching {
+                modelEntry(manifest)?.getValue("files")?.jsonObject?.getValue("model")?.jsonObject?.getValue("path")?.jsonPrimitive?.content
+            }
+                .getOrNull() ?: return null
         return models.resolve(path).parent
     }
 

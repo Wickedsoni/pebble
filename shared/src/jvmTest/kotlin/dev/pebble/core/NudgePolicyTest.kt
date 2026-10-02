@@ -37,7 +37,8 @@ class NudgePolicyTest {
         val policy = NudgePolicy(InMemoryNudgeStore(), random = Random(7))
         val busyAfternoon = NudgeContext.of(ReminderKind.WATER, 13, busy = false)
         val morning = NudgeContext.of(ReminderKind.WATER, 9, busy = false)
-        repeat(200) { // ~200 days, one water nudge in each window
+        repeat(200) {
+            // ~200 days, one water nudge in each window
             for (ctx in listOf(busyAfternoon, morning)) {
                 val arm = policy.choose(ctx).arm
                 policy.learn(ctx, arm, reaction(ctx, arm))

@@ -61,7 +61,7 @@ Then refresh `models/manifest.json` (path + checksum). Tests and the installer u
   `python -m pebble_brain.feedback` summarises; `train_intent --feedback auto` trains on picked (3×) and
   confirmed (1×), slot loss skipped, eval look-alikes dropped. Retrain stays manual + gated.
 - **Still planned:** Phase C mood head on the shared encoder; Phase D contextual bandit for nudge timing
-  (reward = ReminderActed done / snoozed / skipped). Plan: `C:\Users\Avik\.claude\plans\there-is-this-new-logical-castle.md`.
+  (reward = ReminderActed done / snoozed / skipped). See `docs/ARCHITECTURE.md`.
 
 ## Known weak spots
 - Hindi chit-chat ("tum bahut cute ho") and some short Hinglish lines still trigger "Did you mean".
@@ -100,4 +100,4 @@ Then refresh `models/manifest.json` (path + checksum). Tests and the installer u
    worktree, and you review the diff.
 7. **Later milestones:** M3 habit brain (contextual bandit, RL), M4 speech-to-text (Whisper LoRA, push-to-talk),
    M5 local chat (Qwen2.5-0.5B via llama.cpp), M6 situation/mood/context models, M7 overnight continual learning.
-   The full plan is in `C:\Users\Avik\.claude\plans\i-would-like-to-glittery-coral.md`.
+   The full plan is in `docs/ROADMAP.md`.

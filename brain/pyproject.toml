@@ -38,3 +38,22 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pebble_brain"]
+
+# Lint + format, enforced in CI:  uvx ruff check .  /  uvx ruff format --check .
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+extend-exclude = ["notebooks", "data", "models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "RUF"]
+ignore = [
+    "E501",    # long lines are the formatter's job
+    "RUF001",  # Devanagari and typographic characters in strings are intended
+    "RUF002",
+    "RUF003",
+    "B905",    # zip() pairs here are equal length by construction
+    "E741",    # `l` for a line in comprehensions
+    "RUF005",  # list concatenation is clear enough
+    "RUF007",
+]

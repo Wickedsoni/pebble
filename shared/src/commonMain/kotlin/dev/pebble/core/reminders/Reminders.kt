@@ -4,7 +4,11 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class ReminderKind(val emoji: String) {
-    WATER("💧"), STRETCH("🙆"), EYES("👀"), CUSTOM("⏰");
+    WATER("💧"),
+    STRETCH("🙆"),
+    EYES("👀"),
+    CUSTOM("⏰"),
+    ;
 
     companion object {
         fun parse(s: String) = entries.firstOrNull { it.name == s } ?: CUSTOM
@@ -14,7 +18,10 @@ enum class ReminderKind(val emoji: String) {
 /** How hard the pet pushes when you ignore a reminder. Chosen per reminder type. */
 @Serializable
 enum class Strictness(val label: String) {
-    GENTLE("Gentle"), NORMAL("Normal"), STRICT("Strict coach");
+    GENTLE("Gentle"),
+    NORMAL("Normal"),
+    STRICT("Strict coach"),
+    ;
 
     companion object {
         fun parse(s: String) = entries.firstOrNull { it.name == s } ?: NORMAL
@@ -29,11 +36,13 @@ object EscalationPolicy {
         val s = overdueMillis / 1_000
         return when (strictness) {
             Strictness.GENTLE -> Escalation.BUBBLE
+
             Strictness.NORMAL -> when {
                 s < 60 -> Escalation.BUBBLE
                 s < 180 -> Escalation.BOUNCE
                 else -> Escalation.TOAST
             }
+
             Strictness.STRICT -> when {
                 s < 30 -> Escalation.BUBBLE
                 s < 120 -> Escalation.BOUNCE

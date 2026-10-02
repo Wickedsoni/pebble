@@ -34,8 +34,10 @@ fun main(args: Array<String>) {
         add(Stage.entries.map { Triple(Character.PEBBLE, it, PetPose()) })
         add(Mood.entries.take(5).map { Triple(Character.PEBBLE, Stage.TEEN, it.defaultPose()) })
         add(Mood.entries.drop(5).map { Triple(Character.PEBBLE, Stage.TEEN, it.defaultPose()) })
-        add(listOf(Mood.LOVE, Mood.HAPPY, Mood.THIRSTY, Mood.NEEDS_INPUT, Mood.WORKING).zip(Character.entries.drop(1) + Character.PEBBLE)
-            .map { (m, c) -> Triple(c, Stage.TEEN, m.defaultPose()) })
+        add(
+            listOf(Mood.LOVE, Mood.HAPPY, Mood.THIRSTY, Mood.NEEDS_INPUT, Mood.WORKING).zip(Character.entries.drop(1) + Character.PEBBLE)
+                .map { (m, c) -> Triple(c, Stage.TEEN, m.defaultPose()) },
+        )
     }
     val width = cell * 5 + 40
     val height = cell * rows.size + 40

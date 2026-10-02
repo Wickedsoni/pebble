@@ -121,7 +121,15 @@ fun PebbleWindow(
                 backdrop?.let {
                     Image(it.sharp, null, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
                     // Wallpapers can be busy (logos, text): a scrim keeps them from fighting the content.
-                    if (scene == Scene.WALLPAPER) Box(Modifier.fillMaxSize().background(if (dark) Color.Black.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.12f)))
+                    if (scene ==
+                        Scene.WALLPAPER
+                    ) {
+                        Box(
+                            Modifier.fillMaxSize().background(
+                                if (dark) Color.Black.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.12f),
+                            ),
+                        )
+                    }
                 }
                 Row(Modifier.fillMaxSize().padding(14.dp)) {
                     Sidebar(pet, page, onPage, Modifier.width(214.dp).fillMaxHeight().dragsWindow(window))
@@ -129,16 +137,23 @@ fun PebbleWindow(
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Header(page, window, onClose, Modifier.dragsWindow(window))
                         Spacer(Modifier.height(14.dp))
-                        AnimatedContent(page, transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(100)) }, label = "page") { p ->
+                        AnimatedContent(page, transitionSpec = {
+                            fadeIn(tween(160)) togetherWith fadeOut(tween(100))
+                        }, label = "page") { p ->
                             when (p) {
                                 Page.TODAY -> TodayPage(app, pet)
+
                                 Page.WATER -> WaterPage(app)
+
                                 Page.NOTES -> NotesPage(app)
+
                                 Page.REMINDERS -> RemindersPage(app)
+
                                 Page.COMPANION -> CompanionPage(pet, petVisible, onPetVisible, autostart, onAutostart, scene) {
                                     scene = it
                                     app.settings.set(dev.pebble.core.settings.SettingsRepository.Keys.APP_SCENE, it.name)
                                 }
+
                                 Page.MEMORY -> MemoryPage(app)
                             }
                         }
@@ -169,13 +184,23 @@ private fun Sidebar(pet: PetController, page: Page, onPage: (Page) -> Unit, modi
             ) {
                 Icon(p.icon, if (selected) c.accent else c.secondary, 18.dp)
                 Spacer(Modifier.width(12.dp))
-                Text(p.title, color = if (selected) c.content else c.secondary, fontSize = 14.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                Text(
+                    p.title,
+                    color = if (selected) c.content else c.secondary,
+                    fontSize = 14.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                )
             }
         }
         Spacer(Modifier.weight(1f))
         Text("Quick add anywhere", color = c.secondary, fontSize = 11.sp, modifier = Modifier.padding(start = 6.dp))
-        Text("Ctrl + Alt + Space", color = c.content, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 6.dp, top = 2.dp))
+        Text(
+            "Ctrl + Alt + Space",
+            color = c.content,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+        )
     }
 }
 

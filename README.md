@@ -1,0 +1,90 @@
+# Pebble
+
+**A desktop companion for Windows that understands English, Hindi and Hinglish, and runs its AI entirely on your laptop.**
+
+Pebble is a small pet that lives on your taskbar. It nudges you to drink water, stretch and rest your eyes, and keeps your notes and reminders. You can type to it or talk to it the way you'd talk to a friend: *"kal shaam saade paanch baje mummy ko call karna yaad dila dena"*, *"शुक्रवार को चार बजे मीटिंग है"*, *"remind me abt the viva tmrw 10am"*. Its brain is a set of small local models that learn from how you use it. No cloud, no account, no telemetry.
+
+<p align="center"><img src="docs/images/characters.png" width="520" alt="Pebble's characters and moods"></p>
+
+> **Status:** early and actively developed (v0.1). Windows 10/11 only for now. Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## What it does
+
+- **Desktop pet:** five characters with growth stages and moods. It walks along the taskbar, follows your cursor, naps when you're away, and hides for fullscreen apps. It's battery-aware: about 4 Hz when still, and no wandering in battery saver.
+- **Glass app:** Today, Water, Notes, Reminders, Companion and Memory pages over animated aurora backgrounds.
+- **Reminders that learn:**
+  - Water, stretch and 20-20-20 eye breaks, each *gentle*, *normal* or *strict*.
+  - A small reinforcement-learning policy learns *when* nudges actually land for you, and waits out the moments you always skip.
+- **Quick Add** (`Ctrl+Alt+Space`):
+  - Type or **hold to talk**, in English, Devanagari or Roman Hindi, mixed freely.
+  - When it isn't sure, it asks "Did you mean…?".
+  - "Not what I meant" undoes any guess, and your answer teaches the next model.
+- **Memory:** learns your habits, streaks and mood trends. Everything is readable on the Memory page and deletable with one click.
+
+## How it works
+
+```
+voice (hold Ctrl+Alt+Space) → mic → filter → Silero VAD → Whisper ─┐
+typed text ─────────────────────────────────────────────────────────┤
+                                                                    ▼
+rules (exact syntax, Hinglish times/dates) → e5 encoder → intent · slots · mood heads
+→ calibrated decision (act / ask) → action + reply in your script
+→ what you do next becomes training data (gated retrain, never silent)
+```
+
+- **Command model:**
+  - A `multilingual-e5-small` encoder fine-tuned with intent, slot and mood heads, trained on Amazon MASSIVE plus Pebble's own data.
+  - Its vocabulary is pruned from 250k to 27k pieces, and it's quantised to int8: **31 MB, about 5 ms per command on CPU**.
+  - Its confidence is calibrated, so "80% sure" means right about 80% of the time.
+- **Speech:** [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with Silero VAD and Whisper, all offline. The mic is open only while you hold the key.
+- **Habit policy:** a contextual Thompson-sampling bandit. It's rewarded when a reminder gets done.
+- **Low power:** models load on demand and free themselves after 10 idle minutes.
+
+The full design, with file pointers, the training loop and the quality gates, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Where it's going is in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Build and run
+
+**Requirements:** Windows 10/11, JDK 21. For training: Python 3.11 via [uv](https://docs.astral.sh/uv/), and optionally an NVIDIA GPU.
+
+```powershell
+git clone https://github.com/Wickedsoni/pebble.git
+cd pebble
+./gradlew :desktopApp:run                  # start Pebble
+./gradlew :shared:jvmTest :desktopApp:test # run the tests
+./gradlew :desktopApp:packageMsi           # build an installer
+```
+
+**Models aren't stored in git** (they're tens to hundreds of MB). Without them, Pebble still works on rules: exact phrasings, times and notes. To get the full brain, build it yourself:
+
+```powershell
+cd brain
+python -m uv sync
+python -m uv run python data/download_massive.py
+python -m uv run python -m pebble_brain.train_intent --out models/intent-v2
+python -m uv run python -m pebble_brain.prune_vocab models/intent-v2 models/intent-v2-pruned
+python -m uv run python -m pebble_brain.export_onnx models/intent-v2-pruned
+```
+
+See [brain/README.md](brain/README.md) for the speech models and the training details. Prebuilt model downloads will come with the first release.
+
+## Repository layout
+
+| Path | What |
+|---|---|
+| `shared/` | Kotlin Multiplatform core: rules, decision policy, reminders, memory, nudge bandit, SQLite (SQLDelight) |
+| `desktopApp/` | Compose Desktop app: pet, windows, Quick Add, ONNX and speech runtimes, packaging |
+| `brain/` | Python: datasets, training, evaluation, ONNX export, calibration (never shipped to users) |
+| `brain/eval/` | Frozen test sets. **Never train on these.** |
+| `docs/` | Architecture, roadmap |
+
+## Privacy
+
+Pebble runs offline. Your notes, reminders, habits and corrections live in `%APPDATA%\Pebble` and never leave your computer. The microphone is open only while you hold the talk key. Voice clips are kept only if you switch that on *and* correct a transcript, and they can be deleted from the Memory page.
+
+## Contributing
+
+There's useful work at every level: Hinglish phrasings and test sentences, Kotlin UI, reminder logic, model training, speech accuracy for Indian accents. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and look for issues labelled `good first issue`. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md), and report security issues privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Pebble's code is licensed under the [Apache License 2.0](LICENSE). It builds on open datasets and models (Amazon MASSIVE, Google FLEURS, multilingual-e5, Whisper, Silero VAD, sherpa-onnx). Their licenses and the required attributions are listed in [NOTICE](NOTICE).

@@ -63,9 +63,13 @@ class MemoryEngine(
                     val from = formatHour(bucket * 4)
                     val to = formatHour((bucket * 4 + 4) % 24)
                     memory.putDerived(
-                        MemoryKind.HABIT, key,
-                        "I wait about ${best.key.waitMinutes} min with ${kindName(kind)} reminders between $from and $to — they land better then.",
-                        best.key.name, now,
+                        MemoryKind.HABIT,
+                        key,
+                        "I wait about ${best.key.waitMinutes} min with ${kindName(
+                            kind,
+                        )} reminders between $from and $to — they land better then.",
+                        best.key.name,
+                        now,
                     )
                 } else {
                     memory.dropDerived(key)
@@ -80,7 +84,13 @@ class MemoryEngine(
         val hours = events<PebbleEvent.WaterLogged>("water_logged", since).groupingBy { hourOf(it.atMillis) }.eachCount()
         val usual = hours.filterValues { it >= 3 }.entries.sortedByDescending { it.value }.take(3).map { it.key }.sorted()
         if (usual.isEmpty()) return memory.dropDerived(KEY_WATER_HOURS)
-        memory.putDerived(MemoryKind.HABIT, KEY_WATER_HOURS, "You usually drink water around ${listHours(usual)}.", usual.joinToString(","), now)
+        memory.putDerived(
+            MemoryKind.HABIT,
+            KEY_WATER_HOURS,
+            "You usually drink water around ${listHours(usual)}.",
+            usual.joinToString(","),
+            now,
+        )
     }
 
     private fun learnReminderResponses(since: Long, now: Long) {
@@ -105,9 +115,11 @@ class MemoryEngine(
             .keys.sorted()
         if (quiet.isEmpty()) return memory.dropDerived(KEY_QUIET)
         memory.putDerived(
-            MemoryKind.HABIT, KEY_QUIET,
+            MemoryKind.HABIT,
+            KEY_QUIET,
             "I stay quiet around ${listHours(quiet)} — you usually skip reminders then.",
-            quiet.joinToString(","), now,
+            quiet.joinToString(","),
+            now,
         )
     }
 
@@ -119,9 +131,11 @@ class MemoryEngine(
         val hours = active.groupingBy { it.hour }.eachCount().filterValues { it >= days * 0.5 }.keys.sorted()
         if (hours.isEmpty()) return memory.dropDerived(KEY_ACTIVE)
         memory.putDerived(
-            MemoryKind.HABIT, KEY_ACTIVE,
+            MemoryKind.HABIT,
+            KEY_ACTIVE,
             "You're usually at your computer from ${formatHour(hours.first())} to ${formatHour((hours.last() + 1) % 24)}.",
-            hours.joinToString(","), now,
+            hours.joinToString(","),
+            now,
         )
     }
 
@@ -136,8 +150,11 @@ class MemoryEngine(
         var day = if ((perDay[today] ?: 0) >= goal) today else today - 1
         var streak = 0
         while ((perDay[day] ?: 0) >= goal) { streak++; day-- }
-        if (streak >= 2) memory.putDerived(MemoryKind.STREAK, KEY_WATER_STREAK, "Water goal met $streak days in a row.", "$streak", now)
-        else memory.dropDerived(KEY_WATER_STREAK)
+        if (streak >= 2) {
+            memory.putDerived(MemoryKind.STREAK, KEY_WATER_STREAK, "Water goal met $streak days in a row.", "$streak", now)
+        } else {
+            memory.dropDerived(KEY_WATER_STREAK)
+        }
 
         val finished = db.pebbleQueries.eventsOfTypeSince("note_completed", 0).executeAsList().size
         if (finished >= 3) memory.putDerived(MemoryKind.STREAK, KEY_NOTES_DONE, "You've finished $finished notes.", "$finished", now)
@@ -146,8 +163,11 @@ class MemoryEngine(
         var d = today
         var run = 0
         while (d in activeDays) { run++; d-- }
-        if (run >= 3) memory.putDerived(MemoryKind.STREAK, KEY_DAYS_ACTIVE, "We've hung out $run days in a row.", "$run", now)
-        else memory.dropDerived(KEY_DAYS_ACTIVE)
+        if (run >= 3) {
+            memory.putDerived(MemoryKind.STREAK, KEY_DAYS_ACTIVE, "We've hung out $run days in a row.", "$run", now)
+        } else {
+            memory.dropDerived(KEY_DAYS_ACTIVE)
+        }
     }
 
     // ------------------------------------------------------------------ mood
@@ -162,7 +182,13 @@ class MemoryEngine(
             avg >= 2.5 -> "mixed"
             else -> "a bit low"
         }
-        memory.putDerived(MemoryKind.MOOD, KEY_MOOD_WEEK, "Your mood this week has been $word.", ((avg * 10).roundToInt() / 10.0).toString(), now)
+        memory.putDerived(
+            MemoryKind.MOOD,
+            KEY_MOOD_WEEK,
+            "Your mood this week has been $word.",
+            ((avg * 10).roundToInt() / 10.0).toString(),
+            now,
+        )
 
         // Does hitting the water goal line up with better days?
         val goal = waterGoalMl()

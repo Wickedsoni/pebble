@@ -1,0 +1,22 @@
+name: Feature idea
+description: Suggest something Pebble should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like Pebble to help with?
+      description: Describe the situation and the need, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it work?
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Fits Pebble's principles
+      options:
+        - label: Works offline, with no cloud service
+        - label: Doesn't keep listening, watching or recording in the background

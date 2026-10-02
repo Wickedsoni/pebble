@@ -93,8 +93,19 @@ private fun GreetingCard(app: PebbleApp, now: LocalDateTime, modifier: Modifier)
     GlassCard(modifier, padding = 22.dp) {
         Text(greeting, color = c.secondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(now.format(DateTimeFormatter.ofPattern("h:mm")), color = c.content, fontSize = 60.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp)
-            Text(now.format(DateTimeFormatter.ofPattern(" a")).uppercase(), color = c.secondary, fontSize = 16.sp, modifier = Modifier.padding(bottom = 14.dp))
+            Text(
+                now.format(DateTimeFormatter.ofPattern("h:mm")),
+                color = c.content,
+                fontSize = 60.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = (-2).sp,
+            )
+            Text(
+                now.format(DateTimeFormatter.ofPattern(" a")).uppercase(),
+                color = c.secondary,
+                fontSize = 16.sp,
+                modifier = Modifier.padding(bottom = 14.dp),
+            )
         }
         Text(now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), color = c.secondary, fontSize = 14.sp)
     }
@@ -108,7 +119,12 @@ private fun CompanionCard(app: PebbleApp, pet: PetController, modifier: Modifier
     GlassCard(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Canvas(Modifier.size(64.dp)) {
-                drawPet(pet.character, pet.stage, if (logged) Mood.HAPPY.defaultPose().copy(motion = dev.pebble.desktop.pet.Motion.STILL) else PetPose(), PetFrame())
+                drawPet(
+                    pet.character,
+                    pet.stage,
+                    if (logged) Mood.HAPPY.defaultPose().copy(motion = dev.pebble.desktop.pet.Motion.STILL) else PetPose(),
+                    PetFrame(),
+                )
             }
             Spacer(Modifier.width(10.dp))
             Column {
@@ -117,8 +133,10 @@ private fun CompanionCard(app: PebbleApp, pet: PetController, modifier: Modifier
             }
         }
         Spacer(Modifier.weight(1f))
-        if (!logged) FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            MOODS.forEachIndexed { i, label -> Chip(label, false) { app.logMood(i + 1); logged = true } }
+        if (!logged) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                MOODS.forEachIndexed { i, label -> Chip(label, false) { app.logMood(i + 1); logged = true } }
+            }
         }
     }
 }
@@ -161,8 +179,29 @@ private fun NextUpCard(app: PebbleApp, modifier: Modifier) {
         upcoming.forEach { r ->
             val mins = ((r.dueAt - now()) / 60_000).toInt()
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(r.title, color = c.content, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(if (mins <= 0) "now" else if (mins < 60) "${mins}m" else "${mins / 60}h ${mins % 60}m", color = if (mins <= 0) c.warm else c.secondary, fontSize = 12.sp)
+                Text(
+                    r.title,
+                    color = c.content,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    if (mins <=
+                        0
+                    ) {
+                        "now"
+                    } else if (mins <
+                        60
+                    ) {
+                        "${mins}m"
+                    } else {
+                        "${mins / 60}h ${mins % 60}m"
+                    },
+                    color = if (mins <= 0) c.warm else c.secondary,
+                    fontSize = 12.sp,
+                )
             }
         }
         if (upcoming.isEmpty()) Text("Nothing scheduled.", color = c.secondary, fontSize = 13.sp)
@@ -207,10 +246,16 @@ private fun MemoryHighlightCard(app: PebbleApp, modifier: Modifier) {
     val highlights = memories.filter { it.kind != MemoryKind.STREAK }.take(3)
     GlassCard(modifier) {
         CardLabel("Pebble remembers", PebbleIcons.Memory, c.calm)
-        if (highlights.isEmpty()) Text(
-            "I'm still learning your rhythm. Tell me things with quick add: “remember …”.",
-            color = c.secondary, fontSize = 13.sp, lineHeight = 18.sp,
-        )
-        highlights.forEach { Text(it.text, color = c.content, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(vertical = 3.dp)) }
+        if (highlights.isEmpty()) {
+            Text(
+                "I'm still learning your rhythm. Tell me things with quick add: “remember …”.",
+                color = c.secondary,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+            )
+        }
+        highlights.forEach {
+            Text(it.text, color = c.content, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(vertical = 3.dp))
+        }
     }
 }

@@ -47,7 +47,11 @@ fun NotesPage(app: PebbleApp) {
                     IconButton(PebbleIcons.Check, size = 28.dp) { app.completeNote(n.id) }
                     Spacer(Modifier.width(12.dp))
                     Text(n.text, color = c.content, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
-                    Text(Instant.ofEpochMilli(n.updatedAt).atZone(ZoneId.systemDefault()).format(noteDate), color = c.secondary, fontSize = 11.sp)
+                    Text(
+                        Instant.ofEpochMilli(n.updatedAt).atZone(ZoneId.systemDefault()).format(noteDate),
+                        color = c.secondary,
+                        fontSize = 11.sp,
+                    )
                 }
             }
         }

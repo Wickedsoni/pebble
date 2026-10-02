@@ -47,31 +47,35 @@ data class GlassColors(
     val calm: Color,
 )
 
-fun glassColors(dark: Boolean) = if (dark) GlassColors(
-    content = Color(0xFFF7F7FA),
-    secondary = Color(0xFFF7F7FA).copy(alpha = 0.72f),
-    accent = Color(0xFF8AB4FF),
-    well = Color.White.copy(alpha = 0.10f),
-    hairline = Color.White.copy(alpha = 0.16f),
-    tint = Color(0xFF0E1118).copy(alpha = 0.42f),
-    reflection = Color.White.copy(alpha = 0.10f),
-    dark = true,
-    water = Color(0xFF5EEAD4),
-    warm = Color(0xFFFBBF24),
-    calm = Color(0xFFC4B5FD),
-) else GlassColors(
-    content = Color(0xFF111318),
-    secondary = Color(0xFF111318).copy(alpha = 0.68f),
-    accent = Color(0xFF2563EB),
-    well = Color.White.copy(alpha = 0.45f),
-    hairline = Color.White.copy(alpha = 0.7f),
-    tint = Color.White.copy(alpha = 0.50f),
-    reflection = Color.White.copy(alpha = 0.45f),
-    dark = false,
-    water = Color(0xFF0D9488),
-    warm = Color(0xFFD97706),
-    calm = Color(0xFF7C3AED),
-)
+fun glassColors(dark: Boolean) = if (dark) {
+    GlassColors(
+        content = Color(0xFFF7F7FA),
+        secondary = Color(0xFFF7F7FA).copy(alpha = 0.72f),
+        accent = Color(0xFF8AB4FF),
+        well = Color.White.copy(alpha = 0.10f),
+        hairline = Color.White.copy(alpha = 0.16f),
+        tint = Color(0xFF0E1118).copy(alpha = 0.42f),
+        reflection = Color.White.copy(alpha = 0.10f),
+        dark = true,
+        water = Color(0xFF5EEAD4),
+        warm = Color(0xFFFBBF24),
+        calm = Color(0xFFC4B5FD),
+    )
+} else {
+    GlassColors(
+        content = Color(0xFF111318),
+        secondary = Color(0xFF111318).copy(alpha = 0.68f),
+        accent = Color(0xFF2563EB),
+        well = Color.White.copy(alpha = 0.45f),
+        hairline = Color.White.copy(alpha = 0.7f),
+        tint = Color.White.copy(alpha = 0.50f),
+        reflection = Color.White.copy(alpha = 0.45f),
+        dark = false,
+        water = Color(0xFF0D9488),
+        warm = Color(0xFFD97706),
+        calm = Color(0xFF7C3AED),
+    )
+}
 
 val LocalGlass = compositionLocalOf { glassColors(dark = false) }
 

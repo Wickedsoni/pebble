@@ -39,5 +39,9 @@ brain/.venv/
 brain/data/raw/
 brain/models/*
 !brain/models/manifest.json
+# Your voice recordings stay local; only the reference texts are committed.
+brain/eval/voice_v1/*.wav
 __pycache__/
 .ipynb_checkpoints/
+
+.idea/

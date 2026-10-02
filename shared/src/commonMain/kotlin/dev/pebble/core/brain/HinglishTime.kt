@@ -28,8 +28,11 @@ object HinglishTime {
         var hour = hour12
         var flexible = false
         when {
-            hour > 12 -> Unit // already 24h ("17:30")
+            hour > 12 -> Unit
+
+            // already 24h ("17:30")
             part != null -> hour = part.to24(hour)
+
             else -> flexible = hour in 1..11
         }
         if (hour == 24) hour = 0
@@ -40,13 +43,26 @@ object HinglishTime {
     // ---------------------------------------------------------------- pieces
 
     private enum class Part(val defaultHour: Int) {
-        MORNING(9), NOON(13), EVENING(18), NIGHT(21);
+        MORNING(9),
+        NOON(13),
+        EVENING(18),
+        NIGHT(21),
+        ;
 
         fun to24(h: Int): Int = when (this) {
             MORNING -> if (h == 12) 0 else h
+
             NOON -> if (h in 1..4) h + 12 else h
+
             EVENING -> if (h < 12) h + 12 else h
-            NIGHT -> if (h == 12) 0 else if (h in 5..11) h + 12 else h
+
+            NIGHT -> if (h == 12) {
+                0
+            } else if (h in 5..11) {
+                h + 12
+            } else {
+                h
+            }
         }
     }
 
@@ -162,9 +178,12 @@ object HinglishTime {
             listOf("eleven", "gyarah", "gyara", "ग्यारह"), listOf("twelve", "barah", "bara", "बारह"),
         ).forEachIndexed { i, names -> names.forEach { put(it, i + 1) } }
         mapOf(
-            15 to listOf("fifteen", "pandrah", "pandra", "पंद्रह"), 20 to listOf("twenty", "bees", "bis", "बीस"),
-            25 to listOf("pachees", "pachis", "पच्चीस"), 30 to listOf("thirty", "tees", "tis", "तीस"),
-            40 to listOf("forty", "chalees", "chalis", "चालीस"), 45 to listOf("paintalis", "paintalees", "पैंतालीस"),
+            15 to listOf("fifteen", "pandrah", "pandra", "पंद्रह"),
+            20 to listOf("twenty", "bees", "bis", "बीस"),
+            25 to listOf("pachees", "pachis", "पच्चीस"),
+            30 to listOf("thirty", "tees", "tis", "तीस"),
+            40 to listOf("forty", "chalees", "chalis", "चालीस"),
+            45 to listOf("paintalis", "paintalees", "पैंतालीस"),
             50 to listOf("fifty", "pachaas", "pachas", "पचास"),
         ).forEach { (n, names) -> names.forEach { put(it, n) } }
     }
