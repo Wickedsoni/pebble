@@ -26,7 +26,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Format check (ktlint via Spotless)
         run: ./gradlew spotlessCheck --console=plain
       - name: Tests
