@@ -55,3 +55,21 @@ Pebble actions 95.7% (int8), ~6.5 ms per command on 4 CPU threads, 33 MB with to
 1. Only permissively licensed data and models for anything shipped (see `data/licenses.json`).
 2. Never train on outputs of proprietary models (Claude, GPT, Gemini).
 3. Eval sets are frozen. A model only ships if it beats the current one on them.
+
+## Speech (M4)
+
+```powershell
+python -m uv run python -m pebble_brain.prepare_asr small   # package Whisper with the Devanagari token fix
+cd ..; ./gradlew :desktopApp:asrEval -Pclips=30             # WER/CER on FLEURS Hindi, clean + noisy
+cd brain; python -m uv run python -m pebble_brain.asr_eval  # script-aware scoring (Whisper may answer in Roman letters)
+```
+
+No denoiser ships: on our measurements GTCRN made recognition worse (see docs/ARCHITECTURE.md, "Noise").
+Record your own voice test set with `./gradlew :desktopApp:recordVoiceEval`.
+
+## Get the released models instead of training
+
+```powershell
+python -m pebble_brain.download_models   # downloads the zips named in models/manifest.json, verifies SHA-256
+```
+

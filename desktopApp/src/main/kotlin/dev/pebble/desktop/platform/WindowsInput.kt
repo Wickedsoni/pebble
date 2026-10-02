@@ -3,6 +3,7 @@ package dev.pebble.desktop.platform
 import com.sun.jna.Native
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.User32
+import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.ptr.IntByReference
 import com.sun.jna.win32.StdCallLibrary
@@ -115,6 +116,27 @@ object UserActivity {
             Shell32Ext.INSTANCE.SHQueryUserNotificationState(state)
             state.value in setOf(QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN, QUNS_PRESENTATION_MODE)
         }.getOrDefault(false)
+    }
+
+    /** The window in front: its title, and whether it covers its whole monitor (fullscreen video, game, slides). */
+    data class Foreground(val title: String?, val coversScreen: Boolean)
+
+    fun foreground(): Foreground {
+        if (!isWindows) return Foreground(null, false)
+        return runCatching {
+            val u = User32.INSTANCE
+            val hwnd = u.GetForegroundWindow() ?: return Foreground(null, false)
+            val cls = CharArray(64).let { b -> String(b, 0, u.GetClassName(hwnd, b, b.size)) }
+            if (cls in setOf("Progman", "WorkerW", "Shell_TrayWnd")) return Foreground(null, false) // desktop / taskbar
+            val title = CharArray(512).let { b -> String(b, 0, u.GetWindowText(hwnd, b, b.size)) }.takeIf { it.isNotBlank() }
+            val rect = WinDef.RECT().also { u.GetWindowRect(hwnd, it) }
+            val info = WinUser.MONITORINFO()
+            u.GetMonitorInfo(u.MonitorFromWindow(hwnd, WinUser.MONITOR_DEFAULTTONEAREST), info)
+            val m = info.rcMonitor
+            // A maximized window stops at the taskbar; fullscreen covers the monitor edge to edge.
+            val covers = rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom
+            Foreground(title, covers)
+        }.getOrDefault(Foreground(null, false))
     }
 
     fun cursor(): Point? = runCatching { MouseInfo.getPointerInfo()?.location }.getOrNull()

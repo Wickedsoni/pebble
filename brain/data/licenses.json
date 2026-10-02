@@ -84,6 +84,14 @@
       "use": "M5 chat",
       "license": "Apache-2.0",
       "verified": false
+    },
+    {
+      "name": "DataoceanAI Dolphin base CTC (multi-lang, int8 via sherpa-onnx)",
+      "use": "M4 speech: Hindi/Hinglish recognition (shipped)",
+      "license": "Apache-2.0",
+      "url": "https://github.com/DataoceanAI/Dolphin",
+      "verified": true,
+      "verified_by": "GitHub repo license API: Apache-2.0; Hugging Face card DataoceanAI/dolphin-base: license apache-2.0"
     }
   ],
   "rules": [

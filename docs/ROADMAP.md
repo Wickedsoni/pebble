@@ -30,6 +30,51 @@ Everything runs on the user's laptop. The minimum target is **8 GB RAM, an i5, n
 | M6 | **Situation, mood and context:** self-supervised situation model over the event log; mood head (✅ in intent-v2) and context head feeding the bandit | planned |
 | M7 | **Continual learning:** overnight on-device updates for heads, prototypes and bandit; dev-machine LoRA pipeline with replay, eval gates and rollback | planned |
 | — | **Claude Code / agent hand-off:** the pet shows working / needs input / done; tasks run in a git worktree; nothing is pushed without review | planned |
+| — | **Growth levels** earned by tasks (active days, reminders done, water goals, notes, chats) | ✅ done (0.1.2) |
+| — | **Wardrobe + custom SVG avatars + size slider** (below) | planned |
+
+## Next: your pet, your way (wardrobe + custom avatars)
+
+A full "dress-up" system, built so the community can make and share pets.
+
+**Layered pet**
+- Every pet is drawn as layers:
+  - **body**: a built-in character, or *your own SVG*
+  - **slots**: head (cap, crown, flower), face (glasses), neck (scarf), hand (mug)
+- Each layer is a vector, so it stays sharp at any size.
+- Animation (bob, squash, hop, follow) is applied to the whole stack, so any body animates without extra work.
+
+**Bring your own avatar (SVG)**
+- **Import:** Companion → Wardrobe → *Import SVG*.
+- **Safety check before anything is shown:**
+  - at most 256 KB
+  - a `viewBox` is required
+  - scripts, external links and embedded images are stripped
+- **Storage:** stored in `%APPDATA%\Pebble\avatars\<name>\`.
+- **Optional conventions bring it to life:**
+  - groups with `id="eye-left"` / `id="eye-right"` blink
+  - `id="mouth"` changes with mood
+  - anchor markers (`id="anchor-head"`, `anchor-face`, `anchor-neck`) tell accessories where to sit
+- An SVG without them still works as a still figure that moves and bounces.
+
+**Size and wardrobe**
+- **Size slider:** 60–160 %. The pet window, its speech bubble and taskbar walking all scale with it.
+- **Wardrobe:** pick per slot: cap on/off, glasses on/off, scarf colour… Items are SVGs too.
+- **Unlocks:** some items come with growth levels (a crown at Legendary, sunglasses for a 7-day water streak), so the level tasks have visible rewards.
+
+**Avatar packs**
+- A zip with `pack.json` (name, author, licence, which files are body/accessories, anchors) + SVGs.
+- Packs can be contributed to the repo under `avatars/` by PR, with a licence (CC0 / CC BY) required.
+
+**Order:**
+1. Layered renderer + size slider.
+2. Wardrobe with built-in caps and glasses.
+3. SVG import with sanitising.
+4. Packs.
+
+**Done when:**
+- A hand-drawn SVG imported by a user blinks, wears a cap and walks at 140 % size.
+- A malicious SVG (script, external URL, 50 MB) is rejected with a clear message.
 
 ## Budgets
 

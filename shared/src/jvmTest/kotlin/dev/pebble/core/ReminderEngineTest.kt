@@ -24,20 +24,47 @@ class ReminderEngineTest {
 
     @Test
     fun rulesBecomeDueAfterTheirInterval() {
-        advance(19)
+        // Calm defaults: eyes and water hourly, stretch every 90 minutes.
+        advance(59)
         assertEquals(emptySet(), activeKeys())
         advance(1)
-        assertEquals(setOf("rule:eyes"), activeKeys())
-        advance(25)
         assertEquals(setOf("rule:eyes", "rule:water"), activeKeys())
+        advance(30)
+        assertEquals(setOf("rule:eyes", "rule:water", "rule:stretch"), activeKeys())
+    }
+
+    @Test
+    fun skippingInARowPushesTheNextOneFurtherOut() {
+        advance(60)
+        engine.act("rule:eyes", ReminderAction.DISMISSED)
+        advance(60)
+        assertTrue("rule:eyes" !in activeKeys(), "after a skip the gap doubles")
+        advance(60)
+        assertTrue("rule:eyes" in activeKeys())
+        engine.act("rule:eyes", ReminderAction.DONE)
+        advance(60)
+        assertTrue("rule:eyes" in activeKeys(), "doing it resets the gap")
+    }
+
+    @Test
+    fun lessOftenStretchesTheGapAndDeferIsNotAReaction() {
+        advance(60)
+        assertEquals(90, engine.lessOften("rule:eyes"))
+        assertEquals(90, repo.rules().single { it.id == "eyes" }.intervalMinutes)
+        assertEquals(null, engine.lessOften("once:1"), "one-offs have no interval")
+        // Held back while you watch a video: gone for now, back after the wait.
+        engine.defer("rule:water", minutes = 5)
+        assertTrue("rule:water" !in activeKeys())
+        advance(5)
+        assertTrue("rule:water" in activeKeys())
     }
 
     @Test
     fun doneResetsTheIntervalAndSnoozeDelays() {
-        advance(20)
+        advance(60)
         engine.act("rule:eyes", ReminderAction.DONE)
         assertTrue("rule:eyes" !in activeKeys())
-        advance(19)
+        advance(59)
         assertTrue("rule:eyes" !in activeKeys())
         advance(1)
         engine.act("rule:eyes", ReminderAction.SNOOZED, snoozeMinutes = 5)

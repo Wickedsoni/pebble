@@ -33,7 +33,7 @@ sealed interface QuickCommand {
     data object TellTime : QuickCommand
 
     /** Small talk; [intent] is the model's finer label (greet / joke / quirky). */
-    data class Chitchat(val text: String, val intent: String) : QuickCommand
+    data class Chitchat(val text: String, val intent: String, val mood: String? = null) : QuickCommand
 
     /** Something Pebble understands but can't do yet (music, weather, lights…). */
     data class Unsupported(val text: String, val intent: String) : QuickCommand

@@ -28,5 +28,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
 
         /** Keep voice clips whose transcript you corrected (opt-in), to tune speech recognition to you. */
         const val KEEP_VOICE_CORRECTIONS = "voice.keepCorrections"
+
+        /** Voice input allowed at all. Off: Pebble never opens the microphone or loads speech models. */
+        const val MICROPHONE_ENABLED = "voice.microphone"
     }
 }

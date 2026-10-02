@@ -8,6 +8,21 @@ Pebble is a small pet that lives on your taskbar. It nudges you to drink water, 
 
 > **Status:** early and actively developed (v0.1). Windows 10/11 only for now. Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Install
+
+**Requirements:** Windows 10 or 11 (64-bit), about 1 GB of disk space, 8 GB RAM recommended, and a microphone if you want to talk to it.
+
+1. **Download** `Pebble-<version>.msi` from the [Releases page](https://github.com/Wickedsoni/pebble/releases) (the newest one at the top). The models are inside, so there's nothing else to download.
+2. **Optional: check the download.** In PowerShell, run `Get-FileHash .\Pebble-<version>.msi` and compare the hash with `SHA256SUMS` on the release page.
+3. **Run the installer.** It installs just for you, so no admin rights are needed. Windows may show **"Windows protected your PC"**. That's because the installer isn't code-signed yet (signing certificates are paid, and this is a free project). Click **More info → Run anyway**.
+4. **Start Pebble** from the Start menu. The pet appears on your taskbar.
+   - Press **Ctrl+Alt+Space** to type to it.
+   - **Hold** Ctrl+Alt+Space to talk.
+   - Settings, notes and the Memory page live in the Pebble window (right-click the pet, or use the tray icon).
+5. **Uninstall** from *Settings → Apps → Installed apps → Pebble*. Your data stays in `%APPDATA%\Pebble`; delete that folder to remove it too.
+
+Pebble is an early pre-release. If something breaks or Pebble misunderstands you, please [open an issue](https://github.com/Wickedsoni/pebble/issues/new/choose).
+
 ## What it does
 
 - **Desktop pet:** five characters with growth stages and moods. It walks along the taskbar, follows your cursor, naps when you're away, and hides for fullscreen apps. It's battery-aware: about 4 Hz when still, and no wandering in battery saver.
@@ -42,7 +57,7 @@ rules (exact syntax, Hinglish times/dates) → e5 encoder → intent · slots ·
 
 The full design, with file pointers, the training loop and the quality gates, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Where it's going is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Build and run
+## Build from source
 
 **Requirements:** Windows 10/11, JDK 21. For training: Python 3.11 via [uv](https://docs.astral.sh/uv/), and optionally an NVIDIA GPU.
 
@@ -54,7 +69,13 @@ cd pebble
 ./gradlew :desktopApp:packageMsi           # build an installer
 ```
 
-**Models aren't stored in git** (they're tens to hundreds of MB). Without them, Pebble still works on rules: exact phrasings, times and notes. To get the full brain, build it yourself:
+**Models aren't stored in git** (they're tens to hundreds of MB). They're published as release downloads, listed with their checksums in `brain/models/manifest.json`. Fetch them before running (Python 3.10+, no extra packages):
+
+```powershell
+python brain/src/pebble_brain/download_models.py   # downloads + verifies every model file
+```
+
+Without models, Pebble still works on rules: exact phrasings, times and notes. To train the models yourself instead:
 
 ```powershell
 cd brain

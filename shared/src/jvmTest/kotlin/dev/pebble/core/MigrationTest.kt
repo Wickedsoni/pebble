@@ -23,11 +23,25 @@ class MigrationTest {
                     "CREATE TABLE command_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, chosen_action TEXT NOT NULL, model_intent TEXT, model_confidence REAL, at_millis INTEGER NOT NULL)",
                 )
                 s.execute("INSERT INTO command_feedback(text, chosen_action, at_millis) VALUES ('tum cute ho', 'chitchat', 1)")
+                s.execute(
+                    "CREATE TABLE reminder_rule (id TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, interval_minutes INTEGER NOT NULL, strictness TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, active_from_minute INTEGER NOT NULL DEFAULT 480, active_to_minute INTEGER NOT NULL DEFAULT 1380, last_done_at INTEGER)",
+                )
+                // Old defaults (eyes every 20 min) and one rule the user changed (stretch every 30).
+                s.execute(
+                    "INSERT INTO reminder_rule(id, kind, title, interval_minutes, strictness) VALUES ('eyes', 'EYES', '20-20-20: look 20 ft away for 20 s', 20, 'GENTLE')",
+                )
+                s.execute(
+                    "INSERT INTO reminder_rule(id, kind, title, interval_minutes, strictness) VALUES ('stretch', 'STRETCH', 'Stand up & stretch', 30, 'GENTLE')",
+                )
                 s.execute("PRAGMA user_version = 4")
             }
         }
-        val repo = CommandFeedbackRepository(DatabaseFactory.create(file))
+        val db = DatabaseFactory.create(file)
+        val repo = CommandFeedbackRepository(db)
         assertEquals(listOf("tum cute ho" to "picked"), repo.all().map { it.text to it.outcome })
+        val rules = dev.pebble.core.reminders.ReminderRepository(db).rules().associateBy { it.id }
+        assertEquals(60 to "Rest your eyes", rules.getValue("eyes").let { it.intervalMinutes to it.title }, "old default gets calmer")
+        assertEquals(30, rules.getValue("stretch").intervalMinutes, "a value you chose is kept")
     }
 
     /** Dry run on a *copy* of this machine's real database, if there is one. */

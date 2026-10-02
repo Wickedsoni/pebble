@@ -50,6 +50,29 @@ SELECT count(*) FROM voice_sample;
 deleteVoiceSamples:
 DELETE FROM voice_sample;
 
+-- Your conversation with Pebble: what you said (typed or voice), what Pebble did, what it replied.
+-- Local only; the Chat page shows it and can clear it.
+CREATE TABLE conversation_turn (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_millis INTEGER NOT NULL,
+    said TEXT NOT NULL,
+    via TEXT NOT NULL,
+    did TEXT NOT NULL,
+    reply TEXT NOT NULL
+);
+
+insertTurn:
+INSERT INTO conversation_turn(at_millis, said, via, did, reply) VALUES (?, ?, ?, ?, ?);
+
+recentTurns:
+SELECT * FROM conversation_turn WHERE id > (SELECT coalesce(max(id), 0) FROM conversation_turn) - ? ORDER BY id;
+
+turnCount:
+SELECT count(*) FROM conversation_turn;
+
+clearTurns:
+DELETE FROM conversation_turn;
+
 insertFeedback:
 INSERT INTO command_feedback(text, chosen_action, model_intent, model_confidence, at_millis, outcome) VALUES (?, ?, ?, ?, ?, ?);
 

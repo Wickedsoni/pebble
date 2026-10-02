@@ -24,14 +24,19 @@ Models
 intfloat/multilingual-e5-small - MIT License
   Wang et al., "Multilingual E5 Text Embeddings", 2024. Base encoder of the command model.
 
-OpenAI Whisper (base / small) - MIT License
+DataoceanAI Dolphin (base CTC) - Apache License 2.0
+  Meng et al., "Dolphin: A Large-Scale Automatic Speech Recognition Model for Eastern Languages", 2025.
+  https://github.com/DataoceanAI/Dolphin  (int8 ONNX export from the sherpa-onnx project)
+  Pebble's Hindi/Hinglish speech recognizer.
+
+OpenAI Whisper (base) - MIT License
   Radford et al., "Robust Speech Recognition via Large-Scale Weak Supervision", 2022.
-  ONNX exports from the sherpa-onnx project.
+  ONNX exports from the sherpa-onnx project. Pebble's English speech fallback.
 
 Silero VAD - MIT License
   https://github.com/snakers4/silero-vad
 
-GTCRN speech enhancement - MIT License (evaluated; used only if it improves recognition)
+GTCRN speech enhancement - MIT License (evaluated only, not shipped: it made recognition worse)
   https://github.com/Xiaobin-Rong/gtcrn
 
 Libraries

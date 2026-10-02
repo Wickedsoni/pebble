@@ -50,4 +50,21 @@ class AudioPrepTest {
         }
         assertFalse(mic.isOpen, "stop() always releases the microphone")
     }
+
+    @Test
+    fun englishSpeechGoesToWhisper() {
+        assertTrue(SpeechRecognizer.soundsHindi("मेजर किन खाना भूमध्य सागर", 3.0))
+        assertFalse(SpeechRecognizer.soundsHindi("terely nightf the lowlam light the", 3.0), "garbled Latin = English speech")
+        assertFalse(SpeechRecognizer.soundsHindi("", 2.0))
+        assertFalse(SpeechRecognizer.soundsHindi("हाँ", 4.0), "two letters for four seconds of speech: Dolphin missed it")
+    }
+
+    @Test
+    fun microphoneSwitchedOffMeansTheMicNeverOpens() {
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val voice = VoiceInput(SpeechRecognizer(scope), scope, micAllowed = { false })
+        assertFalse(voice.start(), "no recording when the Privacy switch is off")
+        assertFalse(voice.isListening)
+        assertTrue((voice.state.value as VoiceInput.State.Failed).message.contains("Microphone is off"))
+    }
 }

@@ -11,7 +11,12 @@ import kotlinx.coroutines.launch
  * [stop] closes it and transcribes. The transcript lands in the text field, editable, and runs through
  * the same router as typing — voice is just another way to type.
  */
-class VoiceInput(private val recognizer: SpeechRecognizer, private val scope: CoroutineScope) {
+class VoiceInput(
+    private val recognizer: SpeechRecognizer,
+    private val scope: CoroutineScope,
+    /** The Privacy switch: when false, the microphone is never opened and speech models never load. */
+    private val micAllowed: () -> Boolean = { true },
+) {
     sealed interface State {
         data object Idle : State
         data class Listening(val level: Float) : State
@@ -32,8 +37,14 @@ class VoiceInput(private val recognizer: SpeechRecognizer, private val scope: Co
 
     val isListening: Boolean get() = mic != null
 
+    val isAllowed: Boolean get() = micAllowed()
+
     fun start(): Boolean {
         if (mic != null) return true
+        if (!micAllowed()) {
+            _state.value = State.Failed("Microphone is off — turn it on in Memory → Privacy")
+            return false
+        }
         recognizer.warmUp()
         val m = MicCapture { level -> if (mic != null) _state.value = State.Listening(level) }
         if (!m.start()) {

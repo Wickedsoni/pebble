@@ -1,0 +1,44 @@
+name: Release
+
+# Push a tag like v0.1.0 on main: builds the Windows installer with the models named in
+# brain/models/manifest.json (downloaded from GitHub Releases, SHA-256 verified) and publishes it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Fetch models (checksums verified)
+        run: python brain/src/pebble_brain/download_models.py
+      - name: Build installer
+        run: ./gradlew :desktopApp:packageMsi --console=plain
+      - name: Checksums
+        run: |
+          cd desktopApp/build/compose/binaries/main/msi
+          sha256sum *.msi > SHA256SUMS
+          cat SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          notes="docs/releases/${tag}.md"
+          [ -f "$notes" ] || notes=/dev/null
+          pre=""
+          [[ "$tag" == v0.* || "$tag" == *-* ]] && pre="--prerelease"
+          gh release create "$tag" desktopApp/build/compose/binaries/main/msi/* \
+            --title "Pebble ${tag#v}" --notes-file "$notes" $pre

@@ -3,6 +3,7 @@ package dev.pebble.desktop.app.pages
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,14 +89,22 @@ fun CompanionPage(
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             GlassCard(Modifier.weight(1f).fillMaxHeight()) {
-                CardLabel("Growth stage", PebbleIcons.Spark, c.warm)
+                CardLabel("Growth", PebbleIcons.Spark, c.warm)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Stage.entries.forEach { s ->
-                        Chip(s.name.lowercase().replaceFirstChar { it.uppercase() }, s == pet.stage) { pet.chooseStage(s) }
+                        val name = s.name.lowercase().replaceFirstChar { it.uppercase() }
+                        Chip(if (s <= pet.earned) name else "🔒 $name", s == pet.stage) { pet.chooseStage(s) }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text("Later, stages unlock as you keep your streaks going.", color = c.secondary, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                val growth = remember(pet.earned) { pet.growth() }
+                val next = growth.next
+                if (next == null) {
+                    Text("Legendary! Every stage unlocked. 🏆", color = c.content, fontSize = 13.sp)
+                } else {
+                    Text("To grow into ${next.label}:", color = c.content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    growth.tasks.forEach { t -> GrowthTask(t) }
+                }
                 Spacer(Modifier.height(16.dp))
                 CardLabel("Background")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -121,5 +131,24 @@ fun SettingRow(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
         Text(label, color = c.content, fontSize = 13.sp, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(10.dp))
         Toggle(on, onChange)
+    }
+}
+
+@Composable
+private fun GrowthTask(t: dev.pebble.core.growth.Task) {
+    val c = LocalGlass.current
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                (if (t.done) "✓ " else "") + t.label,
+                color = if (t.done) c.secondary else c.content,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text("${minOf(t.current, t.target)} / ${t.target}", color = c.secondary, fontSize = 11.sp)
+        }
+        Box(Modifier.fillMaxWidth().padding(top = 3.dp).height(4.dp).background(c.well, RoundedCornerShape(2.dp))) {
+            Box(Modifier.fillMaxWidth(t.progress).height(4.dp).background(if (t.done) c.calm else c.warm, RoundedCornerShape(2.dp)))
+        }
     }
 }

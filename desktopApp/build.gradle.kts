@@ -28,7 +28,7 @@ dependencies {
 
 tasks.register<JavaExec>("asrEval") {
     group = "pebble"
-    description = "Speech recognition WER/CER on FLEURS Hindi (+ noise, +/- GTCRN): -Pclips=30 -Pmodels=base,small"
+    description = "Speech recognition WER/CER on FLEURS Hindi (+ noise): -Pclips=30 -Pmodels=base,small [-Pdenoise=true]"
     classpath = sourceSets["test"].runtimeClasspath
     mainClass = "dev.pebble.desktop.voice.AsrEvalKt"
     jvmArgs("-Dstdout.encoding=UTF-8", "-Dfile.encoding=UTF-8")
@@ -36,6 +36,7 @@ tasks.register<JavaExec>("asrEval") {
         rootProject.layout.projectDirectory.dir("brain").asFile.absolutePath,
         providers.gradleProperty("clips").getOrElse("30"),
         providers.gradleProperty("models").getOrElse("base,small"),
+        providers.gradleProperty("denoise").getOrElse("false"),
     )
 }
 
@@ -118,7 +119,7 @@ compose.desktop {
             appResourcesRootDir.set(layout.buildDirectory.dir("model-resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Pebble"
-            packageVersion = "0.1.0"
+            packageVersion = "0.1.2"
             description = "Desktop pet and glass widgets"
             modules("java.sql", "jdk.unsupported")
             windows {

@@ -92,7 +92,7 @@ class CommandRouter(
         A.REMINDERS_QUERY -> QuickCommand.ShowUpcoming
         A.NOTES_QUERY -> QuickCommand.ShowNotes
         A.TIME_QUERY -> QuickCommand.TellTime
-        A.CHITCHAT -> QuickCommand.Chitchat(text, intent)
+        A.CHITCHAT -> QuickCommand.Chitchat(text, intent, u.mood?.takeIf { it.confidence >= 0.7f }?.mood)
         A.REMINDER_REMOVE -> QuickCommand.OpenPage("reminders")
         A.NOTE_REMOVE -> QuickCommand.OpenPage("notes")
         else -> QuickCommand.Unsupported(text, intent)
@@ -213,6 +213,7 @@ class CommandRouter(
         /** Words that frame a reminder rather than describe it, in all three scripts. */
         private val filler = setOf(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
+            "around", "approximately", "by", "pls", "plz", "dont", "lagbhag", "लगभग",
             "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "dila", "do", "karo", "kar", "ki", "ka", "ke", "ko",
             "reminder", "laga", "lagao", "set", "utha",
             "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "की", "का", "के", "को", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",

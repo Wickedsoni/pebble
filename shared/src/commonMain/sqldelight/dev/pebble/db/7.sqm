@@ -1,0 +1,10 @@
+-- v0.1.0: your conversation with Pebble (Quick Add / voice), shown in Quick Add and on the Chat page.
+
+CREATE TABLE conversation_turn (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_millis INTEGER NOT NULL,
+    said TEXT NOT NULL,
+    via TEXT NOT NULL,
+    did TEXT NOT NULL,
+    reply TEXT NOT NULL
+);

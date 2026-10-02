@@ -47,42 +47,145 @@ object Replies {
         return lowMoodWords.any { w -> if (w.contains(' ') || w.any { it in 'ऀ'..'ॿ' }) w in t else " $w " in t }
     }
 
-    private val caring = mapOf(
-        Script.EN to listOf(
+    private fun pools(en: List<String>, roman: List<String>, deva: List<String>) = mapOf(
+        Script.EN to en,
+        Script.HI_ROMAN to roman,
+        Script.HI_DEVA to deva,
+    )
+
+    private val caring = pools(
+        listOf(
             "I'm sorry today feels heavy. I'm right here — want to take a short break with me?",
             "That sounds tough. Be gentle with yourself today. A glass of water and a few deep breaths?",
+            "Rough day? You don't have to fix it all now. One small thing at a time.",
+            "I'm here. Want me to keep reminders quiet for a bit?",
         ),
-        Script.HI_ROMAN to listOf(
+        listOf(
             "Sorry yaar, aaj ka din bhaari lag raha hai. Main yahin hoon — thoda break lein saath mein?",
             "Koi baat nahi, aisa hota hai. Thoda paani pi lo aur do minute aaram karo.",
+            "Sab ek saath theek karna zaroori nahi. Ek chhoti cheez se shuru karte hain.",
+            "Main yahin hoon. Thodi der reminders band rakhun?",
         ),
-        Script.HI_DEVA to listOf(
+        listOf(
             "अरे, आज का दिन भारी लग रहा है। मैं यहीं हूँ — थोड़ा ब्रेक लें साथ में?",
             "कोई बात नहीं, ऐसा होता है। थोड़ा पानी पी लो और दो मिनट आराम करो।",
+            "सब एक साथ ठीक करना ज़रूरी नहीं। एक छोटी चीज़ से शुरू करते हैं।",
         ),
     )
-    private val greet = mapOf(
-        Script.EN to listOf("Hey! I'm here.", "Hi. Good to see you.", "Hello! What's up?"),
-        Script.HI_ROMAN to listOf("Main badhiya! Tum batao?", "Hey! Main yahin hoon.", "Sab badhiya. Tumhara din kaisa ja raha hai?"),
-        Script.HI_DEVA to listOf("मैं बढ़िया! तुम बताओ?", "नमस्ते! मैं यहीं हूँ।", "सब बढ़िया। तुम्हारा दिन कैसा जा रहा है?"),
+    private val happy = pools(
+        listOf(
+            "Love that! 😊 Keep it going.",
+            "That's great to hear!",
+            "Yay! Good days deserve a little celebration.",
+            "Nice — I'm doing a happy hop over here.",
+            "So good! What made it great?",
+        ),
+        listOf(
+            "Wah! Sunke bahut accha laga 😊 Aisa hi chalta rahe.",
+            "Kya baat hai! Aaj toh full mood mein ho.",
+            "Badhiya! Kis cheez ne din bana diya?",
+            "Mast! Main bhi khush ho gaya sunke.",
+            "Yay! Aise din pe ek chhota sa celebration banta hai.",
+        ),
+        listOf(
+            "वाह! सुनकर बहुत अच्छा लगा 😊 ऐसे ही चलता रहे।",
+            "क्या बात है! आज तो पूरे मूड में हो।",
+            "बढ़िया! किस चीज़ ने दिन बना दिया?",
+            "मस्त! सुनकर मैं भी खुश हो गया।",
+        ),
     )
-    private val kind = mapOf(
-        Script.EN to listOf("Aw, thanks. You're not bad yourself.", "That made my day."),
-        Script.HI_ROMAN to listOf("Aww, thank you! Tum bhi kam nahi ho.", "Isse mera din ban gaya."),
-        Script.HI_DEVA to listOf("अरे, धन्यवाद! तुम भी कम नहीं हो।", "इससे मेरा दिन बन गया।"),
+    private val aboutMe = pools(
+        listOf(
+            "My plan? Hang out on your taskbar and make sure you drink water. 😄",
+            "Just wandering around here. What are you up to?",
+            "I'm a small pet with a big job: keeping your day on track.",
+            "Today I'm learning how you talk — so I understand you better tomorrow.",
+            "I'm good! A bit sleepy, but here for you.",
+        ),
+        listOf(
+            "Mera plan? Tumhare taskbar pe ghoomna aur yaad dilana ki paani piyo 😄",
+            "Bas yahin ghoom raha hoon. Tum kya kar rahe ho?",
+            "Main chhota sa pet hoon, kaam bada hai: tumhara din sambhalna.",
+            "Aaj main seekh raha hoon tum kaise baat karte ho — taaki kal aur achhe se samjhun.",
+            "Main badhiya! Thoda neend mein hoon, par tumhare liye haazir.",
+        ),
+        listOf(
+            "मेरा प्लान? तुम्हारे टास्कबार पर घूमना और याद दिलाना कि पानी पियो 😄",
+            "बस यहीं घूम रहा हूँ। तुम क्या कर रहे हो?",
+            "मैं छोटा सा पेट हूँ, काम बड़ा है: तुम्हारा दिन संभालना।",
+            "आज मैं सीख रहा हूँ तुम कैसे बात करते हो — ताकि कल और अच्छे से समझूँ।",
+        ),
     )
-    private val jokes = mapOf(
-        Script.EN to listOf(
+    private val greet = pools(
+        listOf(
+            "Hey! I'm here.",
+            "Hi! Good to see you.",
+            "Hello! What's up?",
+            "Hey hey! How's your day going?",
+            "Hi there 👋 Need anything?",
+        ),
+        listOf(
+            "Main badhiya! Tum batao?",
+            "Hey! Main yahin hoon.",
+            "Sab badhiya. Tumhara din kaisa ja raha hai?",
+            "Hello hello! Kya chal raha hai?",
+            "Arre, aa gaye! Kuch yaad dilana hai?",
+        ),
+        listOf(
+            "मैं बढ़िया! तुम बताओ?",
+            "नमस्ते! मैं यहीं हूँ।",
+            "सब बढ़िया। तुम्हारा दिन कैसा जा रहा है?",
+            "अरे, आ गए! कुछ याद दिलाना है?",
+        ),
+    )
+    private val kind = pools(
+        listOf(
+            "Aw, thanks. You're not bad yourself.",
+            "That made my day.",
+            "Stop it, I'm blushing 🙈",
+            "You're sweet. Thank you!",
+            "Right back at you!",
+        ),
+        listOf(
+            "Aww, thank you! Tum bhi kam nahi ho.",
+            "Isse mera din ban gaya.",
+            "Arre, sharma gaya main 🙈",
+            "Tum bhi bahut achhe ho!",
+            "Shukriya dost!",
+        ),
+        listOf("अरे, धन्यवाद! तुम भी कम नहीं हो।", "इससे मेरा दिन बन गया।", "अरे, शरमा गया मैं 🙈", "तुम भी बहुत अच्छे हो!"),
+    )
+    private val chat = pools(
+        listOf(
+            "Hmm, tell me more!",
+            "Interesting! And then?",
+            "I'm listening. 🙂",
+            "Got it. Want me to remember that? Say \"remember …\".",
+            "Ha, okay! Anything I can remind you about?",
+        ),
+        listOf(
+            "Hmm, aur batao!",
+            "Accha? Phir kya hua?",
+            "Sun raha hoon 🙂",
+            "Samajh gaya. Yaad rakhun? Bolo \"yaad rakhna …\".",
+            "Haha theek hai! Kuch yaad dilana hai?",
+        ),
+        listOf("हम्म, और बताओ!", "अच्छा? फिर क्या हुआ?", "सुन रहा हूँ 🙂", "समझ गया। याद रखूँ? बोलो \"याद रखना …\"।"),
+    )
+    private val jokes = pools(
+        listOf(
             "Why did the developer go broke? He used up all his cache.",
             "I'd tell you a UDP joke, but you might not get it.",
             "Debugging: being the detective in a crime movie where you're also the murderer.",
+            "There are 10 kinds of people: those who get binary and those who don't.",
         ),
-        Script.HI_ROMAN to listOf(
+        listOf(
             "Programmer ki diary: aaj bug fix kiya… kal teen naye aa gaye.",
             "Exam se pehle padhai = loading… 99%… 99%… 99%…",
             "Paani pi lo yaar, warna main bhi thirsty ho jaunga.",
+            "Assignment ki deadline aur main: dono kal pe bharosa karte hain 😄",
         ),
-        Script.HI_DEVA to listOf(
+        listOf(
             "प्रोग्रामर की डायरी: आज एक बग ठीक किया… कल तीन नए आ गए।",
             "परीक्षा से पहले पढ़ाई = लोडिंग… 99%… 99%… 99%…",
             "पानी पी लो यार, वरना मुझे भी प्यास लग जाएगी।",
@@ -94,15 +197,45 @@ object Replies {
         Script.HI_DEVA to "यह अभी मुझसे नहीं होगा — नोट में सेव कर दूँ?",
     )
 
-    fun chitchat(text: String, intent: String, random: Random = Random): String {
+    private val youWords = setOf(
+        "you", "your", "u", "tum", "tumhara", "tumhare", "tumhari", "tu", "tera", "teri", "aap", "aapka",
+        "तुम", "तुम्हारा", "तुम्हारे", "तू", "आप", "आपका",
+    )
+
+    private val askWords = setOf("what", "how", "kya", "kaise", "kaisa", "kaun", "kab", "kyu", "kyun", "क्या", "कैसे", "कैसा", "कौन")
+    private val warmWords = setOf(
+        "cute", "love", "best", "awesome", "sweet", "thank", "thanks", "thankyou", "shukriya", "dhanyavaad", "pyare", "pyara",
+        "achhe", "acche", "mast", "क्यूट", "प्यारे", "धन्यवाद", "शुक्रिया", "अच्छे",
+    )
+    private val goodWords =
+        setOf("great", "amazing", "happy", "khush", "maza", "badhiya", "accha", "acha", "achha", "बढ़िया", "खुश", "मज़ा", "अच्छा")
+
+    /** What was said last from each pool, so the same line never comes twice in a row. */
+    private val lastSaid = mutableMapOf<List<String>, String>()
+
+    private fun pick(pool: List<String>, random: Random): String {
+        val fresh = pool.filter { it != lastSaid[pool] }.ifEmpty { pool }
+        return fresh.random(random).also { lastSaid[pool] = it }
+    }
+
+    /**
+     * A reply to small talk, in the script you used. [mood] is the mood head's confident reading
+     * ("low" / "good"), if any. Questions to Pebble, compliments, good news, greetings and jokes each get
+     * their own lines; anything else gets an engaged, open reply — never the same line twice in a row.
+     */
+    fun chitchat(text: String, intent: String, mood: String? = null, random: Random = Random): String {
         val s = Script.detect(text)
-        if (intent == LOW_MOOD || isLowMood(text)) return caring.getValue(Script.detect(text)).random(random)
-        val pool = when (intent) {
-            "general_joke" -> jokes
-            "general_greet" -> greet
-            else -> if (text.lowercase().split(' ').any { it in setOf("how", "kaise", "kaisa", "कैसे", "कैसा") }) greet else kind
+        val words = text.lowercase().split(Regex("""[^\p{L}\p{M}]+""")).filter { it.isNotEmpty() }.toSet()
+        val pool = when {
+            intent == LOW_MOOD || mood == "low" || isLowMood(text) -> caring
+            intent == "general_joke" -> jokes
+            words.any { it in warmWords } -> kind
+            words.any { it in youWords } && (words.any { it in askWords } || text.contains('?')) -> aboutMe
+            mood == "good" || words.any { it in goodWords } -> happy
+            intent == "general_greet" -> greet
+            else -> chat
         }
-        return pool.getValue(s).random(random)
+        return pick(pool.getValue(s), random)
     }
 
     fun unsupported(text: String): String = cant.getValue(Script.detect(text))

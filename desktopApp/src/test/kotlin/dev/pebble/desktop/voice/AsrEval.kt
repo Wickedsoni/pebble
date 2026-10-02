@@ -25,13 +25,15 @@ import kotlin.random.Random
  * Clips: FLEURS Hindi dev (read speech, CC BY 4.0) from brain/data/raw/fleurs_hi — a stand-in until
  * brain/eval/voice_v1 holds your own recordings. Noise is made here, so no noise licence is needed:
  * pink noise (fan / AC) and babble (four other FLEURS speakers mixed = chatter), at 5 and 10 dB SNR.
- * Each condition runs raw and through GTCRN, because denoising before Whisper can *hurt*.
+ * Pebble ships no denoiser: measured here, GTCRN raised WER for both Whisper sizes. The `+gtcrn`
+ * variant stays available (`-Pdenoise=true`) so that decision can be re-checked with new models.
  * Writes brain/models/asr/asr-eval.json and prints a WER / CER table.
  */
 fun main(args: Array<String>) {
     val brain = Path.of(args.getOrElse(0) { "../brain" }).toAbsolutePath().normalize()
     val n = args.getOrElse(1) { "30" }.toInt()
     val models = args.getOrElse(2) { "base,small" }.split(',')
+    val withDenoise = args.getOrElse(3) { "false" }.toBoolean()
     OrtEnvironment.getEnvironment() // the intent model's runtime loads first (see VoiceSpikeTest)
     LibraryUtils.load()
 
@@ -69,19 +71,36 @@ fun main(args: Array<String>) {
     for (size in models) {
         // Packaged by brain prepare_asr.py: hex token table, so Devanagari survives (see WhisperText).
         val dir = brain.resolve("models/asr-whisper-$size")
-        val hex = Files.exists(dir.resolve("HEX_TOKENS"))
-        val recognizer = OfflineRecognizer(
-            OfflineRecognizerConfig.builder().setOfflineModelConfig(
-                OfflineModelConfig.builder().setWhisper(
-                    OfflineWhisperModelConfig.builder()
-                        .setEncoder(dir.resolve("$size-encoder.int8.onnx").toString())
-                        .setDecoder(dir.resolve("$size-decoder.int8.onnx").toString())
-                        .setLanguage("hi").setTask("transcribe").build(),
-                ).setTokens(dir.resolve("$size-tokens.txt").toString()).setNumThreads(4).build(),
-            ).setDecodingMethod("greedy_search").build(),
-        )
+        val hex = !size.startsWith("dolphin") && Files.exists(dir.resolve("HEX_TOKENS"))
+        // "dolphin-base" / "dolphin-small": Dolphin CTC (Hindi + 39 more Eastern languages; no English).
+        val dolphin = size.startsWith("dolphin")
+        val recognizer = if (dolphin) {
+            val dd = asr.resolve("sherpa-onnx-$size-ctc-multi-lang-int8-2025-04-02")
+            OfflineRecognizer(
+                OfflineRecognizerConfig.builder().setOfflineModelConfig(
+                    OfflineModelConfig.builder()
+                        .setDolphin(
+                            com.k2fsa.sherpa.onnx.OfflineDolphinModelConfig.builder().setModel(
+                                dd.resolve("model.int8.onnx").toString(),
+                            ).build(),
+                        )
+                        .setTokens(dd.resolve("tokens.txt").toString()).setNumThreads(4).build(),
+                ).build(),
+            )
+        } else {
+            OfflineRecognizer(
+                OfflineRecognizerConfig.builder().setOfflineModelConfig(
+                    OfflineModelConfig.builder().setWhisper(
+                        OfflineWhisperModelConfig.builder()
+                            .setEncoder(dir.resolve("$size-encoder.int8.onnx").toString())
+                            .setDecoder(dir.resolve("$size-decoder.int8.onnx").toString())
+                            .setLanguage("hi").setTask("transcribe").build(),
+                    ).setTokens(dir.resolve("$size-tokens.txt").toString()).setNumThreads(4).build(),
+                ).setDecodingMethod("greedy_search").build(),
+            )
+        }
         for ((cond, noise) in conditions) {
-            for (denoise in listOf(false, true)) {
+            for (denoise in if (withDenoise) listOf(false, true) else listOf(false)) {
                 if (cond == "clean" && denoise && size != models.first()) continue
                 var errW = 0; var refW = 0; var errC = 0; var refC = 0; var audioMs = 0L; var decodeMs = 0L
                 val noiseRng = Random(1)
@@ -94,7 +113,7 @@ fun main(args: Array<String>) {
                     }
                     if (denoise) x = denoiser.run(x, w.sampleRate).samples
                     val s = recognizer.createStream()
-                    s.acceptWaveform(x, w.sampleRate)
+                    s.acceptWaveform(if (size.startsWith("dolphin")) x else WhisperText.padForBudget(x, w.sampleRate), w.sampleRate)
                     val t0 = System.nanoTime()
                     recognizer.decode(s)
                     decodeMs += (System.nanoTime() - t0) / 1_000_000

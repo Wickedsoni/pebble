@@ -47,6 +47,18 @@ LEARN
 | Memory | `shared/.../memory/MemoryEngine.kt` | `event_log`, `memory` tables |
 | Training | `brain/src/pebble_brain/` | `brain/models/`, `brain/eval/` |
 
+## Noise: no denoiser, on purpose
+
+Pebble doesn't run a neural noise remover before Whisper. We measured GTCRN on FLEURS Hindi with fan-like (pink) and chatter (babble) noise at 5 and 10 dB. It *raised* the error rate for both Whisper sizes, matching published findings that denoising artifacts hurt modern speech models trained on noisy audio.
+
+Robustness instead comes from:
+- **Capture:** an 80 Hz high-pass filter and level normalisation (`AudioPrep`).
+- **Silero VAD:** Whisper never hears long silence or background-only stretches.
+- **Your edits:** the transcript is editable before it runs.
+- **Fine-tuning:** later, on opt-in corrected clips from real rooms.
+
+The evaluator can still test a denoiser (`./gradlew :desktopApp:asrEval -Pdenoise=true`), so the decision can be revisited with new models.
+
 ## Performance rules
 
 - Every model loads only when needed and frees itself after 10 idle minutes. When idle, Pebble uses no model memory and no CPU for models.

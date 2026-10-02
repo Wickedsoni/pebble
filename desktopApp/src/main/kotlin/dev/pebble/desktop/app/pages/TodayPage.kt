@@ -173,7 +173,12 @@ private fun NextUpCard(app: PebbleApp, modifier: Modifier) {
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); tick++ } }
     val active by app.engine.active.collectAsState()
-    val upcoming = remember(tick, active) { app.engine.upcoming(3) }
+    val oneOffs by remember { app.reminders.pendingOneOffsFlow() }.collectAsState(initial = app.reminders.pendingOneOffs())
+    // Your own reminders first (repeating water/stretch/eyes would otherwise crowd them out), then the rest.
+    val upcoming = remember(tick, active, oneOffs) {
+        val all = app.engine.upcoming(10)
+        (all.filter { it.key.startsWith("once:") } + all.filter { it.key.startsWith("rule:") }).take(3)
+    }
     GlassCard(modifier) {
         CardLabel("Next up", PebbleIcons.Bell, c.accent)
         upcoming.forEach { r ->

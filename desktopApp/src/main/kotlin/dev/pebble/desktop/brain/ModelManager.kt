@@ -15,7 +15,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.MessageDigest
 
 /**
  * Owns the command model's lifecycle so it costs nothing when unused:
@@ -122,17 +121,6 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
     private fun modelEntry(manifest: Path) = Json.parseToJsonElement(Files.readString(manifest)).jsonObject.getValue("models").jsonArray
         .map { it.jsonObject }.firstOrNull { it["name"]?.jsonPrimitive?.content == "intent" }
 
-    /** Checks the model file's SHA-256 against manifest.json (next to it, or one level up in the dev layout). */
-    private fun verify(dir: Path): Boolean {
-        val manifest = listOf(dir.resolve("manifest.json"), dir.parent.resolve("manifest.json")).firstOrNull(Files::exists)
-            ?: return true // hand-placed model without a manifest: allowed, but nothing to check against
-        val entry = modelEntry(manifest) ?: return true
-        val want = entry.getValue("files").jsonObject.getValue("model").jsonObject.getValue("sha256").jsonPrimitive.content
-        val digest = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(dir.resolve("intent.int8.onnx")).use { input ->
-            val buf = ByteArray(1 shl 16)
-            while (true) { val n = input.read(buf); if (n < 0) break; digest.update(buf, 0, n) }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) } == want
-    }
+    /** Every file of the "intent" manifest entry must match its SHA-256 (see [ModelChecksums]). */
+    private fun verify(dir: Path): Boolean = ModelChecksums.verify(dir, "intent")
 }
