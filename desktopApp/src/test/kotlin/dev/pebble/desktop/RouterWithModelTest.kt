@@ -15,8 +15,8 @@ import kotlin.test.assertIs
 
 /** End to end with the real model: what Pebble would actually do with each eval sentence. */
 class RouterWithModelTest {
-    private val brain: Path = Path.of(System.getProperty("user.dir")).parent.resolve("brain")
-    private val modelDir = brain.resolve("models/intent-v0-pruned")
+    private val brain: Path = ShippedModel.brain
+    private val modelDir = ShippedModel.dir
 
     @Test
     fun routesEvalSentences() {
@@ -43,9 +43,12 @@ class RouterWithModelTest {
             val c2 = r2.command as QuickCommand.RemindAt
             assertEquals(6 to 1, c2.hour to c2.dayOffset)
             assertIs<QuickCommand.TellTime>((router.route("aaj kaun si date hai") as Routed.Run).command)
-            // When the model is unsure it asks — and the right answer should be the first choice.
-            val unsure = router.route("abhi kitne baje hain") as Routed.Ask
-            assertIs<QuickCommand.TellTime>(unsure.options.first().command)
+            // Telling the time: directly, or (if the model is unsure) as the first "Did you mean" choice.
+            when (val t = router.route("abhi kitne baje hain")) {
+                is Routed.Run -> assertIs<QuickCommand.TellTime>(t.command)
+                is Routed.Ask -> assertIs<QuickCommand.TellTime>(t.options.first().command)
+                null -> error("no routing")
+            }
             // Hindi rules fixed in this session.
             assertIs<QuickCommand.RememberFact>((router.route("याद रखना कि मेरा एग्जाम बीस तारीख को है") as Routed.Run).command)
             assertIs<QuickCommand.LogWater>((router.route("maine ek glass paani pi liya") as Routed.Run).command)

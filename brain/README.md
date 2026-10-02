@@ -31,10 +31,12 @@ Open the notebooks in IntelliJ / VS Code and pick the `brain/.venv` interpreter,
 
 ```powershell
 python -m uv run python data/download_massive.py                       # MASSIVE en-US + hi-IN, licence-checked
-python -m uv run python -m pebble_brain.train_intent --out models/intent-v0   # ~10 min on the RTX 4050, then evaluates
-python -m uv run python -m pebble_brain.prune_vocab models/intent-v0 models/intent-v0-pruned
-python -m uv run python -m pebble_brain.evaluate models/intent-v0-pruned
-python -m uv run python -m pebble_brain.export_onnx models/intent-v0-pruned  # → intent.int8.onnx (~31 MB)
+python -m uv run python -m pebble_brain.train_intent --out models/intent-v1   # ~10 min on the RTX 4050, then evaluates on eval v1
+python -m uv run python -m pebble_brain.prune_vocab models/intent-v1 models/intent-v1-pruned
+python -m uv run python -m pebble_brain.export_onnx models/intent-v1-pruned  # → intent.int8.onnx (~31 MB) + parity.json
+# score the candidate through the real app router; ship only if it beats the gate in EvalSetRouterTest:
+#   $env:PEBBLE_EVAL_MODEL="models/intent-v1-pruned"; ./gradlew :desktopApp:test --tests "*EvalSetRouterTest*" --rerun
+# then point models/manifest.json at it (path + sha256); the installer bundles whatever the manifest names
 ```
 
 Current model (`models/manifest.json`): MASSIVE intent accuracy en 87.9% / hi 85.9% / Roman 79.1%,

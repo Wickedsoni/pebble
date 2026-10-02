@@ -2,40 +2,57 @@
   "models": [
     {
       "name": "intent",
-      "version": "v0-pruned",
+      "version": "v1-pruned",
       "task": "command intent + slots (en / hi_deva / hi_roman)",
       "base": "intfloat/multilingual-e5-small (MIT), vocab pruned 250002 -> 26649",
-      "trained_on": "Amazon MASSIVE 1.1 en-US + hi-IN (CC BY 4.0) + rule-based Roman transliteration",
+      "trained_on": "Amazon MASSIVE 1.1 en-US + hi-IN (CC BY 4.0) + rule-based Roman transliteration with chat spelling + Pebble template data (pebble_data.py, ~1.7k sentences x3)",
       "files": {
         "model": {
-          "path": "intent-v0-pruned/intent.int8.onnx",
+          "path": "intent-v1-pruned/intent.int8.onnx",
           "bytes": 32636152,
-          "sha256": "e57dfee2982b9db9bce1706eed5cf47f7fc4fc8292c54cc795c7349f4eb728b8"
+          "sha256": "481111ae4f8c077311f1b03d068506fb299670439c6adebed6386ffaf7e25699"
         },
         "tokenizer": {
-          "path": "intent-v0-pruned/tokenizer/tokenizer.json",
+          "path": "intent-v1-pruned/tokenizer/tokenizer.json",
           "bytes": 2028413,
           "sha256": "0b0444329266f372549d89deeb89af5cb0b4dba6a7e3a4984f96b32dc09cf7a5"
         },
         "labels": {
-          "path": "intent-v0-pruned/labels.json",
+          "path": "intent-v1-pruned/labels.json",
           "bytes": 3495,
           "sha256": "0b6f576123b63bc60cf846839430e803602cefe944427d93a47a34fa55636302"
         }
       },
       "metrics": {
-        "massive_test_intent_acc": {
-          "en": 0.8786,
-          "hi_deva": 0.8591,
-          "hi_roman": 0.7909
+        "massive_test_intent_acc_pytorch": {
+          "en": 0.8823,
+          "hi_deva": 0.8638,
+          "hi_roman": 0.7983
         },
-        "massive_test_slot_f1": {
-          "en": 0.7025,
-          "hi_deva": 0.6322,
-          "hi_roman": 0.5243
+        "massive_test_slot_f1_pytorch": {
+          "en": 0.7269,
+          "hi_deva": 0.6457,
+          "hi_roman": 0.5447
         },
-        "pebble_v0_action_acc_int8": 0.957,
-        "cpu_latency_ms_int8_4_threads_median": 6.5
+        "pebble_v1_model_action_acc_pytorch": {
+          "en": 1.0,
+          "hi_roman": 0.9474,
+          "hi_deva": 0.9474
+        },
+        "pebble_v1_router_int8": {
+          "right": 61,
+          "right_or_first_choice": 65,
+          "of": 68
+        },
+        "cpu_latency_ms_int8_4_threads_median": 4.8
+      },
+      "previous": {
+        "version": "v0-pruned",
+        "pebble_v1_router_int8": {
+          "right": 58,
+          "right_or_first_choice": 61,
+          "of": 68
+        }
       }
     }
   ]

@@ -1,6 +1,7 @@
 """Trains the M1 intent + slot model on MASSIVE (en, hi_deva, hi_roman).
 
-Run:  uv run python -m pebble_brain.train_intent --out models/intent-v0
+Run:  uv run python -m pebble_brain.train_intent --out models/intent-v1
+      (--no-pebble --chat 0 reproduces intent-v0: MASSIVE only)
 
 Saves model.pt, labels.json and the tokenizer to --out, then runs the full evaluation.
 """
@@ -18,6 +19,7 @@ from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
 from .intent_model import BASE, IntentSlotModel, Labels, encode_words
 from .massive import Example, label_sets, load
+from .pebble_data import chatify, generate
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -45,6 +47,9 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--lr", type=float, default=5e-5)
+    ap.add_argument("--no-pebble", action="store_true", help="MASSIVE only (the v0 recipe)")
+    ap.add_argument("--pebble-repeat", type=int, default=3, help="times each Pebble template sentence is seen per epoch")
+    ap.add_argument("--chat", type=float, default=0.3, help="share of Roman-Hindi MASSIVE words given chat spelling")
     args = ap.parse_args()
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -52,9 +57,20 @@ def main() -> None:
     torch.manual_seed(0)
 
     data = load()
+    if args.chat > 0:
+        rng = random.Random(0)
+        data = [Example(chatify(e.tokens, rng, args.chat), e.tags, e.intent, e.script, e.partition)
+                if e.script == "hi_roman" and e.partition == "train" else e for e in data]
+    labels = Labels(*label_sets(data))
     train = [e for e in data if e.partition == "train"]
     dev = [e for e in data if e.partition == "dev"]
-    labels = Labels(*label_sets(data))
+    pebble_dev: list[Example] = []
+    if not args.no_pebble:
+        pebble = generate()
+        train += [e for e in pebble if e.partition == "train"] * args.pebble_repeat
+        pebble_dev = [e for e in pebble if e.partition == "dev"]
+        unknown = {t for e in pebble for t in e.tags} - set(labels.tags)
+        assert not unknown, f"Pebble data uses tags MASSIVE doesn't have: {unknown}"
     print(f"train {len(train)}  dev {len(dev)}  intents {len(labels.intents)}  tags {len(labels.tags)}  on {device}")
 
     tokenizer = AutoTokenizer.from_pretrained(BASE)
@@ -87,7 +103,8 @@ def main() -> None:
             sched.step()
             total += loss.item(); n += 1
         acc = dev_intent_accuracy(model, tokenizer, dev, labels, device)
-        print(f"epoch {epoch + 1}: loss {total / n:.3f}  dev intent acc {acc:.1%}  ({time.time() - t0:.0f}s)")
+        pacc = dev_intent_accuracy(model, tokenizer, pebble_dev, labels, device) if pebble_dev else float("nan")
+        print(f"epoch {epoch + 1}: loss {total / n:.3f}  dev intent acc {acc:.1%}  pebble dev {pacc:.1%}  ({time.time() - t0:.0f}s)")
 
     torch.save(model.state_dict(), out / "model.pt")
     labels.save(out / "labels.json")
@@ -95,7 +112,7 @@ def main() -> None:
     print("saved", out)
 
     from .evaluate import evaluate
-    evaluate(out)
+    evaluate(out, "v1")
 
 
 @torch.no_grad()

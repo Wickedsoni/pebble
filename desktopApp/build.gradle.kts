@@ -58,6 +58,10 @@ val stageModel by tasks.registering(Sync::class) {
     }
 }
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(stageModel) }
+// Compose's packaging tasks don't track the *contents* of app resources, so a new model alone would
+// leave them "up-to-date" with the old one inside. Make the staged model a real input.
+tasks.matching { it.name.startsWith("createDistributable") || it.name.startsWith("package") }
+    .configureEach { inputs.files(stageModel).withPropertyName("bundledModel") }
 
 compose.desktop {
     application {

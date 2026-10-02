@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
  * Skipped when the model hasn't been built on this machine.
  */
 class OnnxParityTest {
-    private val dir: Path = Path.of(System.getProperty("user.dir")).parent.resolve("brain/models/intent-v0-pruned")
+    private val dir: Path = ShippedModel.dir
 
     @Test
     fun kotlinMatchesPython() {

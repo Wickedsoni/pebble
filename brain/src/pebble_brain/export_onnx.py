@@ -21,7 +21,7 @@ import onnxruntime as ort
 import torch
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
-from .evaluate import PEBBLE_EVAL
+from .evaluate import EVAL_SET, pebble_eval
 from .intent_model import Predictor, encode_words
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -56,7 +56,7 @@ def export(ckpt: pathlib.Path) -> None:
     opts.intra_op_num_threads = 4
     sess = ort.InferenceSession(str(int8), opts, providers=["CPUExecutionProvider"])
 
-    rows = [json.loads(l) for l in PEBBLE_EVAL.read_text(encoding="utf-8").splitlines() if l.strip()]
+    rows = [json.loads(l) for l in pebble_eval(EVAL_SET).read_text(encoding="utf-8").splitlines() if l.strip()]
     torch_preds = [p[0] for p in pred.predict([r["text"].split() for r in rows])]
     agree, times = 0, []
     for r, want in zip(rows, torch_preds):
@@ -67,6 +67,25 @@ def export(ckpt: pathlib.Path) -> None:
         times.append((time.perf_counter() - t0) * 1000)
         agree += pred.labels.intents[int(il[0].argmax())] == want
     print(f"int8 agrees with PyTorch on {agree}/{len(rows)} Pebble commands")
+
+    # parity.json: what the int8 model says for every eval sentence, so Kotlin can prove it reads
+    # commands identically (OnnxParityTest): token ids, intent, confidence, slot tags.
+    parity = []
+    for name in ("v0", "v1"):
+        path = ROOT / "eval" / f"pebble_commands_{name}.jsonl"
+        for line in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
+            if not line.strip():
+                continue
+            words = json.loads(line)["text"].split()
+            e, firsts = encode_words(pred.tokenizer, [words])
+            il, sl = sess.run(None, {"input_ids": e["input_ids"].numpy().astype(np.int64),
+                                     "attention_mask": e["attention_mask"].numpy().astype(np.int64)})
+            probs = np.exp(il[0] - il[0].max()); probs /= probs.sum()
+            k = int(probs.argmax())
+            parity.append({"text": " ".join(words), "input_ids": e["input_ids"][0].tolist(), "intent": pred.labels.intents[k],
+                           "p": float(probs[k]), "tags": [pred.labels.tags[int(sl[0, i].argmax())] for i in firsts[0]]})
+    (ckpt / "parity.json").write_text(json.dumps(parity, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"parity.json: {len(parity)} reference readings")
     print(f"ONNX Runtime int8 CPU latency (4 threads): median {np.median(times):.1f} ms, p95 {np.percentile(times, 95):.1f} ms")
 
     pred.tokenizer.save_pretrained(ckpt / "tokenizer")  # includes tokenizer.json for Kotlin

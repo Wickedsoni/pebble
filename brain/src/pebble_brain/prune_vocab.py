@@ -84,7 +84,8 @@ def verify(src: pathlib.Path, dst: pathlib.Path, remap: dict[int, int]) -> None:
     new = AutoTokenizer.from_pretrained(dst / "tokenizer")
     unk = new.unk_token_id
     held_out = [e.tokens for e in load() if e.partition == "test"]
-    held_out += [json.loads(l)["text"].split() for l in (ROOT / "eval" / "pebble_commands_v0.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    for name in ("v0", "v1"):
+        held_out += [json.loads(l)["text"].split() for l in (ROOT / "eval" / f"pebble_commands_{name}.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     same = unks = 0
     for words in held_out:
         a = old(words, is_split_into_words=True)["input_ids"]
