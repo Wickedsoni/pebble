@@ -23,7 +23,8 @@ import kotlin.test.assertTrue
  */
 class EvalSetRouterTest {
     private val brain: Path = Path.of(System.getProperty("user.dir")).parent.resolve("brain")
-    private val modelDir = brain.resolve("models/intent-v0-pruned")
+    /** Set PEBBLE_EVAL_MODEL=models/intent-v1-pruned to score a candidate before it ships. */
+    private val modelDir = brain.resolve(System.getenv("PEBBLE_EVAL_MODEL") ?: "models/intent-v0-pruned")
 
     private fun actionOf(c: QuickCommand): String = when (c) {
         is QuickCommand.RemindAt, is QuickCommand.RemindIn -> A.REMIND
@@ -72,6 +73,6 @@ class EvalSetRouterTest {
 
     companion object {
         /** intent-v0-pruned, 2026-10-02. Raise this when a better model ships. */
-        const val BASELINE_RIGHT_OR_ASKED = 59 // 54 right + 5 asked, of 68
+        const val BASELINE_RIGHT_OR_ASKED = 61 // 58 right + 3 asked, of 68 (v0 model + Hindi mood / "aadhe ghante" rules)
     }
 }

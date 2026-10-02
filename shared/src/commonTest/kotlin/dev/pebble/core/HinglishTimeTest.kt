@@ -42,6 +42,12 @@ class HinglishTimeTest {
         assertEquals(In(20), p("बीस मिनट बाद"))
         assertEquals(In(60), p("ek ghante mein"))
         assertEquals(In(120), p("2 hours"))
+        assertEquals(In(30), p("aadhe ghante baad"))
+        assertEquals(In(30), p("आधे घंटे बाद"))
+        assertEquals(In(30), p("in half an hour"))
+        assertEquals(In(90), p("dedh ghante mein"))
+        assertEquals(In(15), p("thodi der mein"))
+        assertEquals(At(1, 30, null, true), p("dedh baje")) // a clock time, not a duration
     }
 
     @Test fun partOfDayOnly() {

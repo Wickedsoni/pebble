@@ -99,13 +99,26 @@ object HinglishTime {
         "hour" to 60, "hours" to 60, "hr" to 60, "hrs" to 60, "ghanta" to 60, "ghante" to 60, "घंटा" to 60, "घंटे" to 60,
     )
 
-    /** "in 20 minutes", "20 min baad", "बीस मिनट बाद", "ek ghante mein". */
+    /** Fractions of a unit: "aadhe ghante", "dedh ghanta", "ढाई घंटे", "half an hour". */
+    private val fractions = mapOf(
+        "half" to 0.5, "aadha" to 0.5, "aadhe" to 0.5, "adha" to 0.5, "adhe" to 0.5, "आधा" to 0.5, "आधे" to 0.5,
+        "dedh" to 1.5, "डेढ़" to 1.5, "डेढ" to 1.5, "dhai" to 2.5, "ढाई" to 2.5,
+    )
+
+    /** "in 20 minutes", "20 min baad", "बीस मिनट बाद", "ek ghante mein", "aadhe ghante baad", "thodi der mein". */
     private fun relative(w: List<String>): When? {
+        val marker = w.any { it in setOf("in", "after", "baad", "bad", "mein", "me", "बाद", "में") }
+        val der = w.indexOfFirst { it == "der" || it == "देर" }
+        if (der > 0 && w[der - 1] in setOf("thodi", "thori", "थोड़ी", "थोडी") && marker) return When.In(15)
         val i = w.indexOfFirst { it in units }
         if (i <= 0) return null
-        val n = number(w[i - 1]) ?: if (w[i - 1] in setOf("a", "an", "one")) 1 else return null
-        val marker = w.any { it in setOf("in", "after", "baad", "bad", "mein", "me", "बाद", "में") }
-        return if (marker || i == w.lastIndex) When.In(n * units.getValue(w[i])) else null
+        val prev = w[i - 1]
+        val n: Double = when {
+            prev in fractions -> fractions.getValue(prev)
+            prev in setOf("a", "an") && w.getOrNull(i - 2) == "half" -> 0.5
+            else -> (number(prev) ?: if (prev in setOf("a", "an", "one")) 1 else return null).toDouble()
+        }
+        return if (marker || i == w.lastIndex) When.In((n * units.getValue(w[i])).toInt()) else null
     }
 
     /** Hour and minute from "5", "5:30", "17.00", "saade paanch", "पौने सात", "dedh", "half past five". */

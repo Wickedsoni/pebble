@@ -30,7 +30,10 @@ object Replies {
     private val lowMoodWords = listOf(
         "sad", "feeling low", "feel low", "feeling down", "a bit low", "upset", "lonely", "stressed", "tired of", "depressed", "anxious", "not okay", "not ok", "bad day",
         "mood off", "mood kharab", "mood thoda off", "udaas", "udas", "dukhi", "pareshan", "akela", "tension",
+        "mann nahi lag", "man nahi lag", "mann nhi lag", "man nhi lag", "dil nahi lag", "dil nhi lag", "kuch acha nahi lag",
+        "thak gaya hu", "thak gayi hu", "thak gaya hoon", "thak gayi hoon", "so tired", "exhausted", "burnt out", "overwhelmed",
         "उदास", "दुखी", "परेशान", "अकेला", "मूड ठीक नहीं", "मूड खराब", "टेंशन",
+        "मन नहीं", "मन नही", "दिल नहीं लग", "थक गया हूं", "थक गई हूं", "थक गया हूँ", "थक गई हूँ",
     )
 
     /** Words that signal a low mood, in all three scripts. */

@@ -118,7 +118,7 @@ class CommandRouterTest {
     fun lowMoodGetsACaringReplyBeforeTheModel() {
         var asked = false
         val router = CommandRouter({ asked = true; null })
-        for (t in listOf("aaj mood thoda off hai", "आज मेरा मूड ठीक नहीं है", "i'm feeling a bit low today")) {
+        for (t in listOf("aaj mood thoda off hai", "आज मेरा मूड ठीक नहीं है", "i'm feeling a bit low today", "padhai me mann nhi lag rha", "आज किसी काम में मन नहीं है")) {
             val r = router.route(t) as Routed.Run
             assertEquals(QuickCommand.Chitchat(t, Replies.LOW_MOOD), r.command)
         }
