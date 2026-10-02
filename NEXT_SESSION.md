@@ -1,20 +1,69 @@
-# Next session — where we are
+# Pebble — status and next-session plan
 
-## Done
-- **M0:** `brain/` Python 3.11 env (PyTorch CUDA on the RTX 4050), learning notebooks 01–02.
-- **M1 command model:** MASSIVE (CC BY 4.0) + Hinglish transliteration → multilingual-e5-small with intent + slot heads,
-  vocab-pruned and int8-quantised (31 MB model + 1.9 MB tokenizer). MASSIVE intent acc en 87.9 / hi 85.9 / Roman 79.1%.
-- **Kotlin runtime:** ONNX Runtime + HF tokenizer in the app with exact Python parity (`OnnxParityTest`);
-  `ModelManager` loads lazily, verifies the SHA-256 from `brain/models/manifest.json`, unloads after 10 idle minutes.
-- **Router:** rules → model → "Did you mean…?" (answers saved to `command_feedback` for retraining);
-  Hindi/Hinglish rules for remember, "har N minute", water logging and low mood; `HinglishTime` reads times in 3 scripts.
-- Verified in the running app: "kal shaam 7 baje mummy ko call karne ki yaad dila dena" → reminder "Mummy call karne",
-  tomorrow 7:00 PM (97% sure). 40/40 tests pass. App: 256 MB with the model loaded, 0.5% of one core idle.
+To resume: open this repo and say "continue from NEXT_SESSION.md".
 
-## Next (from the plan)
-1. Replace the draft eval set (`brain/eval/pebble_commands_v0.jsonl`) with ~50 real commands from you.
-2. Retrain script that also uses `command_feedback` rows (your "Did you mean" picks) — export from `%APPDATA%\Pebble\pebble.db`.
-3. Weekday times ("friday wali meeting") in `HinglishTime` (needs today's date passed in).
-4. M2: semantic memory search + few-shot prototypes on the same encoder.
-5. Parallel track: Claude Code task delegation with pet status (working / needs input / done).
-6. Packaging: copy the model into the installer (`%APPDATA%\Pebble\models\intent`) so it works outside the dev layout.
+## What's implemented
+
+### The app (Kotlin + Compose Desktop, `desktopApp/` + `shared/`)
+- **Desktop companion pet:** flat, neutral characters (Pebble, Mochi, Sprout, Bolt, Drip) with 4 growth stages and moods.
+  It walks along the taskbar, blinks, follows the cursor and sleeps when you're idle, and hides for fullscreen apps.
+  Battery-aware: about 4 Hz when still, 24 fps when moving, 20 fps on battery, and no wandering in battery saver.
+- **Pebble app window:** sidebar with Today, Water, Notes, Reminders, Companion and Memory pages, as glass bento cards over
+  generated Aurora scenes (Auto by time of day, or your wallpaper). Opened from the pet menu or the tray.
+- **Reminders:** water, stretch and 20-20-20 eye breaks, with per-type strictness:
+  - Gentle: speech bubble only.
+  - Normal: bubble, then a nudge, then a Windows notification.
+  - Strict: the pet follows your cursor until it's done.
+  - Also one-off reminders, and learned quiet hours (reminders hold off in hours you usually skip).
+- **Memory system:** learns water timing, which reminders you skip, active hours, streaks, mood trends and (opt-in) what you
+  watch, plus facts you tell it ("remember …"). Everything can be deleted on the Memory page. Local only.
+- **Quick add (Ctrl+Alt+Space):** types in English, Hindi (Devanagari) or Hinglish, shows a live preview, and asks
+  "Did you mean…?" when unsure.
+
+### The brain (`brain/` Python training + Kotlin runtime)
+- **Environment:** Python 3.11 via `uv`, PyTorch with CUDA on the RTX 4050. Learning notebooks 01–02.
+- **Command model (M1):** Amazon MASSIVE (CC BY 4.0, licence checked by script) plus rule-based Hinglish transliteration.
+  multilingual-e5-small encoder with intent and slot heads, trained jointly. Vocabulary pruned 250k → 26.6k pieces,
+  int8 per-channel: **31 MB model + 1.9 MB tokenizer, ~6.5 ms per command on 4 CPU threads.**
+  MASSIVE intent accuracy: English 87.9%, Devanagari 85.9%, Roman 79.1%. Pebble actions 95.7% on the draft eval set.
+- **In the app:** ONNX Runtime + HF tokenizer with exact Python parity. `ModelManager` loads lazily, checks the SHA-256 in
+  `brain/models/manifest.json`, and unloads after 10 idle minutes. 256 MB RAM while loaded, 0.5% of one core idle.
+- **Command router:** rules first, then the model, then "Did you mean…?" Your picks are saved to `command_feedback` as
+  training labels. `HinglishTime` reads times in three scripts ("kal shaam saade paanch baje", "बीस मिनट बाद").
+  Replies mirror the script you typed in; low mood gets a caring reply.
+- **Tests:** 40/40 pass (`./gradlew :shared:jvmTest :desktopApp:test`).
+
+### Rebuild the model from scratch (artifacts are gitignored)
+```powershell
+cd brain
+python -m uv sync
+python -m uv run python data/download_massive.py
+python -m uv run python -m pebble_brain.train_intent --out models/intent-v0
+python -m uv run python -m pebble_brain.prune_vocab models/intent-v0 models/intent-v0-pruned
+python -m uv run python -m pebble_brain.export_onnx models/intent-v0-pruned
+```
+Then refresh `models/manifest.json` (checksum) and `parity.json` before running the Kotlin tests.
+
+## Known weak spots
+- Hindi chit-chat ("tum bahut cute ho") and some short Hinglish lines still trigger "Did you mean".
+- Roman-Hindi slot F1 is only 52%, because its training data is machine-transliterated.
+- Weekdays aren't read as days yet ("friday wali meeting"), so Pebble asks when.
+- The eval set (`brain/eval/pebble_commands_v0.jsonl`) is a draft I wrote, not your real phrasing.
+- The model is only found in the dev layout (`brain/models/...`); the installer doesn't ship it yet.
+
+## Next session plan (in order)
+1. **Your real commands:** about 50 sentences you'd actually type or say, in all three scripts.
+   They become eval set v1 and replace my draft.
+2. **Retrain with feedback (active learning):** export `command_feedback` from `%APPDATA%\Pebble\pebble.db`,
+   add those pairs plus a small set of hand-labelled Hinglish chit-chat, retrain, and keep the new model only if it
+   beats the current one on the frozen eval set.
+3. **Weekdays in `HinglishTime`:** friday / shukravar / शुक्रवार, with today's date passed in.
+4. **Packaging:** bundle the model into the installer (`%APPDATA%\Pebble\models\intent`), then test `packageMsi` and
+   "Start with Windows".
+5. **M2 (weeks 7–8):** semantic memory search (embeddings in SQLite) and few-shot "teach Pebble a new command"
+   prototypes on the same encoder.
+6. **Parallel app track:** Claude Code task delegation. The pet shows working / needs input / done, tasks run in a git
+   worktree, and you review the diff.
+7. **Later milestones:** M3 habit brain (contextual bandit, RL), M4 speech-to-text (Whisper LoRA, push-to-talk),
+   M5 local chat (Qwen2.5-0.5B via llama.cpp), M6 situation/mood/context models, M7 overnight continual learning.
+   The full plan is in `C:\Users\Avik\.claude\plans\i-would-like-to-glittery-coral.md`.
