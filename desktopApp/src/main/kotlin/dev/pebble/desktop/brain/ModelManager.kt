@@ -19,8 +19,9 @@ import java.security.MessageDigest
 
 /**
  * Owns the command model's lifecycle so it costs nothing when unused:
- *  - finds the model folder (env `PEBBLE_MODELS_DIR`, then `%APPDATA%\Pebble\models\intent`,
- *    then the dev build in `brain/models/intent-v0-pruned`)
+ *  - finds the model folder: env `PEBBLE_MODELS_DIR`, then `%APPDATA%\Pebble\models\intent` (a newer model
+ *    placed there wins), then the copy bundled in the installer, then the dev build that
+ *    `brain/models/manifest.json` names (e.g. `brain/models/intent-v0-pruned`)
  *  - verifies the ONNX file against `manifest.json`'s SHA-256 before trusting it
  *  - loads lazily in the background ([warmUp]); [understand] never blocks on loading
  *  - frees it (~60 MB of RAM) after [idleMillis] without use
@@ -44,15 +45,31 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
         loading = scope.launch(Dispatchers.IO) {
             status = "loading"
             val ok = verify(dir)
-            if (!ok) { status = "checksum mismatch — not loaded"; return@launch }
+            if (!ok) { status = "checksum mismatch — not loaded"; log(dir); return@launch }
             val t0 = System.currentTimeMillis()
             model = runCatching { OnnxIntentModel(dir) }.onFailure { status = "load failed: ${it.message}" }.getOrNull()
             if (model != null) {
                 status = "ready (${System.currentTimeMillis() - t0} ms load)"
                 watchIdle()
             }
+            log(dir)
         }
     }
+
+    /** One line per load in `%APPDATA%\Pebble\brain.log`: which model, from where, and how it went. */
+    private fun log(dir: Path) {
+        runCatching {
+            val file = DatabaseFactory.defaultDataDir().toPath().resolve("brain.log")
+            if (Files.exists(file) && Files.size(file) > 64_000) Files.delete(file)
+            Files.writeString(
+                file, "${java.time.LocalDateTime.now().withNano(0)}  $status  $dir\n",
+                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND,
+            )
+        }
+    }
+
+    /** Waits for a pending load (tests and diagnostics; the app never blocks on this). */
+    suspend fun awaitLoaded(): Boolean { loading?.join(); return model != null }
 
     override fun understand(text: String): Understood? {
         val m = model ?: run { warmUp(); return null }
@@ -75,21 +92,32 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
     }
 
     private fun locate(): Path? {
+        val cwd = Path.of(System.getProperty("user.dir"))
         val candidates = listOfNotNull(
             System.getenv("PEBBLE_MODELS_DIR")?.let { Path.of(it) },
             DatabaseFactory.defaultDataDir().toPath().resolve("models/intent"),
-            Path.of(System.getProperty("user.dir")).resolve("../brain/models/intent-v0-pruned").normalize(),
-            Path.of(System.getProperty("user.dir")).resolve("brain/models/intent-v0-pruned").normalize(),
-        )
+            // Set by Compose Desktop in the installed app (and by `run`): <install>/app/resources.
+            System.getProperty("compose.application.resources.dir")?.let { Path.of(it).resolve("models/intent") },
+        ) + listOf(cwd.resolve("../brain/models"), cwd.resolve("brain/models")).mapNotNull { devModel(it.normalize()) }
         return candidates.firstOrNull { Files.exists(it.resolve("intent.int8.onnx")) && Files.exists(it.resolve("tokenizer/tokenizer.json")) }
     }
+
+    /** The dev-layout model folder that `<models>/manifest.json` points at. */
+    private fun devModel(models: Path): Path? {
+        val manifest = models.resolve("manifest.json").takeIf(Files::exists) ?: return null
+        val path = runCatching { modelEntry(manifest)?.getValue("files")?.jsonObject?.getValue("model")?.jsonObject?.getValue("path")?.jsonPrimitive?.content }
+            .getOrNull() ?: return null
+        return models.resolve(path).parent
+    }
+
+    private fun modelEntry(manifest: Path) = Json.parseToJsonElement(Files.readString(manifest)).jsonObject.getValue("models").jsonArray
+        .map { it.jsonObject }.firstOrNull { it["name"]?.jsonPrimitive?.content == "intent" }
 
     /** Checks the model file's SHA-256 against manifest.json (next to it, or one level up in the dev layout). */
     private fun verify(dir: Path): Boolean {
         val manifest = listOf(dir.resolve("manifest.json"), dir.parent.resolve("manifest.json")).firstOrNull(Files::exists)
             ?: return true // hand-placed model without a manifest: allowed, but nothing to check against
-        val entry = Json.parseToJsonElement(Files.readString(manifest)).jsonObject.getValue("models").jsonArray
-            .map { it.jsonObject }.firstOrNull { it["name"]?.jsonPrimitive?.content == "intent" } ?: return true
+        val entry = modelEntry(manifest) ?: return true
         val want = entry.getValue("files").jsonObject.getValue("model").jsonObject.getValue("sha256").jsonPrimitive.content
         val digest = MessageDigest.getInstance("SHA-256")
         Files.newInputStream(dir.resolve("intent.int8.onnx")).use { input ->

@@ -39,6 +39,26 @@ tasks.register<JavaExec>("sceneGallery") {
     args(layout.buildDirectory.file("scene-gallery.png").get().asFile.absolutePath)
 }
 
+// The command model ships inside the installer. brain/models/manifest.json names the model folder
+// (e.g. "intent-v0-pruned/intent.int8.onnx"); only the three runtime files are copied (~35 MB).
+// Model files are gitignored: on a fresh clone with no trained model, the app runs on rules only.
+val brainModels = rootProject.layout.projectDirectory.dir("brain/models")
+val shippedModel = providers.fileContents(brainModels.file("manifest.json")).asText.map { json ->
+    Regex(""""path"\s*:\s*"([^"/]+)/intent\.int8\.onnx"""").find(json)?.groupValues?.get(1)
+        ?: error("brain/models/manifest.json has no intent.int8.onnx path")
+}
+val stageModel by tasks.registering(Sync::class) {
+    group = "pebble"
+    description = "Copies the model named in brain/models/manifest.json into the app resources"
+    into(layout.buildDirectory.dir("model-resources/common/models"))
+    from(brainModels.file("manifest.json"))
+    from(brainModels.dir(shippedModel)) {
+        include("intent.int8.onnx", "labels.json", "tokenizer/tokenizer.json")
+        into("intent")
+    }
+}
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(stageModel) }
+
 compose.desktop {
     application {
         mainClass = "dev.pebble.desktop.MainKt"
@@ -60,6 +80,7 @@ compose.desktop {
         )
 
         nativeDistributions {
+            appResourcesRootDir.set(layout.buildDirectory.dir("model-resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Pebble"
             packageVersion = "0.1.0"
