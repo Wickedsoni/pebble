@@ -7,6 +7,7 @@ sqldelight = "2.4.0"
 jna = "5.19.1"
 onnxruntime = "1.30.0"
 djl = "0.38.0"
+sherpa-onnx = "v1.13.5"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -19,8 +20,11 @@ jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 onnxruntime = { module = "com.microsoft.onnxruntime:onnxruntime", version.ref = "onnxruntime" }
 djl-tokenizers = { module = "ai.djl.huggingface:tokenizers", version.ref = "djl" }
+sherpa-onnx-jvm = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx-jvm", version.ref = "sherpa-onnx" }
+sherpa-onnx-native-win = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx-native-lib-win-x64", version.ref = "sherpa-onnx" }
 
 [plugins]
+spotless = { id = "com.diffplug.spotless", version = "8.10.3" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

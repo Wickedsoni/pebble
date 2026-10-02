@@ -4,6 +4,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -27,6 +28,8 @@ import dev.pebble.desktop.platform.MediaWatcher
 import dev.pebble.desktop.platform.SingleInstance
 import dev.pebble.desktop.quickadd.QuickAddWindow
 import dev.pebble.desktop.ui.rememberSystemDarkTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.system.exitProcess
 
 private const val PET = "pet"
@@ -45,6 +48,7 @@ fun main(args: Array<String>) {
         var petVisible by remember { mutableStateOf(app.layouts.get(PET)?.visible ?: true) }
         var autostart by remember { mutableStateOf(Autostart.isEnabled()) }
         var quickAddOpen by remember { mutableStateOf(false) }
+        val talkScope = rememberCoroutineScope()
         var quickAddRetry by remember { mutableStateOf<dev.pebble.desktop.quickadd.QuickAddRetry?>(null) }
         var appOpen by remember { mutableStateOf(!startInBackground) }
         var page by remember { mutableStateOf(Page.TODAY) }
@@ -58,7 +62,17 @@ fun main(args: Array<String>) {
             appOpen = true
         }
         LaunchedEffect(Unit) {
-            GlobalHotkey(GlobalHotkey.MOD_CONTROL or GlobalHotkey.MOD_ALT, GlobalHotkey.VK_SPACE) { quickAddOpen = true }.start()
+            GlobalHotkey(GlobalHotkey.MOD_CONTROL or GlobalHotkey.MOD_ALT, GlobalHotkey.VK_SPACE) {
+                // Tap: type. Hold (> 300 ms): talk until the keys are released.
+                quickAddOpen = true
+                talkScope.launch {
+                    delay(300)
+                    if (!GlobalHotkey.isHeld(GlobalHotkey.VK_SPACE)) return@launch
+                    if (!app.voice.start()) return@launch
+                    while (GlobalHotkey.isHeld(GlobalHotkey.VK_SPACE)) delay(30)
+                    app.voice.stop()
+                }
+            }.start()
             pet.greet()
         }
         LaunchedEffect(Unit) { MediaWatcher(app).run() }
@@ -114,7 +128,10 @@ fun main(args: Array<String>) {
         )
 
         QuickAddWindow(
-            app, quickAddOpen, dark, quickAddRetry,
+            app,
+            quickAddOpen,
+            dark,
+            quickAddRetry,
             onRetry = { quickAddRetry = it; quickAddOpen = true },
         ) { line ->
             quickAddOpen = false

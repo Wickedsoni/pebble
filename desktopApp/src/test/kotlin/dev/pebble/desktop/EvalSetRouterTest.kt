@@ -2,7 +2,6 @@ package dev.pebble.desktop
 
 import dev.pebble.core.brain.CommandRouter
 import dev.pebble.core.brain.CommandRouter.Routed
-import dev.pebble.core.brain.PebbleActions as A
 import dev.pebble.core.brain.Replies
 import dev.pebble.core.quickadd.QuickCommand
 import dev.pebble.desktop.brain.OnnxIntentModel
@@ -13,6 +12,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.pebble.core.brain.PebbleActions as A
 
 /**
  * The frozen gate (eval set v1) scored on what Pebble actually does: rules, then the int8 model,
@@ -23,22 +23,9 @@ import kotlin.test.assertTrue
  */
 class EvalSetRouterTest {
     private val brain: Path = ShippedModel.brain
+
     /** Set PEBBLE_EVAL_MODEL=models/intent-v1-pruned to score a candidate before it ships. */
     private val modelDir = brain.resolve(System.getenv("PEBBLE_EVAL_MODEL") ?: ShippedModel.dir.toString())
-
-    private fun actionOf(c: QuickCommand): String = when (c) {
-        is QuickCommand.RemindAt, is QuickCommand.RemindIn -> A.REMIND
-        is QuickCommand.AddNote -> A.ADD_NOTE
-        is QuickCommand.RememberFact -> "remember_fact"
-        is QuickCommand.LogWater -> "log_water"
-        is QuickCommand.SetInterval -> "set_interval"
-        QuickCommand.ShowUpcoming -> A.REMINDERS_QUERY
-        QuickCommand.ShowNotes -> A.NOTES_QUERY
-        QuickCommand.TellTime -> A.TIME_QUERY
-        is QuickCommand.Chitchat -> if (c.intent == Replies.LOW_MOOD) "mood" else A.CHITCHAT
-        is QuickCommand.Unsupported -> A.OTHER
-        is QuickCommand.OpenPage -> if (c.page == "notes") A.NOTE_REMOVE else A.REMINDER_REMOVE
-    }
 
     @Test
     fun scoreV1() {
@@ -55,7 +42,12 @@ class EvalSetRouterTest {
                 val script = row.getValue("script").jsonPrimitive.content
                 val (verdict, got) = when (val r = router.route(text)) {
                     is Routed.Run -> actionOf(r.command).let { (if (it == want) 0 else 2) to "${r.source} $it" }
-                    is Routed.Ask -> r.options.firstOrNull()?.action.let { (if (it == want) 1 else 2) to "ASK ${r.options.map { o -> o.action }}" }
+
+                    is Routed.Ask -> r.options.firstOrNull()?.action.let {
+                        (if (it == want) 1 else 2) to
+                            "ASK ${r.options.map { o -> o.action }}"
+                    }
+
                     null -> 2 to "null"
                 }
                 score.getOrPut(script) { IntArray(3) }[verdict]++
@@ -75,7 +67,8 @@ class EvalSetRouterTest {
     }
 
     companion object {
-        /** intent-v2-pruned, 2026-10-02. Raise this when a better model ships. */
+        // Gates for intent-v2-pruned (2026-10-02). Raise them when a better model ships.
+
         /** Doing the wrong thing without asking; may never go up. */
         const val MAX_ACTED_WRONGLY = 0
         const val BASELINE_RIGHT_OR_ASKED = 67 // intent-v2-pruned: 65 right + 2 asked, of 68

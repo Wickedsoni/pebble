@@ -27,6 +27,29 @@ INSERT OR REPLACE INTO nudge_stats(key, alpha, beta) VALUES (?, ?, ?);
 clearNudgeStats:
 DELETE FROM nudge_stats;
 
+-- Voice clips you corrected, opt-in (settings "voice.keepCorrections"): the audio file lives in
+-- %APPDATA%\Pebble\voice\, the row says what Whisper heard and what you meant. Deletable on the Memory page.
+CREATE TABLE voice_sample (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wav_path TEXT NOT NULL,
+    asr_text TEXT NOT NULL,
+    final_text TEXT NOT NULL,
+    asr_model TEXT NOT NULL,
+    at_millis INTEGER NOT NULL
+);
+
+insertVoiceSample:
+INSERT INTO voice_sample(wav_path, asr_text, final_text, asr_model, at_millis) VALUES (?, ?, ?, ?, ?);
+
+allVoiceSamples:
+SELECT * FROM voice_sample ORDER BY at_millis;
+
+voiceSampleCount:
+SELECT count(*) FROM voice_sample;
+
+deleteVoiceSamples:
+DELETE FROM voice_sample;
+
 insertFeedback:
 INSERT INTO command_feedback(text, chosen_action, model_intent, model_confidence, at_millis, outcome) VALUES (?, ?, ?, ?, ?, ?);
 

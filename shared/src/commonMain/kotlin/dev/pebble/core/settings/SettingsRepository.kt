@@ -25,5 +25,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
         const val KEEP_ON_TOP = "widgets.keepOnTop"
         const val MEDIA_TRACKING = "memory.mediaTracking"
         const val APP_SCENE = "app.scene"
+
+        /** Keep voice clips whose transcript you corrected (opt-in), to tune speech recognition to you. */
+        const val KEEP_VOICE_CORRECTIONS = "voice.keepCorrections"
     }
 }

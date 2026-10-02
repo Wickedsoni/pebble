@@ -20,7 +20,33 @@ dependencies {
     implementation(libs.onnxruntime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.djl.tokenizers)
+    // Voice: VAD + Whisper offline. Ships its own onnxruntime.dll; SpeechRecognizer loads ours first (VoiceSpikeTest).
+    implementation(libs.sherpa.onnx.jvm)
+    implementation(libs.sherpa.onnx.native.win)
     testImplementation(kotlin("test"))
+}
+
+tasks.register<JavaExec>("asrEval") {
+    group = "pebble"
+    description = "Speech recognition WER/CER on FLEURS Hindi (+ noise, +/- GTCRN): -Pclips=30 -Pmodels=base,small"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass = "dev.pebble.desktop.voice.AsrEvalKt"
+    jvmArgs("-Dstdout.encoding=UTF-8", "-Dfile.encoding=UTF-8")
+    args(
+        rootProject.layout.projectDirectory.dir("brain").asFile.absolutePath,
+        providers.gradleProperty("clips").getOrElse("30"),
+        providers.gradleProperty("models").getOrElse("base,small"),
+    )
+}
+
+tasks.register<JavaExec>("recordVoiceEval") {
+    group = "pebble"
+    description = "Record your own voice test set into brain/eval/voice_v1 (interactive)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.pebble.desktop.tools.RecordVoiceEvalKt"
+    standardInput = System.`in`
+    jvmArgs("-Dstdout.encoding=UTF-8")
+    args(rootProject.layout.projectDirectory.dir("brain").asFile.absolutePath)
 }
 
 tasks.register<JavaExec>("petGallery") {
@@ -39,22 +65,27 @@ tasks.register<JavaExec>("sceneGallery") {
     args(layout.buildDirectory.file("scene-gallery.png").get().asFile.absolutePath)
 }
 
-// The command model ships inside the installer. brain/models/manifest.json names the model folder
-// (e.g. "intent-v0-pruned/intent.int8.onnx"); only the three runtime files are copied (~35 MB).
-// Model files are gitignored: on a fresh clone with no trained model, the app runs on rules only.
+// Models ship inside the installer. brain/models/manifest.json lists every model ("intent", "asr") and its
+// files, e.g. "intent-v2-pruned/tokenizer/tokenizer.json"; each is copied to models/<name>/ with the first
+// folder dropped (→ models/intent/tokenizer/tokenizer.json). Model files are gitignored: on a fresh clone
+// with no trained model, the app runs on rules only and voice says "voice model isn't installed".
 val brainModels = rootProject.layout.projectDirectory.dir("brain/models")
-val shippedModel = providers.fileContents(brainModels.file("manifest.json")).asText.map { json ->
-    Regex(""""path"\s*:\s*"([^"/]+)/intent\.int8\.onnx"""").find(json)?.groupValues?.get(1)
-        ?: error("brain/models/manifest.json has no intent.int8.onnx path")
-}
+val manifestModels: List<Pair<String, List<String>>> =
+    providers.fileContents(brainModels.file("manifest.json")).asText.orNull?.let { json ->
+        @Suppress("UNCHECKED_CAST")
+        ((groovy.json.JsonSlurper().parseText(json) as Map<String, Any>)["models"] as List<Map<String, Any>>).map { m ->
+            m["name"] as String to (m["files"] as Map<String, Map<String, Any>>).values.map { it["path"] as String }
+        }
+    } ?: emptyList()
 val stageModel by tasks.registering(Sync::class) {
     group = "pebble"
-    description = "Copies the model named in brain/models/manifest.json into the app resources"
+    description = "Copies every model named in brain/models/manifest.json into the app resources"
     into(layout.buildDirectory.dir("model-resources/common/models"))
     from(brainModels.file("manifest.json"))
-    from(brainModels.dir(shippedModel)) {
-        include("intent.int8.onnx", "labels.json", "tokenizer/tokenizer.json")
-        into("intent")
+    for ((name, paths) in manifestModels) {
+        for (path in paths) {
+            from(brainModels.file(path)) { into("$name/" + path.substringAfter('/').substringBeforeLast('/', "")) }
+        }
     }
 }
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(stageModel) }

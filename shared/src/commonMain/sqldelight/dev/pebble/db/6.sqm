@@ -1,0 +1,10 @@
+-- Phase M4: voice clips you corrected (opt-in): audio + what you actually said, for tuning Whisper.
+
+CREATE TABLE voice_sample (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wav_path TEXT NOT NULL,
+    asr_text TEXT NOT NULL,
+    final_text TEXT NOT NULL,
+    asr_model TEXT NOT NULL,
+    at_millis INTEGER NOT NULL
+);

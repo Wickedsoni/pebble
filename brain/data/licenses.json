@@ -21,7 +21,8 @@
       "use": "M4 speech",
       "license": "CC BY 4.0",
       "url": "https://huggingface.co/datasets/google/fleurs",
-      "verified": false
+      "verified": true,
+      "verified_by": "Dataset card on huggingface.co/datasets/google/fleurs: 'licensed under the Creative Commons license (CC-BY)'; used for evaluation only"
     },
     {
       "name": "AI4Bharat IndicVoices",

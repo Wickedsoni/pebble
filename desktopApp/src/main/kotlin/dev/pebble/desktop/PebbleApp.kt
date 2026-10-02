@@ -24,12 +24,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -53,17 +53,25 @@ class PebbleApp(db: PebbleDatabase) {
     val notes = NoteRepository(db)
     val memory = MemoryRepository(db)
     val brain = MemoryEngine(
-        db, memory, clock = ::now,
+        db,
+        memory,
+        clock = ::now,
         hourOf = { minuteOfDay(it) / 60 },
         dayOf = { java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() },
         waterGoalMl = { waterGoalGlasses * GLASS_ML },
     )
+
     /** Learns when repeating reminders land best (contextual bandit); beliefs persist in the database. */
     val nudge = dev.pebble.core.brain.NudgePolicy(dev.pebble.core.brain.SqlNudgeStore(db), quietHours = brain::quietHours)
         .also { brain.nudge = it }
     val engine = ReminderEngine(
-        reminders, bus, clock = ::now, minuteOfDay = ::minuteOfDay, quietHours = brain::quietHours,
-        nudge = nudge, busy = dev.pebble.desktop.platform.UserActivity::isFullscreenBusy,
+        reminders,
+        bus,
+        clock = ::now,
+        minuteOfDay = ::minuteOfDay,
+        quietHours = brain::quietHours,
+        nudge = nudge,
+        busy = dev.pebble.desktop.platform.UserActivity::isFullscreenBusy,
     )
 
     /** "Forget this" on the Memory page; forgetting a learned nudge timing also resets what was learned there. */
@@ -89,6 +97,37 @@ class PebbleApp(db: PebbleDatabase) {
     val model = dev.pebble.desktop.brain.ModelManager(CoroutineScope(SupervisorJob() + Dispatchers.Default))
     val router = dev.pebble.core.brain.CommandRouter({ model }, today = { LocalDate.now().dayOfWeek.value })
     val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
+
+    /** Offline speech (VAD + Whisper), loaded only when you talk and freed when idle. */
+    val speech = dev.pebble.desktop.voice.SpeechRecognizer(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    val voice = dev.pebble.desktop.voice.VoiceInput(speech, CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    val voiceSamples = dev.pebble.core.brain.VoiceSampleRepository(db)
+
+    /** Where kept voice clips go (tests point it elsewhere). */
+    var voiceDir: java.nio.file.Path = DatabaseFactory.defaultDataDir().toPath().resolve("voice")
+
+    /**
+     * After a voice command runs: if you edited what Whisper heard and you've opted in, keep the clip and
+     * your text — the best possible data for tuning speech recognition to your voice. Otherwise nothing.
+     */
+
+    fun noteVoiceCorrection(finalText: String) {
+        val heard = voice.lastHeard ?: return
+        val audio = voice.lastAudio ?: return
+        if (finalText.trim() == heard.text.trim() || !settings.bool(SettingsRepository.Keys.KEEP_VOICE_CORRECTIONS, false)) return
+        runCatching {
+            val wav = voiceDir.resolve("${now()}.wav")
+            dev.pebble.desktop.voice.writeWav(wav, audio)
+            val model = speech.modelDir?.let { dev.pebble.desktop.voice.SpeechRecognizer.whisperSize(it) } ?: "?"
+            voiceSamples.add(dev.pebble.core.brain.VoiceSample(wav.toString(), heard.text, finalText.trim(), "whisper-$model", now()))
+        }
+    }
+
+    /** Deletes every kept voice clip, files and rows. */
+    fun clearVoiceSamples() {
+        voiceSamples.all().forEach { runCatching { java.nio.file.Files.deleteIfExists(java.nio.file.Path.of(it.wavPath)) } }
+        voiceSamples.clear()
+    }
 
     init {
         // Unconfined: events are written on the publisher's thread, so nothing is lost on exit.
@@ -143,7 +182,19 @@ class PebbleApp(db: PebbleDatabase) {
         if (before < goalMl && total >= goalMl) {
             runCatching { brain.learn() }
             val streak = memory.byKey(MemoryEngine.KEY_WATER_STREAK)?.data
-            say(PetLine(if (streak != null) "Water goal done — $streak days in a row." else "Water goal done for today.", Mood.CELEBRATE, 3_500))
+            say(
+                PetLine(
+                    if (streak !=
+                        null
+                    ) {
+                        "Water goal done — $streak days in a row."
+                    } else {
+                        "Water goal done for today."
+                    },
+                    Mood.CELEBRATE,
+                    3_500,
+                ),
+            )
         }
         return total / GLASS_ML
     }
@@ -185,14 +236,17 @@ class PebbleApp(db: PebbleDatabase) {
                 lastUndo = { notes.delete(id) }
                 PetLine("Saved to your notes.")
             }
+
             is QuickCommand.RememberFact -> {
                 remember(cmd.text)
                 PetLine("Got it, I'll remember that.")
             }
+
             is QuickCommand.LogWater -> {
                 val glasses = logWater(cmd.glasses)
                 PetLine("$glasses of $waterGoalGlasses glasses today.", Mood.HAPPY)
             }
+
             is QuickCommand.SetInterval -> {
                 val rule = reminders.rules().first { it.kind == cmd.kind }
                 val strictness = cmd.strictness ?: rule.strictness
@@ -200,32 +254,44 @@ class PebbleApp(db: PebbleDatabase) {
                 engine.tick()
                 PetLine("Every ${formatMinutes(cmd.minutes)} · ${strictness.label}")
             }
+
             is QuickCommand.RemindIn -> {
                 val at = now() + cmd.minutes * 60_000L
                 val id = reminders.addOneOff(cmd.title, at)
                 lastUndo = { reminders.deleteOneOff(id); engine.tick() }
                 PetLine("I'll remind you in ${formatMinutes(cmd.minutes)}.")
             }
+
             is QuickCommand.RemindAt -> {
                 val at = resolve(cmd)
                 val id = reminders.addOneOff(cmd.title, at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
                 lastUndo = { reminders.deleteOneOff(id); engine.tick() }
                 PetLine("I'll remind you ${describeWhen(at)}.")
             }
+
             QuickCommand.ShowUpcoming -> {
                 val next = engine.upcoming(3)
                 PetLine(
                     if (next.isEmpty()) "Nothing coming up." else "Next: " + next.joinToString(" · ") { "${it.title} ${dueIn(it.dueAt)}" },
-                    Mood.IDLE, 6_000,
+                    Mood.IDLE,
+                    6_000,
                 )
             }
+
             QuickCommand.ShowNotes -> {
                 val open = notes.recent(3)
                 PetLine(if (open.isEmpty()) "No open notes." else open.joinToString(" · ") { it.text }, Mood.IDLE, 6_000)
             }
-            QuickCommand.TellTime -> PetLine("It's " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm a, EEEE")) + ".", Mood.IDLE)
+
+            QuickCommand.TellTime -> PetLine(
+                "It's " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm a, EEEE")) + ".",
+                Mood.IDLE,
+            )
+
             is QuickCommand.Chitchat -> PetLine(dev.pebble.core.brain.Replies.chitchat(cmd.text, cmd.intent), Mood.HAPPY, 5_000)
+
             is QuickCommand.Unsupported -> PetLine(dev.pebble.core.brain.Replies.unsupported(cmd.text), Mood.IDLE, 5_000)
+
             is QuickCommand.OpenPage -> {
                 openPage(cmd.page)
                 PetLine("")
@@ -241,17 +307,30 @@ class PebbleApp(db: PebbleDatabase) {
     /** One-line preview shown under the quick-add field before you press Enter. */
     fun describe(cmd: QuickCommand): String = when (cmd) {
         is QuickCommand.AddNote -> "Save note: “${cmd.text}”"
+
         is QuickCommand.RememberFact -> "Remember: “${cmd.text}”"
+
         is QuickCommand.LogWater -> "Log ${cmd.glasses} glass${if (cmd.glasses > 1) "es" else ""} of water"
-        is QuickCommand.SetInterval -> "${cmd.kind.name.lowercase().replaceFirstChar { it.uppercase() }} reminder every ${formatMinutes(cmd.minutes)}" +
+
+        is QuickCommand.SetInterval -> "${cmd.kind.name.lowercase().replaceFirstChar {
+            it.uppercase()
+        }} reminder every ${formatMinutes(cmd.minutes)}" +
             (cmd.strictness?.let { " · ${it.label}" } ?: "")
+
         is QuickCommand.RemindIn -> "Remind me: “${cmd.title}” in ${formatMinutes(cmd.minutes)}"
+
         is QuickCommand.RemindAt -> "Remind me: “${cmd.title}” ${describeWhen(resolve(cmd))}"
+
         QuickCommand.ShowUpcoming -> "Show what's coming up"
+
         QuickCommand.ShowNotes -> "Show my notes"
+
         QuickCommand.TellTime -> "Tell me the time"
+
         is QuickCommand.Chitchat -> "Chat with Pebble"
+
         is QuickCommand.Unsupported -> "Can't do this yet"
+
         is QuickCommand.OpenPage -> "Open ${cmd.page} in Pebble"
     }
 

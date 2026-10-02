@@ -37,6 +37,10 @@ class GlobalHotkey(private val modifiers: Int, private val virtualKey: Int, priv
     }
 
     companion object {
+        /** True while [virtualKey] is physically held down (hold-to-talk: RegisterHotKey only reports the press). */
+        fun isHeld(virtualKey: Int): Boolean =
+            isWindows && runCatching { (User32.INSTANCE.GetAsyncKeyState(virtualKey).toInt() and 0x8000) != 0 }.getOrDefault(false)
+
         private const val HOTKEY_ID = 0x5EB1
         const val MOD_ALT = 0x0001
         const val MOD_CONTROL = 0x0002
@@ -61,14 +65,24 @@ object Power {
 
     @Suppress("PropertyName")
     @com.sun.jna.Structure.FieldOrder(
-        "ACLineStatus", "BatteryFlag", "BatteryLifePercent", "SystemStatusFlag", "BatteryLifeTime", "BatteryFullLifeTime",
+        "ACLineStatus",
+        "BatteryFlag",
+        "BatteryLifePercent",
+        "SystemStatusFlag",
+        "BatteryLifeTime",
+        "BatteryFullLifeTime",
     )
     class SystemPowerStatus : com.sun.jna.Structure() {
         @JvmField var ACLineStatus: Byte = 0
+
         @JvmField var BatteryFlag: Byte = 0
+
         @JvmField var BatteryLifePercent: Byte = 0
+
         @JvmField var SystemStatusFlag: Byte = 0
+
         @JvmField var BatteryLifeTime: Int = 0
+
         @JvmField var BatteryFullLifeTime: Int = 0
     }
 

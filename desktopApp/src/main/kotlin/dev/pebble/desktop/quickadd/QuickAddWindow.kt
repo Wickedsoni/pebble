@@ -1,5 +1,6 @@
 package dev.pebble.desktop.quickadd
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,20 +37,20 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
-import androidx.compose.foundation.layout.Arrangement
 import dev.pebble.core.brain.CommandRouter
-import dev.pebble.desktop.now
-import dev.pebble.desktop.ui.Chip
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.PetLine
+import dev.pebble.desktop.now
 import dev.pebble.desktop.platform.UserActivity
 import dev.pebble.desktop.platform.WindowsEffects
+import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.FrostedPanel
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.glassColors
+import dev.pebble.desktop.voice.VoiceInput
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 
@@ -92,6 +94,15 @@ fun QuickAddWindow(
         alwaysOnTop = true,
     ) {
         var text by remember { mutableStateOf(retry?.text ?: "") }
+        // What Whisper heard, so an edit before Enter can be told apart from typing (a correction).
+        var heard by remember { mutableStateOf<String?>(null) }
+        val voice = app.voice
+        val voiceState by voice.state.collectAsState()
+        LaunchedEffect(Unit) { voice.reset() }
+        LaunchedEffect(voiceState) {
+            (voiceState as? VoiceInput.State.Heard)?.let { text = it.transcript.text; heard = it.transcript.text; voice.reset() }
+        }
+        DisposableEffect(Unit) { onDispose { voice.cancel() } }
         val focus = remember { FocusRequester() }
         var routed by remember { mutableStateOf<CommandRouter.Routed?>(null) }
         // Route as you type: rules are instant; the model (~7 ms) runs off the UI thread, debounced.
@@ -104,17 +115,28 @@ fun QuickAddWindow(
         }
 
         fun choose(option: CommandRouter.Option) {
+            if (heard != null) app.noteVoiceCorrection(text)
             val ask = routed as? CommandRouter.Routed.Ask
             app.commandFeedback.record(text.trim(), option.action, ask?.understood, now())
             onDone(app.execute(option.command))
         }
 
         fun submit() {
-            when (val r = routed ?: app.router.route(text)) {
+            val r0 = routed ?: app.router.route(text)
+            if (heard != null && r0 !is CommandRouter.Routed.Ask) app.noteVoiceCorrection(text)
+            when (val r = r0) {
                 is CommandRouter.Routed.Run ->
-                    if (r.source == CommandRouter.Source.MODEL) onDone(app.executeFromModel(text, r) { t, a -> onRetry(QuickAddRetry(t, a)) })
-                    else onDone(app.execute(r.command))
-                is CommandRouter.Routed.Ask -> Unit // pick an option instead
+                    if (r.source ==
+                        CommandRouter.Source.MODEL
+                    ) {
+                        onDone(app.executeFromModel(text, r) { t, a -> onRetry(QuickAddRetry(t, a)) })
+                    } else {
+                        onDone(app.execute(r.command))
+                    }
+
+                is CommandRouter.Routed.Ask -> Unit
+
+                // pick an option instead
                 null -> onDone(null)
             }
         }
@@ -142,26 +164,33 @@ fun QuickAddWindow(
                         dev.pebble.desktop.app.Icon(dev.pebble.desktop.app.PebbleIcons.Spark, colors.accent, 24.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.fillMaxWidth()) {
-                            if (text.isEmpty()) Text(
-                                "remind me to call mom at 7pm · remember …",
-                                color = colors.secondary, fontSize = 20.sp,
-                            )
+                            if (text.isEmpty()) {
+                                Text(
+                                    "remind me to call mom at 7pm · remember …",
+                                    color = colors.secondary,
+                                    fontSize = 20.sp,
+                                )
+                            }
                             BasicTextField(
-                                text, { text = it },
+                                text,
+                                { text = it },
                                 singleLine = true,
                                 textStyle = TextStyle(color = colors.content, fontSize = 20.sp),
                                 cursorBrush = SolidColor(colors.accent),
                                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
                                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                     when (e.key) {
-                                        Key.Escape -> { onDone(null); true }
+                                        Key.Escape -> { voice.cancel(); onDone(null); true }
+
                                         Key.Enter, Key.NumPadEnter -> { submit(); true }
+
                                         Key.One, Key.Two, Key.Three -> {
                                             val ask = routed as? CommandRouter.Routed.Ask ?: return@onPreviewKeyEvent false
                                             val i = listOf(Key.One, Key.Two, Key.Three).indexOf(e.key)
                                             ask.options.getOrNull(i)?.let(::choose)
                                             ask.options.getOrNull(i) != null
                                         }
+
                                         else -> false
                                     }
                                 },
@@ -169,12 +198,19 @@ fun QuickAddWindow(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
+                    VoiceBar(voiceState, onMic = { if (voice.isListening) voice.stop() else voice.start() })
                     when (val r = routed) {
                         is CommandRouter.Routed.Run -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(app.describe(r.command) + "   ↵", color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                app.describe(r.command) + "   ↵",
+                                color = colors.accent,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                             Spacer(Modifier.width(10.dp))
                             Text(sourceLabel(r), color = colors.secondary, fontSize = 11.sp)
                         }
+
                         is CommandRouter.Routed.Ask -> Column {
                             Text(r.question, color = colors.content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(8.dp))
@@ -182,10 +218,34 @@ fun QuickAddWindow(
                                 r.options.forEachIndexed { i, o -> Chip("${i + 1}  ${o.label}", false) { choose(o) } }
                             }
                         }
+
                         null -> Text("Type in English, Hindi or Hinglish · Esc to close", color = colors.secondary, fontSize = 13.sp)
                     }
                 }
             }
         }
     }
+}
+
+/** Mic chip + what the voice session is doing; hidden while idle except for the chip. */
+@Composable
+private fun VoiceBar(state: VoiceInput.State, onMic: () -> Unit) {
+    val colors = LocalGlass.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val listening = state is VoiceInput.State.Listening
+        Chip(if (listening) "■  Stop" else "🎤  Speak", listening, onMic)
+        Spacer(Modifier.width(10.dp))
+        val note = when (state) {
+            is VoiceInput.State.Listening -> "Listening " + "▮".repeat(1 + (state.level * 8).toInt()) +
+                "   (release the keys or press Stop)"
+
+            VoiceInput.State.Transcribing -> "Understanding…"
+
+            is VoiceInput.State.Failed -> state.message
+
+            else -> "or hold Ctrl+Alt+Space and talk"
+        }
+        Text(note, color = if (state is VoiceInput.State.Failed) colors.accent else colors.secondary, fontSize = 11.sp)
+    }
+    Spacer(Modifier.height(10.dp))
 }

@@ -52,21 +52,34 @@ fun MemoryPage(app: PebbleApp) {
     LaunchedEffect(Unit) { runCatching { app.brain.learn() } }
     val memories by remember { app.memory.visibleFlow() }.collectAsState(initial = app.memory.visible())
     var mediaOn by remember { mutableStateOf(app.settings.bool(Keys.MEDIA_TRACKING, false)) }
+    var keepVoice by remember { mutableStateOf(app.settings.bool(Keys.KEEP_VOICE_CORRECTIONS, false)) }
+    var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         GlassCard(Modifier.weight(1.6f).fillMaxHeight(), padding = 20.dp) {
             CardLabel("What I remember about you", PebbleIcons.Memory, c.calm)
             GlassField("Tell me something to remember…", Modifier.fillMaxWidth()) { app.remember(it) }
             Spacer(Modifier.height(10.dp))
-            if (memories.isEmpty()) Text("Nothing yet. I learn from how you use me, and you can tell me things here.",
-                color = c.secondary, fontSize = 13.sp, lineHeight = 18.sp)
+            if (memories.isEmpty()) {
+                Text(
+                    "Nothing yet. I learn from how you use me, and you can tell me things here.",
+                    color = c.secondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+            }
             LazyColumn {
                 MemoryKind.entries.forEach { kind ->
                     val group = memories.filter { it.kind == kind }
                     if (group.isNotEmpty()) {
                         item(key = "h-$kind") {
-                            Text(kind.label, color = c.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                            Text(
+                                kind.label,
+                                color = c.secondary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                            )
                         }
                         items(group, key = { it.id }) { MemoryRow(it) { app.forget(it) } }
                     }
@@ -82,15 +95,39 @@ fun MemoryPage(app: PebbleApp) {
                     mediaOn = it
                     app.settings.set(Keys.MEDIA_TRACKING, it.toString())
                 }
-                Text("Reads the title of video apps and sites (YouTube, Netflix, Prime Video, VLC…) once a minute. Off by default.",
-                    color = c.secondary, fontSize = 12.sp, lineHeight = 16.sp)
+                Text(
+                    "Reads the title of video apps and sites (YouTube, Netflix, Prime Video, VLC…) once a minute. Off by default.",
+                    color = c.secondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
                 Spacer(Modifier.height(8.dp))
                 Chip("Clear watch history", false) { app.memory.clearMedia(); runCatching { app.brain.learn() } }
+                Spacer(Modifier.height(12.dp))
+                SettingRow("Keep voice clips I correct", keepVoice) {
+                    keepVoice = it
+                    app.settings.set(Keys.KEEP_VOICE_CORRECTIONS, it.toString())
+                }
+                Text(
+                    "When you fix what I heard, I keep that clip and your words, to understand your voice better. " +
+                        "Off by default; the mic is only on while you hold the talk key.",
+                    color = c.secondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                if (voiceClips > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Chip("Delete $voiceClips voice clips", false) { app.clearVoiceSamples(); voiceClips = 0 }
+                }
             }
             GlassCard(Modifier.fillMaxWidth().weight(1f)) {
                 CardLabel("AI assistants", PebbleIcons.Spark, c.accent)
-                Text("Coming later: connect Claude Code, Codex or Gemini so I can remember what you worked on together.",
-                    color = c.secondary, fontSize = 13.sp, lineHeight = 18.sp)
+                Text(
+                    "Coming later: connect Claude Code, Codex or Gemini so I can remember what you worked on together.",
+                    color = c.secondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
             }
         }
     }
