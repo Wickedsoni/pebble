@@ -32,6 +32,9 @@ SELECT last_insert_rowid();
 updateNote:
 UPDATE note SET text = ?, updated_at = ? WHERE id = ?;
 
+deleteNote:
+DELETE FROM note WHERE id = ?;
+
 archiveNote:
 UPDATE note SET archived = 1, updated_at = ? WHERE id = ?;
 

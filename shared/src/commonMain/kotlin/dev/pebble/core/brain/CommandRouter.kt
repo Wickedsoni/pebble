@@ -21,7 +21,13 @@ class CommandRouter(
     enum class Source { RULES, MODEL, FALLBACK }
 
     sealed interface Routed {
-        data class Run(val command: QuickCommand, val source: Source, val understood: Understood? = null) : Routed
+        /** [action]: the Pebble action the model chose (MODEL source only), so a "Not what I meant" can name it. */
+        data class Run(
+            val command: QuickCommand,
+            val source: Source,
+            val understood: Understood? = null,
+            val action: String? = null,
+        ) : Routed
 
         /** Not sure enough to act: show [question] with [options]; the chosen one is recorded as feedback. */
         data class Ask(val question: String, val options: List<Option>, val understood: Understood?) : Routed
@@ -42,13 +48,25 @@ class CommandRouter(
         return when (val d = policy.decide(understood)) {
             is DecisionPolicy.Decision.Act -> {
                 val cmd = toCommand(d.guess.action, understood, text, d.guess.bestIntent)
-                if (cmd != null) Routed.Run(cmd, Source.MODEL, understood) else askWhen(text, understood)
+                if (cmd != null) Routed.Run(cmd, Source.MODEL, understood, d.guess.action) else askWhen(text, understood)
             }
             DecisionPolicy.Decision.Ask -> didYouMean(text, understood)
         }
     }
 
     // Null for a reminder whose time we couldn't read.
+    /**
+     * Always asks: the choices for [input] without [exclude] — used after "Not what I meant", where
+     * [exclude] is what Pebble wrongly did. Saving as a note is always offered (unless excluded).
+     */
+    fun ask(input: String, exclude: String? = null): Routed.Ask {
+        val text = input.trim()
+        val u = model()?.understand(text)
+        val options = (if (u != null) didYouMean(text, u, limit = 4).options else emptyList()).filter { it.action != exclude }.toMutableList()
+        if (exclude != A.ADD_NOTE && options.none { it.action == A.ADD_NOTE }) options += Option(labelFor(A.ADD_NOTE), A.ADD_NOTE, QuickCommand.AddNote(text))
+        return Routed.Ask("What did you mean?", options.take(3), u)
+    }
+
     /** Model action → concrete command. [intent] is the finer label behind it (alarm_set, general_joke…). */
     private fun toCommand(action: String, u: Understood, text: String, intent: String): QuickCommand? = when (action) {
         A.REMIND -> reminder(u, text, intent)
@@ -128,14 +146,14 @@ class CommandRouter(
         )
     }
 
-    private fun didYouMean(text: String, u: Understood): Routed.Ask {
+    private fun didYouMean(text: String, u: Understood, limit: Int = 3): Routed.Ask {
         // Ranked by summed action probability; skip near-zero actions so options stay meaningful.
         val options = u.actions.filter { it.action != A.OTHER && it.confidence >= 0.05f }.mapNotNull { g ->
             val cmd = toCommand(g.action, u, text, g.bestIntent) ?: return@mapNotNull null
             Option(labelFor(g.action), g.action, cmd)
         }.toMutableList()
         if (options.none { it.action == A.ADD_NOTE }) options += Option(labelFor(A.ADD_NOTE), A.ADD_NOTE, QuickCommand.AddNote(text))
-        return Routed.Ask("Did you mean…", options.take(3), u)
+        return Routed.Ask("Did you mean…", options.take(limit), u)
     }
 
     companion object {

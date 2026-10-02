@@ -1,0 +1,6 @@
+-- Phase M1 learning loop: what happened to each command the model handled.
+--   picked     you chose this action from "Did you mean…?" (strongest label)
+--   confirmed  Pebble acted on the model's guess and you didn't object
+--   wrong      you tapped "Not what I meant" — chosen_action is what Pebble wrongly did
+
+ALTER TABLE command_feedback ADD COLUMN outcome TEXT NOT NULL DEFAULT 'picked';

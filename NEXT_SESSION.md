@@ -33,7 +33,7 @@ To resume: open this repo and say "continue from NEXT_SESSION.md".
   Replies mirror the script you typed in; low mood gets a caring reply.
   Weekdays in all three scripts ("friday", "shukravar", "शुक्रवार", "agle somvar", "next tuesday"); a day with no
   time ("friday wali meeting") offers times on that day. "sat"/"sun" are deliberately not weekdays (seven / listen).
-- **Tests:** 46/46 pass (`./gradlew :shared:jvmTest :desktopApp:test`).
+- **Tests:** 57 Kotlin + 2 Python (`uv run python -m unittest tests/test_feedback.py`) pass (`./gradlew :shared:jvmTest :desktopApp:test`).
 
 ### Rebuild the model from scratch (artifacts are gitignored)
 ```powershell
@@ -45,6 +45,23 @@ python -m uv run python -m pebble_brain.prune_vocab models/intent-v1 models/inte
 python -m uv run python -m pebble_brain.export_onnx models/intent-v1-pruned   # also writes parity.json
 ```
 Then refresh `models/manifest.json` (path + checksum). Tests and the installer use whatever the manifest names.
+
+### Decisions and learning loop (from the Jev / RLCD discussion)
+- **Not using Jev** (TypeSafe's cloud decision model): cloud-only, 70–500 ms, Hindi undocumented, breaks
+  "everything stays on your laptop". "RLCD" has no paper; its useful idea (calibration) is done locally.
+- **Calibration** (`brain/.../calibrate.py`, runs inside `export_onnx`): temperature T on the int8 model,
+  fitted where Pebble decides — intent probabilities summed per action, unsupported intents kept apart.
+  Action ECE 0.025 → 0.011. T is stored in `labels.json`; Kotlin applies it.
+- **DecisionPolicy** (`shared/.../brain/DecisionPolicy.kt`): per-action bars by cost of a mistake (removals 0.9,
+  remind 0.7, notes/queries 0.6, chitchat 0.5) + 0.15 margin. Eval v1 router: 64 right / 65 incl. first choice,
+  2 acted wrongly (gates in `EvalSetRouterTest`).
+- **Learning loop:** after a model-chosen action, the pet bubble shows **"Not what I meant"** → undoes the
+  note/reminder, labels it `wrong`, reopens Quick Add with the other choices (your pick = `picked`). Untouched
+  model actions are `confirmed`. DB migration 4.sqm adds `command_feedback.outcome`.
+  `python -m pebble_brain.feedback` summarises; `train_intent --feedback auto` trains on picked (3×) and
+  confirmed (1×), slot loss skipped, eval look-alikes dropped. Retrain stays manual + gated.
+- **Still planned:** Phase C mood head on the shared encoder; Phase D contextual bandit for nudge timing
+  (reward = ReminderActed done / snoozed / skipped). Plan: `C:\Users\Avik\.claude\plans\there-is-this-new-logical-castle.md`.
 
 ## Known weak spots
 - Hindi chit-chat ("tum bahut cute ho") and some short Hinglish lines still trigger "Did you mean".

@@ -60,9 +60,22 @@ private fun sourceLabel(r: CommandRouter.Routed.Run): String = when (r.source) {
     CommandRouter.Source.FALLBACK -> "brain not loaded — saving as note"
 }
 
-/** Spotlight-style bar: type naturally, see what it will do, press Enter. Closes on Esc or focus loss. */
+/** After "Not what I meant": reopen with [text] and ask, leaving out [wrongAction]. */
+data class QuickAddRetry(val text: String, val wrongAction: String)
+
+/**
+ * Spotlight-style bar: type naturally, see what it will do, press Enter. Closes on Esc or focus loss.
+ * [retry] reopens it on a sentence Pebble got wrong, straight into the choices.
+ */
 @Composable
-fun QuickAddWindow(app: PebbleApp, visible: Boolean, dark: Boolean, onDone: (PetLine?) -> Unit) {
+fun QuickAddWindow(
+    app: PebbleApp,
+    visible: Boolean,
+    dark: Boolean,
+    retry: QuickAddRetry? = null,
+    onRetry: (QuickAddRetry) -> Unit = {},
+    onDone: (PetLine?) -> Unit,
+) {
     if (!visible) return
     val area = remember { UserActivity.workArea() }
     val state = rememberDialogState(
@@ -78,14 +91,16 @@ fun QuickAddWindow(app: PebbleApp, visible: Boolean, dark: Boolean, onDone: (Pet
         resizable = false,
         alwaysOnTop = true,
     ) {
-        var text by remember { mutableStateOf("") }
+        var text by remember { mutableStateOf(retry?.text ?: "") }
         val focus = remember { FocusRequester() }
         var routed by remember { mutableStateOf<CommandRouter.Routed?>(null) }
         // Route as you type: rules are instant; the model (~7 ms) runs off the UI thread, debounced.
         LaunchedEffect(text) {
             if (text.isBlank()) { routed = null; return@LaunchedEffect }
             delay(120)
-            routed = withContext(Dispatchers.Default) { app.router.route(text) }
+            routed = withContext(Dispatchers.Default) {
+                if (retry != null && text == retry.text) app.router.ask(text, exclude = retry.wrongAction) else app.router.route(text)
+            }
         }
 
         fun choose(option: CommandRouter.Option) {
@@ -96,7 +111,9 @@ fun QuickAddWindow(app: PebbleApp, visible: Boolean, dark: Boolean, onDone: (Pet
 
         fun submit() {
             when (val r = routed ?: app.router.route(text)) {
-                is CommandRouter.Routed.Run -> onDone(app.execute(r.command))
+                is CommandRouter.Routed.Run ->
+                    if (r.source == CommandRouter.Source.MODEL) onDone(app.executeFromModel(text, r) { t, a -> onRetry(QuickAddRetry(t, a)) })
+                    else onDone(app.execute(r.command))
                 is CommandRouter.Routed.Ask -> Unit // pick an option instead
                 null -> onDone(null)
             }

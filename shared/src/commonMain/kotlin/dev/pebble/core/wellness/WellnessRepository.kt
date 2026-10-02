@@ -41,6 +41,9 @@ class NoteRepository(private val db: PebbleDatabase) {
 
     fun archive(id: Long, at: Long) = q.archiveNote(at, id)
 
+    /** Removes a note outright (used to undo a note Pebble created by mistake). */
+    fun delete(id: Long) = q.deleteNote(id)
+
     fun recent(limit: Long = 5): List<Note> =
         q.activeNotes(limit).executeAsList().map { Note(it.id, it.text, it.updated_at) }
 

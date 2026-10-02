@@ -1,5 +1,7 @@
 package dev.pebble.desktop
 
+import dev.pebble.core.brain.CommandFeedbackRepository
+import dev.pebble.core.brain.CommandRouter
 import dev.pebble.core.db.DatabaseFactory
 import dev.pebble.core.event.EventBus
 import dev.pebble.core.event.EventLogger
@@ -34,7 +36,12 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Something the pet should say out loud (in its speech bubble), with the face to make. */
-data class PetLine(val text: String, val mood: Mood = Mood.HAPPY, val durationMillis: Long = 4_000)
+data class PetLine(
+    val text: String,
+    val mood: Mood = Mood.HAPPY,
+    val durationMillis: Long = 4_000,
+    val actions: List<dev.pebble.desktop.pet.BubbleAction> = emptyList(),
+)
 
 /** App-wide object graph. Created once in `main`, shared by every window. Lives on the Swing thread. */
 class PebbleApp(db: PebbleDatabase) {
@@ -133,12 +140,35 @@ class PebbleApp(db: PebbleDatabase) {
 
     fun addNote(text: String): Long = notes.add(text, now()).also { bus.publish(PebbleEvent.NoteCreated(it, now())) }
 
+    /** How to take back what the last [execute] created (a note or reminder); null if nothing to undo. */
+    private var lastUndo: (() -> Unit)? = null
+
+    /**
+     * Runs a command the model chose, with a way out: Pebble's reply gets a "Not what I meant" button
+     * that undoes it, labels it wrong for the next model, and calls [retry] with the text and the wrong
+     * action so Quick Add can ask what you did mean. Unchallenged, it stays a "confirmed" label.
+     */
+    fun executeFromModel(text: String, run: CommandRouter.Routed.Run, retry: (text: String, wrongAction: String) -> Unit): PetLine {
+        val line = execute(run.command)
+        val action = run.action ?: return line
+        val undo = lastUndo
+        val id = commandFeedback.record(text.trim(), action, run.understood, now(), CommandFeedbackRepository.CONFIRMED)
+        val notWhatIMeant = dev.pebble.desktop.pet.BubbleAction("Not what I meant") {
+            undo?.invoke()
+            commandFeedback.markWrong(id)
+            retry(text, action)
+        }
+        return line.copy(durationMillis = maxOf(line.durationMillis, 8_000), actions = listOf(notWhatIMeant))
+    }
+
     /** Runs a quick-add command and returns what the pet should say about it. */
     fun execute(cmd: QuickCommand): PetLine {
         bus.publish(PebbleEvent.QuickAddUsed(cmd::class.simpleName ?: "?", now()))
+        lastUndo = null
         return when (cmd) {
             is QuickCommand.AddNote -> {
-                addNote(cmd.text)
+                val id = addNote(cmd.text)
+                lastUndo = { notes.delete(id) }
                 PetLine("Saved to your notes.")
             }
             is QuickCommand.RememberFact -> {
@@ -158,12 +188,14 @@ class PebbleApp(db: PebbleDatabase) {
             }
             is QuickCommand.RemindIn -> {
                 val at = now() + cmd.minutes * 60_000L
-                reminders.addOneOff(cmd.title, at)
+                val id = reminders.addOneOff(cmd.title, at)
+                lastUndo = { reminders.deleteOneOff(id); engine.tick() }
                 PetLine("I'll remind you in ${formatMinutes(cmd.minutes)}.")
             }
             is QuickCommand.RemindAt -> {
                 val at = resolve(cmd)
-                reminders.addOneOff(cmd.title, at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+                val id = reminders.addOneOff(cmd.title, at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+                lastUndo = { reminders.deleteOneOff(id); engine.tick() }
                 PetLine("I'll remind you ${describeWhen(at)}.")
             }
             QuickCommand.ShowUpcoming -> {

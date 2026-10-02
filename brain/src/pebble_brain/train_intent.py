@@ -37,7 +37,8 @@ def make_targets(batch, firsts, labels: Labels, seq_len: int):
     tags = torch.full((len(batch), seq_len), -100)  # -100 = ignored by the loss (sub-pieces, padding, prefix)
     for i, e in enumerate(batch):
         for w, pos in enumerate(firsts[i]):
-            tags[i, pos] = labels.tags.index(e.tags[w])
+            if e.tags[w]:  # "" = slot unknown (feedback examples): leave it out of the slot loss
+                tags[i, pos] = labels.tags.index(e.tags[w])
     return intents, tags
 
 
@@ -50,6 +51,8 @@ def main() -> None:
     ap.add_argument("--no-pebble", action="store_true", help="MASSIVE only (the v0 recipe)")
     ap.add_argument("--pebble-repeat", type=int, default=3, help="times each Pebble template sentence is seen per epoch")
     ap.add_argument("--chat", type=float, default=0.3, help="share of Roman-Hindi MASSIVE words given chat spelling")
+    ap.add_argument("--feedback", default=None,
+                    help="'auto' (= %%APPDATA%%\Pebble\pebble.db) or a path: train on your in-app labels too")
     args = ap.parse_args()
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -71,6 +74,11 @@ def main() -> None:
         pebble_dev = [e for e in pebble if e.partition == "dev"]
         unknown = {t for e in pebble for t in e.tags} - set(labels.tags)
         assert not unknown, f"Pebble data uses tags MASSIVE doesn't have: {unknown}"
+    if args.feedback:
+        from .feedback import from_db
+        fb, report = from_db(None if args.feedback == "auto" else pathlib.Path(args.feedback))
+        print(f"feedback: {report}")
+        train += fb
     print(f"train {len(train)}  dev {len(dev)}  intents {len(labels.intents)}  tags {len(labels.tags)}  on {device}")
 
     tokenizer = AutoTokenizer.from_pretrained(BASE)

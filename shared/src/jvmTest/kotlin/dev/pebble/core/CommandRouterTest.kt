@@ -154,4 +154,26 @@ class CommandRouterTest {
         val next = CommandRouter({ null }, today = { 3 }).route("dentist next wednesday at 10am") as Routed.Run
         assertEquals(QuickCommand.RemindAt("Dentist", 10, 0, 7), next.command)
     }
+
+    @Test
+    fun askAfterNotWhatIMeantLeavesOutTheWrongAction() {
+        val text = "ek note bana lo project ka topic"
+        val reading = u(text, List(7) { "O" }, "lists_createoradd" to 0.8f, "calendar_set" to 0.15f, "general_quirky" to 0.05f)
+        val r = CommandRouter({ model(text to reading) }).ask(text, exclude = "add_note")
+        assertEquals(listOf("chitchat"), r.options.map { it.action }.filter { it == "add_note" || it == "chitchat" })
+        assertTrue(r.options.none { it.action == "add_note" })
+        // "remind" has no time in the sentence, so it can't be offered as a ready command; chitchat can.
+        assertTrue(r.options.isNotEmpty())
+        // No model: only "save as note" is left to offer.
+        assertEquals(listOf("add_note"), CommandRouter({ null }).ask(text, exclude = "chitchat").options.map { it.action })
+    }
+
+    @Test
+    fun feedbackOutcomes() {
+        val repo = CommandFeedbackRepository(DatabaseFactory.inMemory())
+        val id = repo.record("x", "add_note", null, at = 1, outcome = CommandFeedbackRepository.CONFIRMED)
+        repo.record("y", "remind", null, at = 2)
+        repo.markWrong(id)
+        assertEquals(listOf("wrong", "picked"), repo.all().map { it.outcome })
+    }
 }

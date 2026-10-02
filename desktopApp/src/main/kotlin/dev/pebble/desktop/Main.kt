@@ -45,6 +45,7 @@ fun main(args: Array<String>) {
         var petVisible by remember { mutableStateOf(app.layouts.get(PET)?.visible ?: true) }
         var autostart by remember { mutableStateOf(Autostart.isEnabled()) }
         var quickAddOpen by remember { mutableStateOf(false) }
+        var quickAddRetry by remember { mutableStateOf<dev.pebble.desktop.quickadd.QuickAddRetry?>(null) }
         var appOpen by remember { mutableStateOf(!startInBackground) }
         var page by remember { mutableStateOf(Page.TODAY) }
 
@@ -112,8 +113,12 @@ fun main(args: Array<String>) {
             onClose = { appOpen = false },
         )
 
-        QuickAddWindow(app, quickAddOpen, dark) { line ->
+        QuickAddWindow(
+            app, quickAddOpen, dark, quickAddRetry,
+            onRetry = { quickAddRetry = it; quickAddOpen = true },
+        ) { line ->
             quickAddOpen = false
+            quickAddRetry = null
             line?.let(pet::react)
         }
     }

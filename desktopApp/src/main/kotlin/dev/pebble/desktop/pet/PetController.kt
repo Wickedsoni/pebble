@@ -151,7 +151,9 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     fun react(line: PetLine) {
         transient = line
         transientUntil = now() + line.durationMillis
-        if (line.text.isNotEmpty()) speech = Speech(line.text, untilMillis = transientUntil)
+        // Buttons close the bubble when clicked, like the reminder buttons do.
+        val actions = line.actions.map { a -> BubbleAction(a.label) { speech = null; a.onClick() } }
+        if (line.text.isNotEmpty()) speech = Speech(line.text, actions, untilMillis = transientUntil)
         if (behaviour == Behaviour.SLEEPING) behaviour = Behaviour.IDLE
     }
 

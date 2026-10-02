@@ -37,6 +37,12 @@ SELECT * FROM one_off_reminder WHERE done_at IS NULL ORDER BY due_at;
 insertOneOff:
 INSERT INTO one_off_reminder(title, due_at, strictness) VALUES (?, ?, ?);
 
+lastOneOffId:
+SELECT last_insert_rowid();
+
+deleteOneOff:
+DELETE FROM one_off_reminder WHERE id = ?;
+
 markOneOffDone:
 UPDATE one_off_reminder SET done_at = ? WHERE id = ?;
 

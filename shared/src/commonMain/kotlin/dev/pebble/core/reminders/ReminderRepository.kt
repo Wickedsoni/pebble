@@ -36,8 +36,14 @@ class ReminderRepository(private val db: PebbleDatabase) {
         OneOffReminder(it.id, it.title, it.due_at, Strictness.parse(it.strictness))
     }
 
-    fun addOneOff(title: String, dueAt: Long, strictness: Strictness = Strictness.NORMAL) =
+    /** Returns the new reminder's id. */
+    fun addOneOff(title: String, dueAt: Long, strictness: Strictness = Strictness.NORMAL): Long = db.transactionWithResult {
         q.insertOneOff(title, dueAt, strictness.name)
+        q.lastOneOffId().executeAsOne()
+    }
+
+    /** Removes a reminder outright (used to undo one Pebble created by mistake). */
+    fun deleteOneOff(id: Long) = q.deleteOneOff(id)
 
     fun markOneOffDone(id: Long, at: Long) = q.markOneOffDone(at, id)
 
