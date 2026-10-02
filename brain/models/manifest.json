@@ -56,6 +56,11 @@
           "acted_wrongly": 2,
           "of": 68
         }
+      },
+      "download": {
+        "url": "https://github.com/Wickedsoni/pebble/releases/download/models-2026.10/intent-v2-pruned.zip",
+        "sha256": "1417c04a96a377f85606e80088285f616721f0a38e9c3fe8519744bc81ce42b2",
+        "bytes": 27130073
       }
     },
     {
@@ -137,6 +142,11 @@
           }
         },
         "denoiser": "none (GTCRN raised WER in every condition)"
+      },
+      "download": {
+        "url": "https://github.com/Wickedsoni/pebble/releases/download/models-2026.10/asr-voice.zip",
+        "sha256": "efd1a93f90e60d977b4c7888bf0f6114de3d065a8007faf6a7c56356ee13ea18",
+        "bytes": 173494913
       }
     }
   ]
