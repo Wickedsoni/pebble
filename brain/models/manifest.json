@@ -19,8 +19,8 @@
         },
         "labels": {
           "path": "intent-v1-pruned/labels.json",
-          "bytes": 3495,
-          "sha256": "0b6f576123b63bc60cf846839430e803602cefe944427d93a47a34fa55636302"
+          "bytes": 3520,
+          "sha256": "7ec0a4720ef38e0d59b07e48a1e6dd70500e19406425405b6570d893b9e16749"
         }
       },
       "metrics": {
@@ -53,6 +53,12 @@
           "right_or_first_choice": 61,
           "of": 68
         }
+      },
+      "calibration": {
+        "temperature": 1.0854,
+        "level": "pebble action (summed intent probs; unsupported intents kept separate)",
+        "ece_before": 0.0251,
+        "ece_after": 0.0109
       }
     }
   ]

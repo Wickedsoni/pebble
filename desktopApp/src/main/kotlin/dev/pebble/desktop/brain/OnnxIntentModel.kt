@@ -30,6 +30,8 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
     private val session: OrtSession
     private val intents: List<String>
     private val tags: List<String>
+    /** Calibration temperature from labels.json (brain/calibrate.py); 1.0 for uncalibrated models. */
+    private val temperature: Float
 
     init {
         System.setProperty("offline", "true") // DJL: never try to download a native library
@@ -40,6 +42,7 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
         val labels = Json.parseToJsonElement(Files.readString(dir.resolve("labels.json"))).jsonObject
         intents = labels.getValue("intents").jsonArray.map { it.jsonPrimitive.content }
         tags = labels.getValue("tags").jsonArray.map { it.jsonPrimitive.content }
+        temperature = labels["temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(threads)
             setInterOpNumThreads(1)
@@ -64,8 +67,9 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
                     val intentLogits = (out[0].value as Array<FloatArray>)[0]
                     @Suppress("UNCHECKED_CAST")
                     val slotLogits = (out[1].value as Array<Array<FloatArray>>)[0]
-                    val probs = softmax(intentLogits)
-                    val guesses = probs.indices.sortedByDescending { probs[it] }.take(3).map { IntentGuess(intents[it], probs[it]) }
+                    val probs = softmax(FloatArray(intentLogits.size) { intentLogits[it] / temperature })
+                    // All intents, so probabilities can be summed per Pebble action (Understood.actions).
+                    val guesses = probs.indices.sortedByDescending { probs[it] }.map { IntentGuess(intents[it], probs[it]) }
                     // First sub-token of each real word (word id 0 is the "query:" prefix).
                     val firstPiece = IntArray(words.size) { -1 }
                     enc.wordIds.forEachIndexed { pos, wid ->

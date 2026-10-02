@@ -3,9 +3,12 @@ package dev.pebble.core.brain
 /** One intent the model considered, with its probability. */
 data class IntentGuess(val intent: String, val confidence: Float)
 
+/** A Pebble action with the summed probability of every intent that maps to it, plus its best intent. */
+data class ActionGuess(val action: String, val confidence: Float, val bestIntent: String)
+
 /**
- * What the command model made of a line of text: ranked intent guesses plus a slot tag per word
- * (BIO tags such as `B-time`, `I-date`, `O`), aligned with [words].
+ * What the command model made of a line of text: ranked intent guesses (all of them, calibrated)
+ * plus a slot tag per word (BIO tags such as `B-time`, `I-date`, `O`), aligned with [words].
  */
 data class Understood(
     val words: List<String>,
@@ -13,6 +16,21 @@ data class Understood(
     val tags: List<String>,
 ) {
     val top: IntentGuess get() = guesses.first()
+
+    /**
+     * Pebble actions ranked by summed probability: alarm_set + calendar_set both count for "remind".
+     * This is what decisions use — the top intent alone understates how sure the model is of the action.
+     * "other" is not one action but many unrelated ones (music, weather, news…), so those intents are
+     * never summed: each stays its own guess, or 47 small leftovers would add up to false confidence.
+     */
+    val actions: List<ActionGuess> by lazy {
+        guesses.groupBy { PebbleActions.fromMassive(it.intent).let { a -> if (a == PebbleActions.OTHER) "other:${it.intent}" else a } }
+            .map { (_, gs) ->
+                val best = gs.maxBy { it.confidence }
+                ActionGuess(PebbleActions.fromMassive(best.intent), gs.sumOf { it.confidence.toDouble() }.toFloat(), best.intent)
+            }
+            .sortedByDescending { it.confidence }
+    }
 
     /** Slot name → its words joined, e.g. `time` → "5 baje", `date` → "kal". First span wins. */
     fun slots(): Map<String, String> {

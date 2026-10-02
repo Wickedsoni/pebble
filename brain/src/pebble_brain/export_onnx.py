@@ -68,6 +68,10 @@ def export(ckpt: pathlib.Path) -> None:
         agree += pred.labels.intents[int(il[0].argmax())] == want
     print(f"int8 agrees with PyTorch on {agree}/{len(rows)} Pebble commands")
 
+    # Calibrate the int8 model (writes "temperature" into labels.json); parity below uses the same T.
+    from .calibrate import calibrate
+    temperature = calibrate(ckpt)["temperature"]
+
     # parity.json: what the int8 model says for every eval sentence, so Kotlin can prove it reads
     # commands identically (OnnxParityTest): token ids, intent, confidence, slot tags.
     parity = []
@@ -80,7 +84,8 @@ def export(ckpt: pathlib.Path) -> None:
             e, firsts = encode_words(pred.tokenizer, [words])
             il, sl = sess.run(None, {"input_ids": e["input_ids"].numpy().astype(np.int64),
                                      "attention_mask": e["attention_mask"].numpy().astype(np.int64)})
-            probs = np.exp(il[0] - il[0].max()); probs /= probs.sum()
+            z = il[0] / temperature
+            probs = np.exp(z - z.max()); probs /= probs.sum()
             k = int(probs.argmax())
             parity.append({"text": " ".join(words), "input_ids": e["input_ids"][0].tolist(), "intent": pred.labels.intents[k],
                            "p": float(probs[k]), "tags": [pred.labels.tags[int(sl[0, i].argmax())] for i in firsts[0]]})

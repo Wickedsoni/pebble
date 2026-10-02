@@ -14,7 +14,7 @@ import dev.pebble.core.quickadd.QuickCommand
  */
 class CommandRouter(
     private val model: () -> Understanding?,
-    private val confident: Float = 0.6f,
+    private val policy: DecisionPolicy = DecisionPolicy(),
     /** Today's ISO weekday (1 = Monday … 7 = Sunday), so "friday wali meeting" gets a date. */
     private val today: () -> Int? = { null },
 ) {
@@ -39,28 +39,30 @@ class CommandRouter(
         val understood = model()?.understand(text)
             ?: return Routed.Run(QuickCommand.AddNote(text), Source.FALLBACK)
 
-        val action = A.fromMassive(understood.top.intent)
-        if (understood.top.confidence >= confident) {
-            val cmd = toCommand(action, understood, text)
-            return if (cmd != null) Routed.Run(cmd, Source.MODEL, understood) else askWhen(text, understood)
+        return when (val d = policy.decide(understood)) {
+            is DecisionPolicy.Decision.Act -> {
+                val cmd = toCommand(d.guess.action, understood, text, d.guess.bestIntent)
+                if (cmd != null) Routed.Run(cmd, Source.MODEL, understood) else askWhen(text, understood)
+            }
+            DecisionPolicy.Decision.Ask -> didYouMean(text, understood)
         }
-        return didYouMean(text, understood)
     }
 
-    /** Model action → concrete command. Null for a reminder whose time we couldn't read. */
-    private fun toCommand(action: String, u: Understood, text: String): QuickCommand? = when (action) {
-        A.REMIND -> reminder(u, text)
+    // Null for a reminder whose time we couldn't read.
+    /** Model action → concrete command. [intent] is the finer label behind it (alarm_set, general_joke…). */
+    private fun toCommand(action: String, u: Understood, text: String, intent: String): QuickCommand? = when (action) {
+        A.REMIND -> reminder(u, text, intent)
         A.ADD_NOTE -> QuickCommand.AddNote(text)
         A.REMINDERS_QUERY -> QuickCommand.ShowUpcoming
         A.NOTES_QUERY -> QuickCommand.ShowNotes
         A.TIME_QUERY -> QuickCommand.TellTime
-        A.CHITCHAT -> QuickCommand.Chitchat(text, u.top.intent)
+        A.CHITCHAT -> QuickCommand.Chitchat(text, intent)
         A.REMINDER_REMOVE -> QuickCommand.OpenPage("reminders")
         A.NOTE_REMOVE -> QuickCommand.OpenPage("notes")
-        else -> QuickCommand.Unsupported(text, u.top.intent)
+        else -> QuickCommand.Unsupported(text, intent)
     }
 
-    private fun reminder(u: Understood, text: String): QuickCommand? {
+    private fun reminder(u: Understood, text: String, intent: String): QuickCommand? {
         val slots = u.slots()
         val slotText = listOfNotNull(slots["date"], slots["timeofday"], slots["time"]).joinToString(" ")
         // The model sometimes tags only "shaam"/"kal" as the time. If the slot has no clock number,
@@ -68,7 +70,7 @@ class CommandRouter(
         val timeText = if (slotText.isNotBlank() && HinglishTime.hasClock(slotText)) slotText
         else if (HinglishTime.hasClock(text)) text
         else slotText.ifBlank { text }
-        val title = reminderTitle(u, text)
+        val title = reminderTitle(u, text, intent)
         val weekday = today()
         return when (val w = HinglishTime.parse(timeText, weekday)) {
             // The day may sit outside the time slot ("friday wali meeting 5 baje"), so look in the whole sentence too.
@@ -84,7 +86,7 @@ class CommandRouter(
      * The reminder text: every word except time/date words and reminder filler, so slot words like
      * the person ("mummy") stay in. Never the whole sentence: if nothing is left, a plain label.
      */
-    private fun reminderTitle(u: Understood, text: String): String {
+    private fun reminderTitle(u: Understood, text: String, intent: String = u.top.intent): String {
         val timeTags = setOf("time", "date", "timeofday")
         val kept = u.words.zip(u.tags).filter { (w, t) ->
             val kind = t.removePrefix("B-").removePrefix("I-")
@@ -93,7 +95,7 @@ class CommandRouter(
                 HinglishTime.numberOf(w.lowercase()) == null
         }.map { it.first }
         val title = kept.joinToString(" ").trim()
-        return title.ifBlank { if (u.top.intent == "alarm_set") "Wake up" else "Reminder" }.replaceFirstChar(Char::uppercase)
+        return title.ifBlank { if (intent == "alarm_set") "Wake up" else "Reminder" }.replaceFirstChar(Char::uppercase)
     }
 
     private fun askWhen(text: String, u: Understood): Routed.Ask {
@@ -127,12 +129,10 @@ class CommandRouter(
     }
 
     private fun didYouMean(text: String, u: Understood): Routed.Ask {
-        val seen = mutableSetOf<String>()
-        val options = u.guesses.mapNotNull { g ->
-            val action = A.fromMassive(g.intent)
-            if (!seen.add(action) || action == A.OTHER) return@mapNotNull null
-            val cmd = toCommand(action, u.copy(guesses = listOf(g)), text) ?: return@mapNotNull null
-            Option(labelFor(action), action, cmd)
+        // Ranked by summed action probability; skip near-zero actions so options stay meaningful.
+        val options = u.actions.filter { it.action != A.OTHER && it.confidence >= 0.05f }.mapNotNull { g ->
+            val cmd = toCommand(g.action, u, text, g.bestIntent) ?: return@mapNotNull null
+            Option(labelFor(g.action), g.action, cmd)
         }.toMutableList()
         if (options.none { it.action == A.ADD_NOTE }) options += Option(labelFor(A.ADD_NOTE), A.ADD_NOTE, QuickCommand.AddNote(text))
         return Routed.Ask("Did you mean…", options.take(3), u)

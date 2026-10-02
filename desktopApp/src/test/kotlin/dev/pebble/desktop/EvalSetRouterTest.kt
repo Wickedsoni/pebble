@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * then "Did you mean". The Python evaluator scores the model alone; this one is what you'd see.
  *  - right: acted straight away with the right action
  *  - asked: asked "Did you mean…" / "When…" with the right action as the first choice
- *  - wrong: anything else
+ *  - wrong: anything else; "acted wrongly" (did the wrong thing without asking) is the worst kind
  */
 class EvalSetRouterTest {
     private val brain: Path = ShippedModel.brain
@@ -48,6 +48,7 @@ class EvalSetRouterTest {
             val rows = Files.readAllLines(brain.resolve("eval/pebble_commands_v1.jsonl")).filter { it.isNotBlank() }
                 .map { Json.parseToJsonElement(it).jsonObject }
             val score = linkedMapOf<String, IntArray>() // script → [right, asked, wrong]
+            var actedWrongly = 0
             for (row in rows) {
                 val text = row.getValue("text").jsonPrimitive.content
                 val want = row.getValue("action").jsonPrimitive.content
@@ -58,6 +59,7 @@ class EvalSetRouterTest {
                     null -> 2 to "null"
                 }
                 score.getOrPut(script) { IntArray(3) }[verdict]++
+                if (verdict == 2 && !got.startsWith("ASK")) actedWrongly++
                 if (verdict != 0) println("  ${if (verdict == 1) "?" else "x"} ${text.take(50).padEnd(50)} want $want, got $got")
             }
             var right = 0; var asked = 0; var n = 0
@@ -65,14 +67,17 @@ class EvalSetRouterTest {
                 println("$script: ${s[0]} right, ${s[1]} asked, ${s[2]} wrong (of ${s.sum()})")
                 right += s[0]; asked += s[1]; n += s.sum()
             }
-            println("TOTAL: $right/$n right, ${right + asked}/$n right or right-first-choice")
+            println("TOTAL: $right/$n right, ${right + asked}/$n right or right-first-choice, $actedWrongly acted wrongly")
             // The gate: a new model must not drop below the baseline it replaces.
             assertTrue(right + asked >= BASELINE_RIGHT_OR_ASKED, "router v1 score fell below baseline")
+            assertTrue(actedWrongly <= MAX_ACTED_WRONGLY, "Pebble acted wrongly $actedWrongly times (max $MAX_ACTED_WRONGLY)")
         }
     }
 
     companion object {
         /** intent-v1-pruned, 2026-10-02. Raise this when a better model ships. */
-        const val BASELINE_RIGHT_OR_ASKED = 65 // intent-v1-pruned: 61 right + 4 asked, of 68 (v0 was 58 + 3)
+        /** Doing the wrong thing without asking; may never go up. */
+        const val MAX_ACTED_WRONGLY = 2
+        const val BASELINE_RIGHT_OR_ASKED = 65 // intent-v1-pruned + DecisionPolicy: 64 right + 1 asked, of 68
     }
 }
