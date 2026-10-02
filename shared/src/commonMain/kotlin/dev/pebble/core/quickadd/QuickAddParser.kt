@@ -55,21 +55,25 @@ object QuickAddParser {
     private val everyRx = Regex("""\bevery\s+(\d+(?:\.\d+)?)?\s*(m|min|mins|minutes?|h|hr|hrs|hours?)\b""", RegexOption.IGNORE_CASE)
     private val waterLogRx = Regex("""^(?:\+|drank|had|log)?\s*(\d+)?\s*(?:x\s*)?(?:glass(?:es)?(?: of water)?|water|💧)\s*(?:\+\s*(\d+))?$""", RegexOption.IGNORE_CASE)
     private val inRx = Regex("""^(?:remind me\s+(?:to\s+)?)?(.+?)\s+in\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$""", RegexOption.IGNORE_CASE)
+    private const val DAY = """(today|tomorrow|tmrw|(?:next\s+)?(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*day)"""
     private val atRx = Regex(
-        """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:(today|tomorrow|tmrw)\s+)?(?:at|by|@)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(today|tomorrow|tmrw)?$|""" +
-            """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:(today|tomorrow|tmrw)\s+)?(?:at|by|@)\s*(\d{1,2})(?::(\d{2}))?\s*(today|tomorrow|tmrw)?$""",
+        """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$DAY?$|""" +
+            """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)\s*(\d{1,2})(?::(\d{2}))?\s*$DAY?$""",
         RegexOption.IGNORE_CASE,
     )
 
     /** Like [parseStrict], but anything unrecognised becomes a note (the pre-model behaviour). */
-    fun parse(input: String): QuickCommand? {
+    fun parse(input: String, today: Int? = null): QuickCommand? {
         val text = input.trim()
         if (text.isEmpty()) return null
-        return parseStrict(text) ?: QuickCommand.AddNote(text)
+        return parseStrict(text, today) ?: QuickCommand.AddNote(text)
     }
 
-    /** Only explicit rule matches; null when no rule applies (so the command model can try). */
-    fun parseStrict(input: String): QuickCommand? {
+    /**
+     * Only explicit rule matches; null when no rule applies (so the command model can try).
+     * [today] (ISO weekday, 1 = Monday) lets "call mom friday at 5pm" pick a date.
+     */
+    fun parseStrict(input: String, today: Int? = null): QuickCommand? {
         val text = input.trim()
         if (text.isEmpty()) return null
 
@@ -126,11 +130,7 @@ object QuickAddParser {
             // No am/pm ("at 5"): take whichever of 5:00 / 17:00 comes next.
             val flexible = !withMeridiem && hour in 1..11
             if (hour in 0..23 && minute in 0..59) {
-                val offset = when (dayWord.lowercase()) {
-                    "today" -> 0
-                    "tomorrow", "tmrw" -> 1
-                    else -> null
-                }
+                val offset = if (dayWord.isEmpty()) null else HinglishTime.dayOf(dayWord, today)
                 return QuickCommand.RemindAt(cleanTitle(title), hour, minute, offset, flexible)
             }
         }

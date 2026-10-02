@@ -31,7 +31,9 @@ To resume: open this repo and say "continue from NEXT_SESSION.md".
 - **Command router:** rules first, then the model, then "Did you mean…?" Your picks are saved to `command_feedback` as
   training labels. `HinglishTime` reads times in three scripts ("kal shaam saade paanch baje", "बीस मिनट बाद").
   Replies mirror the script you typed in; low mood gets a caring reply.
-- **Tests:** 40/40 pass (`./gradlew :shared:jvmTest :desktopApp:test`).
+  Weekdays in all three scripts ("friday", "shukravar", "शुक्रवार", "agle somvar", "next tuesday"); a day with no
+  time ("friday wali meeting") offers times on that day. "sat"/"sun" are deliberately not weekdays (seven / listen).
+- **Tests:** 44/44 pass (`./gradlew :shared:jvmTest :desktopApp:test`).
 
 ### Rebuild the model from scratch (artifacts are gitignored)
 ```powershell
@@ -47,7 +49,6 @@ Then refresh `models/manifest.json` (checksum) and `parity.json` before running 
 ## Known weak spots
 - Hindi chit-chat ("tum bahut cute ho") and some short Hinglish lines still trigger "Did you mean".
 - Roman-Hindi slot F1 is only 52%, because its training data is machine-transliterated.
-- Weekdays aren't read as days yet ("friday wali meeting"), so Pebble asks when.
 - The eval set (`brain/eval/pebble_commands_v0.jsonl`) is a draft I wrote, not your real phrasing.
 - The model is only found in the dev layout (`brain/models/...`); the installer doesn't ship it yet.
 
@@ -57,7 +58,7 @@ Then refresh `models/manifest.json` (checksum) and `parity.json` before running 
 2. **Retrain with feedback (active learning):** export `command_feedback` from `%APPDATA%\Pebble\pebble.db`,
    add those pairs plus a small set of hand-labelled Hinglish chit-chat, retrain, and keep the new model only if it
    beats the current one on the frozen eval set.
-3. **Weekdays in `HinglishTime`:** friday / shukravar / शुक्रवार, with today's date passed in.
+3. ~~Weekdays in `HinglishTime`~~ — done.
 4. **Packaging:** bundle the model into the installer (`%APPDATA%\Pebble\models\intent`), then test `packageMsi` and
    "Start with Windows".
 5. **M2 (weeks 7–8):** semantic memory search (embeddings in SQLite) and few-shot "teach Pebble a new command"

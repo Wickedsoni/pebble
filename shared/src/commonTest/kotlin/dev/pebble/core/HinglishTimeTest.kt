@@ -49,4 +49,20 @@ class HinglishTimeTest {
         assertEquals(At(9, 0, 1, false), p("tomorrow morning"))
         assertNull(p("call mom"))
     }
+
+    @Test fun weekdays() {
+        val wed = 3
+        assertEquals(At(5, 0, 2, true), HinglishTime.parse("friday 5 baje", wed))
+        assertEquals(At(19, 0, 2, false), HinglishTime.parse("shukravar shaam 7 baje", wed))
+        assertEquals(At(9, 0, 5, false), HinglishTime.parse("सोमवार सुबह", wed))
+        assertEquals(At(10, 0, 0, true), HinglishTime.parse("wednesday 10 baje", wed))
+        assertEquals(At(10, 0, 7, true), HinglishTime.parse("agle budhvar 10 baje", wed))
+        assertEquals(At(18, 0, 6, false), HinglishTime.parse("next tuesday evening", wed))
+        // Without today's weekday the day is unknown, not guessed.
+        assertEquals(At(5, 0, null, true), HinglishTime.parse("friday 5 baje"))
+        // "saat" / "sat" is seven, never Saturday.
+        assertEquals(At(19, 0, null, false), HinglishTime.parse("shaam sat baje", wed))
+        assertEquals(2, HinglishTime.dayOf("friday wali meeting", wed))
+        assertNull(HinglishTime.dayOf("friday wali meeting"))
+    }
 }

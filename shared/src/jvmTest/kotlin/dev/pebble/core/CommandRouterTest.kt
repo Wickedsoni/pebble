@@ -126,4 +126,32 @@ class CommandRouterTest {
         assertTrue(!Replies.isLowMood("my phone battery is low"))
         assertTrue(Replies.chitchat("aaj mood thoda off hai", Replies.LOW_MOOD).isNotBlank())
     }
+
+    @Test
+    fun weekdayReminderGetsItsDate() {
+        val text = "friday wali meeting 5 baje yaad dilana"
+        // The model tagged only the clock; the weekday still comes from the sentence.
+        val tags = listOf("O", "O", "O", "B-time", "I-time", "O", "O")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }, today = { 3 }).route(text) as Routed.Run
+        val cmd = r.command as QuickCommand.RemindAt
+        assertEquals(5 to 2, cmd.hour to cmd.dayOffset)
+        assertTrue(cmd.flexibleHalfDay)
+    }
+
+    @Test
+    fun weekdayWithoutATimeOffersTimesOnThatDay() {
+        val text = "shukravar wali meeting yaad dilana"
+        val reading = u(text, listOf("B-date", "O", "O", "O", "O"), "calendar_set" to 0.9f)
+        val r = CommandRouter({ model(text to reading) }, today = { 3 }).route(text) as Routed.Ask
+        assertEquals(listOf("Friday 9 AM", "Friday 1 PM", "Friday 6 PM", "Tomorrow 8 PM"), r.options.map { it.label })
+        assertEquals(2, (r.options.first().command as QuickCommand.RemindAt).dayOffset)
+    }
+
+    @Test
+    fun englishRulesReadWeekdays() {
+        val r = CommandRouter({ null }, today = { 3 }).route("call mom friday at 5pm") as Routed.Run
+        assertEquals(QuickCommand.RemindAt("Call mom", 17, 0, 2), r.command)
+        val next = CommandRouter({ null }, today = { 3 }).route("dentist next wednesday at 10am") as Routed.Run
+        assertEquals(QuickCommand.RemindAt("Dentist", 10, 0, 7), next.command)
+    }
 }

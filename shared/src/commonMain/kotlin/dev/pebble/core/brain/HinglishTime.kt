@@ -12,13 +12,17 @@ object HinglishTime {
         data class In(val minutes: Int) : When
     }
 
-    fun parse(text: String): When? {
+    /**
+     * [today] is today's ISO weekday (1 = Monday … 7 = Sunday). Without it, weekday words
+     * ("friday", "shukravar", "शुक्रवार") can't be turned into a date and are ignored.
+     */
+    fun parse(text: String, today: Int? = null): When? {
         val t = normalise(text)
         val words = t.split(' ').filter { it.isNotEmpty() }
         if (words.isEmpty()) return null
         relative(words)?.let { return it }
 
-        val day = dayOffset(words)
+        val day = dayOffset(words, today)
         val part = partOfDay(words)
         val (hour12, minute) = clock(words) ?: return part?.let { When.At(it.defaultHour, 0, day, false) }
         var hour = hour12
@@ -55,7 +59,34 @@ object HinglishTime {
 
     private fun partOfDay(w: List<String>) = partWords.entries.firstOrNull { (_, set) -> w.any { it in set } }?.key
 
-    private fun dayOffset(w: List<String>): Int? = when {
+    /** Days from today to the day named in [text] ("kal", "friday", "अगले सोमवार"), or null if none. */
+    fun dayOf(text: String, today: Int? = null): Int? = dayOffset(normalise(text).split(' ').filter { it.isNotEmpty() }, today)
+
+    private val weekdayWords: Map<String, Int> = buildMap {
+        listOf(
+            listOf("monday", "mon", "somvar", "somwar", "somvaar", "सोमवार"),
+            listOf("tuesday", "tue", "tues", "mangalvar", "mangalwar", "mangal", "मंगलवार", "मंगल"),
+            listOf("wednesday", "wed", "budhvar", "budhwar", "budh", "बुधवार", "बुध"),
+            listOf("thursday", "thu", "thurs", "guruvar", "guruwar", "brihaspativar", "veervar", "गुरुवार", "बृहस्पतिवार", "वीरवार"),
+            listOf("friday", "fri", "shukravar", "shukrawar", "shukra", "sukravar", "शुक्रवार"),
+            listOf("saturday", "shanivar", "shaniwar", "shani", "शनिवार"),
+            listOf("sunday", "ravivar", "raviwar", "itvar", "itwar", "रविवार", "इतवार"),
+        ).forEachIndexed { i, names -> names.forEach { put(it, i + 1) } }
+    }
+
+    /** "next friday", "agle shukravar", "अगले शुक्रवार": skip today if today is that day. */
+    private val nextWords = setOf("next", "agle", "agla", "agli", "अगले", "अगला", "अगली")
+
+    private fun weekdayOffset(w: List<String>, today: Int?): Int? {
+        if (today == null) return null
+        // No "sat" / "sun": in Hinglish those are "seven" and "listen".
+        val i = w.indexOfFirst { it in weekdayWords }
+        if (i < 0) return null
+        val diff = (weekdayWords.getValue(w[i]) - today + 7) % 7
+        return if (diff == 0 && w.getOrNull(i - 1) in nextWords) 7 else diff
+    }
+
+    private fun dayOffset(w: List<String>, today: Int? = null): Int? = weekdayOffset(w, today) ?: when {
         w.any { it in setOf("parso", "parson", "परसों") } -> 2
         w.containsAll(listOf("day", "after", "tomorrow")) -> 2
         w.any { it in setOf("tomorrow", "kal", "tmrw", "कल") } -> 1

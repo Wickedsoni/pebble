@@ -15,6 +15,8 @@ import dev.pebble.core.quickadd.QuickCommand
 class CommandRouter(
     private val model: () -> Understanding?,
     private val confident: Float = 0.6f,
+    /** Today's ISO weekday (1 = Monday … 7 = Sunday), so "friday wali meeting" gets a date. */
+    private val today: () -> Int? = { null },
 ) {
     enum class Source { RULES, MODEL, FALLBACK }
 
@@ -30,7 +32,7 @@ class CommandRouter(
     fun route(input: String): Routed? {
         val text = input.trim()
         if (text.isEmpty()) return null
-        QuickAddParser.parseStrict(text)?.let { return Routed.Run(it, Source.RULES) }
+        QuickAddParser.parseStrict(text, today())?.let { return Routed.Run(it, Source.RULES) }
         // Feelings first: a low mood deserves a caring reply, never a joke or a "did you mean".
         if (Replies.isLowMood(text)) return Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
 
@@ -67,8 +69,12 @@ class CommandRouter(
         else if (HinglishTime.hasClock(text)) text
         else slotText.ifBlank { text }
         val title = reminderTitle(u, text)
-        return when (val w = HinglishTime.parse(timeText)) {
-            is HinglishTime.When.At -> QuickCommand.RemindAt(title, w.hour, w.minute, w.dayOffset, w.flexibleHalfDay)
+        val weekday = today()
+        return when (val w = HinglishTime.parse(timeText, weekday)) {
+            // The day may sit outside the time slot ("friday wali meeting 5 baje"), so look in the whole sentence too.
+            is HinglishTime.When.At -> QuickCommand.RemindAt(
+                title, w.hour, w.minute, w.dayOffset ?: HinglishTime.dayOf(text, weekday), w.flexibleHalfDay,
+            )
             is HinglishTime.When.In -> QuickCommand.RemindIn(title, w.minutes)
             null -> null
         }
@@ -92,6 +98,22 @@ class CommandRouter(
 
     private fun askWhen(text: String, u: Understood): Routed.Ask {
         val title = reminderTitle(u, text)
+        val weekday = today()
+        val day = HinglishTime.dayOf(text, weekday)
+        if (day != null && day > 0) {
+            // We know the day but not the time: offer times on that day, plus a heads-up the evening before.
+            val name = dayName(day, weekday)
+            return Routed.Ask(
+                "What time $name: “$title”?",
+                listOf(
+                    Option("$name 9 AM", A.REMIND, QuickCommand.RemindAt(title, 9, 0, day)),
+                    Option("$name 1 PM", A.REMIND, QuickCommand.RemindAt(title, 13, 0, day)),
+                    Option("$name 6 PM", A.REMIND, QuickCommand.RemindAt(title, 18, 0, day)),
+                    Option("${dayName(day - 1, weekday)} 8 PM", A.REMIND, QuickCommand.RemindAt(title, 20, 0, day - 1)),
+                ),
+                u,
+            )
+        }
         return Routed.Ask(
             "When should I remind you: “$title”?",
             listOf(
@@ -117,6 +139,16 @@ class CommandRouter(
     }
 
     companion object {
+        private val weekdayNames = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+        /** "Today", "Tomorrow", or the weekday name [offset] days from [today]. */
+        fun dayName(offset: Int, today: Int?): String = when {
+            offset == 0 -> "Today"
+            offset == 1 -> "Tomorrow"
+            today == null -> "In $offset days"
+            else -> weekdayNames[(today - 1 + offset) % 7]
+        }
+
         fun labelFor(action: String) = when (action) {
             A.REMIND -> "Set a reminder"
             A.REMINDERS_QUERY -> "Show what's coming up"

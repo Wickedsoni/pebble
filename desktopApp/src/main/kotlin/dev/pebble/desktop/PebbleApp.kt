@@ -66,7 +66,7 @@ class PebbleApp(db: PebbleDatabase) {
 
     /** The local command model, loaded on demand; the router falls back to rules without it. */
     val model = dev.pebble.desktop.brain.ModelManager(CoroutineScope(SupervisorJob() + Dispatchers.Default))
-    val router = dev.pebble.core.brain.CommandRouter({ model })
+    val router = dev.pebble.core.brain.CommandRouter({ model }, today = { LocalDate.now().dayOfWeek.value })
     val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
 
     init {
