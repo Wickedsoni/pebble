@@ -52,6 +52,14 @@ class PebbleApp(db: PebbleDatabase) {
     val water = WaterRepository(db)
     val notes = NoteRepository(db)
     val memory = MemoryRepository(db)
+
+    /** The pet's growth: levels earned by what you do (reminders done, water goals, active days, chats). */
+    val growth = dev.pebble.core.growth.GrowthEngine(
+        db,
+        dayOf = { java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() },
+        waterGoalMl = { waterGoalGlasses * GLASS_ML },
+    )
+
     val brain = MemoryEngine(
         db,
         memory,
@@ -100,7 +108,9 @@ class PebbleApp(db: PebbleDatabase) {
 
     /** Offline speech (VAD + Whisper), loaded only when you talk and freed when idle. */
     val speech = dev.pebble.desktop.voice.SpeechRecognizer(CoroutineScope(SupervisorJob() + Dispatchers.Default))
-    val voice = dev.pebble.desktop.voice.VoiceInput(speech, CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    val voice = dev.pebble.desktop.voice.VoiceInput(speech, CoroutineScope(SupervisorJob() + Dispatchers.Default)) {
+        settings.bool(Keys.MICROPHONE_ENABLED, true)
+    }
     val voiceSamples = dev.pebble.core.brain.VoiceSampleRepository(db)
 
     /** Where kept voice clips go (tests point it elsewhere). */

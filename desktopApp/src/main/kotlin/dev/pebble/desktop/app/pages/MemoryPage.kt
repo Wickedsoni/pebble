@@ -53,6 +53,7 @@ fun MemoryPage(app: PebbleApp) {
     val memories by remember { app.memory.visibleFlow() }.collectAsState(initial = app.memory.visible())
     var mediaOn by remember { mutableStateOf(app.settings.bool(Keys.MEDIA_TRACKING, false)) }
     var keepVoice by remember { mutableStateOf(app.settings.bool(Keys.KEEP_VOICE_CORRECTIONS, false)) }
+    var micOn by remember { mutableStateOf(app.settings.bool(Keys.MICROPHONE_ENABLED, true)) }
     var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -104,6 +105,21 @@ fun MemoryPage(app: PebbleApp) {
                 Spacer(Modifier.height(8.dp))
                 Chip("Clear watch history", false) { app.memory.clearMedia(); runCatching { app.brain.learn() } }
                 Spacer(Modifier.height(12.dp))
+                SettingRow("Microphone (talk to Pebble)", micOn) {
+                    micOn = it
+                    app.settings.set(Keys.MICROPHONE_ENABLED, it.toString())
+                }
+                Text(
+                    if (micOn) {
+                        "Only while you hold Ctrl+Alt+Space or press 🎤. Speech is understood on this computer."
+                    } else {
+                        "Off: Pebble never opens the microphone."
+                    },
+                    color = c.secondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Spacer(Modifier.height(8.dp))
                 SettingRow("Keep voice clips I correct", keepVoice) {
                     keepVoice = it
                     app.settings.set(Keys.KEEP_VOICE_CORRECTIONS, it.toString())

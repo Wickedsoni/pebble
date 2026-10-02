@@ -44,6 +44,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import dev.pebble.desktop.PebbleApp
+import dev.pebble.desktop.app.pages.AboutPage
 import dev.pebble.desktop.app.pages.ChatPage
 import dev.pebble.desktop.app.pages.CompanionPage
 import dev.pebble.desktop.app.pages.MemoryPage
@@ -72,6 +73,7 @@ enum class Page(val title: String, val subtitle: String, val icon: ImageVector) 
     REMINDERS("Reminders", "What Pebble nudges you about", PebbleIcons.Bell),
     COMPANION("Companion", "Your desktop buddy", PebbleIcons.Companion),
     MEMORY("Memory", "What Pebble has learned", PebbleIcons.Memory),
+    ABOUT("About", "Privacy, who makes Pebble, how to help", PebbleIcons.Shield),
 }
 
 private val WINDOW_SIZE = DpSize(1060.dp, 700.dp)
@@ -159,6 +161,8 @@ fun PebbleWindow(
                                 Page.CHAT -> ChatPage(app)
 
                                 Page.MEMORY -> MemoryPage(app)
+
+                                Page.ABOUT -> AboutPage()
                             }
                         }
                     }

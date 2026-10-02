@@ -67,6 +67,9 @@ INSERT INTO conversation_turn(at_millis, said, via, did, reply) VALUES (?, ?, ?,
 recentTurns:
 SELECT * FROM conversation_turn WHERE id > (SELECT coalesce(max(id), 0) FROM conversation_turn) - ? ORDER BY id;
 
+turnCount:
+SELECT count(*) FROM conversation_turn;
+
 clearTurns:
 DELETE FROM conversation_turn;
 

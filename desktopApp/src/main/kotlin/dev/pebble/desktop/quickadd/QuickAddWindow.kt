@@ -244,7 +244,7 @@ fun QuickAddWindow(
                     }
                     Spacer(Modifier.height(10.dp))
                     val talking = voiceState is VoiceInput.State.Listening || voiceState is VoiceInput.State.Transcribing
-                    if (talking) VoiceBar(voiceState, onMic = { if (voice.isListening) voice.stop() else voice.start() })
+                    if (talking) VoiceBar(voiceState, voice.isAllowed, onMic = { if (voice.isListening) voice.stop() else voice.start() })
                     if (!talking) {
                         when (val r = routed) {
                             is CommandRouter.Routed.Run -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,7 +266,9 @@ fun QuickAddWindow(
                                 }
                             }
 
-                            null -> VoiceBar(voiceState, onMic = { if (voice.isListening) voice.stop() else voice.start() })
+                            null -> VoiceBar(voiceState, voice.isAllowed, onMic = {
+                                if (voice.isListening) voice.stop() else voice.start()
+                            })
                         }
                     }
                 }
@@ -331,11 +333,21 @@ private fun Bubble(text: String, mine: Boolean) {
 
 /** Mic chip + what the voice session is doing. */
 @Composable
-private fun VoiceBar(state: VoiceInput.State, onMic: () -> Unit) {
+private fun VoiceBar(state: VoiceInput.State, allowed: Boolean, onMic: () -> Unit) {
     val colors = LocalGlass.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         val listening = state is VoiceInput.State.Listening
-        Chip(if (listening) "■  Stop" else "🎤  Speak", listening, onMic)
+        Chip(
+            if (listening) {
+                "■  Stop"
+            } else if (allowed) {
+                "🎤  Speak"
+            } else {
+                "🎤  Off"
+            },
+            listening,
+            onMic,
+        )
         Spacer(Modifier.width(10.dp))
         val note = when (state) {
             is VoiceInput.State.Listening -> "Listening " + "▮".repeat(1 + (state.level * 8).toInt()) +
@@ -345,7 +357,7 @@ private fun VoiceBar(state: VoiceInput.State, onMic: () -> Unit) {
 
             is VoiceInput.State.Failed -> state.message
 
-            else -> "or hold Ctrl+Alt+Space and talk · Esc to close"
+            else -> if (allowed) "or hold Ctrl+Alt+Space and talk · Esc to close" else "Voice is off (Memory → Privacy) · Esc to close"
         }
         Text(note, color = if (state is VoiceInput.State.Failed) colors.accent else colors.secondary, fontSize = 11.sp)
     }

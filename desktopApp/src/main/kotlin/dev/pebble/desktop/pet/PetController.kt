@@ -51,7 +51,13 @@ data class Speech(
 class PetController(private val app: PebbleApp, private val openQuickAdd: () -> Unit, private val openApp: () -> Unit) {
     var character by mutableStateOf(app.settings.enum(Keys.PET_CHARACTER, Character.PEBBLE))
         private set
-    var stage by mutableStateOf(app.settings.enum(Keys.PET_STAGE, Stage.TEEN))
+
+    /** The highest level earned so far (tasks on the Companion page); the pet can show any level up to it. */
+    var earned by mutableStateOf(earnedStage())
+        private set
+
+    // The stage you picked, but never above what's been earned (stages used to be a free choice).
+    var stage by mutableStateOf(minOf(app.settings.enum(Keys.PET_STAGE, Stage.BABY), earned))
         private set
 
     /** Window top-left in screen dp. */
@@ -160,7 +166,29 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     }
 
     fun chooseCharacter(c: Character) { character = c; app.settings.set(Keys.PET_CHARACTER, c.name) }
-    fun chooseStage(s: Stage) { stage = s; app.settings.set(Keys.PET_STAGE, s.name) }
+
+    /** Show an earned stage (a locked one can't be picked: it has to be grown into). */
+    fun chooseStage(s: Stage) {
+        if (s > earned) return
+        stage = s
+        app.settings.set(Keys.PET_STAGE, s.name)
+    }
+
+    /** Progress towards the next stage (tasks + counts) for the Companion page. */
+    fun growth(): dev.pebble.core.growth.Growth = app.growth.growth()
+
+    private fun earnedStage(): Stage = runCatching { Stage.valueOf(app.growth.growth().earned.name) }.getOrDefault(Stage.BABY)
+
+    private var lastGrowthCheck = 0f
+
+    /** Every few minutes: did the pet just grow? Then it celebrates and shows its new stage. */
+    private fun checkGrowth() {
+        val now = earnedStage()
+        if (now <= earned) return
+        earned = now
+        chooseStage(now)
+        react(PetLine("I grew up! I'm ${now.name.lowercase()} now 🎉", Mood.CELEBRATE, 6_000))
+    }
 
     /** Make a face and optionally say something for a while (task done, water logged…). */
     fun react(line: PetLine) {
@@ -257,6 +285,10 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         val maxX = (wa.x + wa.width) - sizeW
         if (x.isNaN()) { x = maxX - 180f; y = groundY }
 
+        if (time - lastGrowthCheck > 180f) {
+            lastGrowthCheck = time
+            checkGrowth()
+        }
         if (time - lastSystemPoll > 2f) {
             lastSystemPoll = time
             area = UserActivity.workArea()
