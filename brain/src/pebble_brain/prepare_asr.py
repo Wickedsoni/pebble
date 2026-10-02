@@ -1,6 +1,13 @@
-"""Packages a Whisper model for Pebble, with the Devanagari fix (plan 3.2).
+"""Packages Pebble's speech models (plan 3.2).
 
-Run:  uv run python -m pebble_brain.prepare_asr small     (or base)
+Run:  uv run python -m pebble_brain.prepare_asr voice      (the shipped cascade, models/asr-voice/)
+      uv run python -m pebble_brain.prepare_asr small      (a Whisper-only package, for evaluation)
+
+The shipped cascade: Dolphin-base CTC (Apache-2.0) for Hindi/Hinglish — 16% CER on FLEURS Hindi at
+RTF 0.01 — and Whisper-base for English, which Dolphin doesn't transcribe. Files: ctc-model.int8.onnx,
+ctc-tokens.txt, base-*.int8.onnx, base-tokens.txt (hex, below), silero_vad.onnx, HEX_TOKENS.
+
+Whisper token fix:
 
 Why: Whisper's tokens are byte-level, so one Devanagari letter (3 UTF-8 bytes) can be split across two
 tokens. sherpa-onnx's Java API turns each token into a string on its own, and a half letter becomes ""
@@ -53,5 +60,23 @@ def prepare(size: str) -> pathlib.Path:
     return out
 
 
+DOLPHIN = "sherpa-onnx-dolphin-base-ctc-multi-lang-int8-2025-04-02"
+
+
+def prepare_voice() -> pathlib.Path:
+    """Dolphin-base (Hindi) + Whisper-base (English fallback) + Silero VAD in models/asr-voice/."""
+    whisper = prepare("base")
+    out = ROOT / "models" / "asr-voice"
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(whisper, out)
+    src = ROOT / "models" / "asr" / DOLPHIN
+    shutil.copy2(src / "model.int8.onnx", out / "ctc-model.int8.onnx")
+    shutil.copy2(src / "tokens.txt", out / "ctc-tokens.txt")
+    print(f"{out}: Dolphin-base + Whisper-base + VAD")
+    return out
+
+
 if __name__ == "__main__":
-    prepare(sys.argv[1] if len(sys.argv) > 1 else "small")
+    arg = sys.argv[1] if len(sys.argv) > 1 else "voice"
+    prepare_voice() if arg == "voice" else prepare(arg)

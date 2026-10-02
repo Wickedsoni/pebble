@@ -57,6 +57,87 @@
           "of": 68
         }
       }
+    },
+    {
+      "name": "asr",
+      "version": "dolphin-base+whisper-base-1",
+      "task": "speech to text, push-to-talk: Hindi/Hinglish via Dolphin CTC, English via Whisper",
+      "base": "DataoceanAI Dolphin base CTC multi-lang int8 (Apache-2.0, sherpa-onnx export) + OpenAI Whisper base int8 (MIT; token table hex-encoded by prepare_asr.py) + Silero VAD (MIT)",
+      "files": {
+        "ctc_model": {
+          "path": "asr-voice/ctc-model.int8.onnx",
+          "bytes": 103729802,
+          "sha256": "a3aa46c97f3f60f135ff949793cb05fabe7a0b3c484dc2e3cc699d354ee11b76"
+        },
+        "ctc_tokens": {
+          "path": "asr-voice/ctc-tokens.txt",
+          "bytes": 504662,
+          "sha256": "c3788261a51df1899ea4b210b552cd42139204de72c0ad60f6cebb199078872e"
+        },
+        "encoder": {
+          "path": "asr-voice/base-encoder.int8.onnx",
+          "bytes": 29120534,
+          "sha256": "0b8fb1304b6109976038efff5ace81720e00386f3ff6b54ee8c75291ca0a1e11"
+        },
+        "decoder": {
+          "path": "asr-voice/base-decoder.int8.onnx",
+          "bytes": 130672026,
+          "sha256": "9759d217388a01b3a4c7c15533201067b48ae819c4daafc8624e64b9409dc02d"
+        },
+        "tokens": {
+          "path": "asr-voice/base-tokens.txt",
+          "bytes": 1274554,
+          "sha256": "d82cf0323b4b5fbad815b30cda37db0fcf52093fdc9d3de5111b2cf690497272"
+        },
+        "vad": {
+          "path": "asr-voice/silero_vad.onnx",
+          "bytes": 643854,
+          "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+        },
+        "hex_marker": {
+          "path": "asr-voice/HEX_TOKENS",
+          "bytes": 75,
+          "sha256": "70eef50c7444ac4cc532e18615e739b20990c2638fc091b7857549f55801db9e"
+        }
+      },
+      "metrics": {
+        "fleurs_hi_dev_30_clips_dolphin_base": {
+          "clean": {
+            "wer": 0.327,
+            "cer": 0.162
+          },
+          "pink_10db": {
+            "wer": 0.409,
+            "cer": 0.239
+          },
+          "pink_5db": {
+            "wer": 0.512,
+            "cer": 0.328
+          },
+          "babble_10db": {
+            "wer": 0.372,
+            "cer": 0.204
+          },
+          "babble_5db": {
+            "wer": 0.489,
+            "cer": 0.293
+          },
+          "rtf_cpu_4_threads": 0.015
+        },
+        "compared": {
+          "whisper_small_clean": {
+            "wer": 0.601,
+            "cer": 0.295,
+            "rtf": 0.81
+          },
+          "dolphin_small_clean": {
+            "wer": 0.325,
+            "cer": 0.204,
+            "rtf": 0.04
+          }
+        },
+        "denoiser": "none (GTCRN raised WER in every condition)"
+      }
     }
   ]
 }

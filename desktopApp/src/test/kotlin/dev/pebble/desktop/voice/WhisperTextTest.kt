@@ -19,4 +19,14 @@ class WhisperTextTest {
         assertEquals("kal 5 baje DBMS viva", WhisperText.fromHex(hex(" kal 5 baje DBMS viva")))
         assertEquals("not hex at all", WhisperText.fromHex("not hex at all"))
     }
+
+    @Test
+    fun shortClipsArePaddedForTheTokenBudget() {
+        val fiveSeconds = FloatArray(5 * 16_000) { 0.1f }
+        val padded = WhisperText.padForBudget(fiveSeconds)
+        assertEquals(((5 * 2.5 + 1) * 16_000).toInt(), padded.size) // 2.5x the speech + 1 s
+        assertEquals(0.1f, padded[5 * 16_000 - 1])
+        assertEquals(0f, padded.last(), "padding is silence")
+        assertEquals(29 * 16_000, WhisperText.padForBudget(FloatArray(20 * 16_000)).size, "capped below Whisper's 30 s window")
+    }
 }
