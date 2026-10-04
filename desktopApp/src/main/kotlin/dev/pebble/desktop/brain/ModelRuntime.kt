@@ -11,6 +11,12 @@ import java.nio.file.Path
  * the command model ([intent]) and the speech models ([speech]). Nothing loads until it's needed.
  */
 class ModelRuntime(scope: CoroutineScope, dataDir: Path, idleMillis: Long = 10 * 60_000L) {
+    /** Where signed packs are installed (WP D2). */
+    val packsDir: Path = dataDir.resolve("models")
+
+    /** Pack installs and removals staged in the last run, done now: no model is loaded yet. */
+    val packChangesAtStart: List<String> = runCatching { ModelPack.applyStaged(packsDir) }.getOrElse { listOf("failed: ${it.message}") }
+
     val cache = VerifiedModelCache(dataDir.resolve("models-verified.json"))
     val intent = ModelManager(scope, idleMillis, cache)
     val speech = SpeechRecognizer(scope, idleMillis, cache)

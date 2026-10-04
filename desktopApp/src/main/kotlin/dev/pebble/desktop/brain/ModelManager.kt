@@ -15,8 +15,8 @@ import java.nio.file.Path
 
 /**
  * Owns the command model's lifecycle so it costs nothing when unused:
- *  - finds the model folder: env `PEBBLE_MODELS_DIR`, then `%APPDATA%\Pebble\models\intent` (a newer model
- *    placed there wins), then the copy bundled in the installer, then the dev build that
+ *  - finds the model folder: env `PEBBLE_MODELS_DIR`, then `%APPDATA%\Pebble\models\intent` (only a valid
+ *    signed pack, see [ModelPack]), then the copy bundled in the installer, then the dev build that
  *    `brain/models/manifest.json` names (e.g. `brain/models/intent-v0-pruned`)
  *  - verifies the ONNX file against `manifest.json`'s SHA-256 before trusting it
  *  - loads lazily in the background ([warmUp]); [understand] never blocks on loading
@@ -86,7 +86,7 @@ class ModelManager(
         val cwd = Path.of(System.getProperty("user.dir"))
         val candidates = listOfNotNull(
             System.getenv("PEBBLE_MODELS_DIR")?.let { Path.of(it) },
-            DatabaseFactory.defaultDataDir().toPath().resolve("models/intent"),
+            ModelChecksums.trustedUserDir(DatabaseFactory.defaultDataDir().toPath(), "intent", cache),
             // Set by Compose Desktop in the installed app (and by `run`): <install>/app/resources.
             System.getProperty("compose.application.resources.dir")?.let { Path.of(it).resolve("models/intent") },
         ) + listOf(cwd.resolve("../brain/models"), cwd.resolve("brain/models")).mapNotNull { devModel(it.normalize()) }

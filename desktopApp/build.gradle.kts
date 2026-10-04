@@ -64,6 +64,14 @@ tasks.register<JavaExec>("recordVoiceEval") {
     args(rootProject.layout.projectDirectory.dir("brain").asFile.absolutePath)
 }
 
+tasks.register<JavaExec>("modelPack") {
+    group = "pebble"
+    description = "Signed model packs: --args=\"keygen <key file>\" | \"sign …\" | \"check <pack.zip>\" (see ModelPackTool.kt)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.pebble.desktop.tools.ModelPackToolKt"
+    workingDir = rootProject.projectDir // relative paths in --args are from the repo root
+}
+
 tasks.register<JavaExec>("petGallery") {
     group = "pebble"
     description = "Renders every character and mood to build/pet-gallery.png"
@@ -92,12 +100,17 @@ val manifestModels: List<Pair<String, List<String>>> =
             m["name"] as String to (m["files"] as Map<String, Map<String, Any>>).values.map { it["path"] as String }
         }
     } ?: emptyList()
+// `-Pflavor=lite` leaves out the speech models (WP D2): a small installer; voice comes later as a signed pack.
+val flavor = providers.gradleProperty("flavor").orNull ?: "full"
+require(flavor == "full" || flavor == "lite") { "-Pflavor must be full or lite, not $flavor" }
+val bundledModels = if (flavor == "lite") manifestModels.filter { it.first != "asr" } else manifestModels
 val stageModel by tasks.registering(Sync::class) {
     group = "pebble"
-    description = "Copies every model named in brain/models/manifest.json into the app resources"
+    description = "Copies every model named in brain/models/manifest.json into the app resources (lite: no speech)"
+    inputs.property("flavor", flavor)
     into(layout.buildDirectory.dir("model-resources/common/models"))
     from(brainModels.file("manifest.json"))
-    for ((name, paths) in manifestModels) {
+    for ((name, paths) in bundledModels) {
         for (path in paths) {
             from(brainModels.file(path)) { into("$name/" + path.substringAfter('/').substringBeforeLast('/', "")) }
         }
@@ -135,7 +148,8 @@ compose.desktop {
             packageName = "Pebble"
             packageVersion = "0.1.2"
             description = "Desktop pet and glass widgets"
-            modules("java.sql", "jdk.unsupported")
+            // jdk.crypto.ec: Ed25519 for signed model packs on JDK 21 (in java.base only from JDK 22).
+            modules("java.sql", "jdk.unsupported", "jdk.crypto.ec")
             windows {
                 menuGroup = "Pebble"
                 perUserInstall = true

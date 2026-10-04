@@ -162,7 +162,7 @@ fun PebbleWindow(
 
                                 Page.MEMORY -> MemoryPage(app)
 
-                                Page.ABOUT -> AboutPage()
+                                Page.ABOUT -> AboutPage(app)
                             }
                         }
                     }

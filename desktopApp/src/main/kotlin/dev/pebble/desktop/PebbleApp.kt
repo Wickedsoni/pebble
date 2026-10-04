@@ -136,6 +136,59 @@ class PebbleApp(
     /** The local command model, loaded on demand; the router falls back to rules without it. */
     val models = dev.pebble.desktop.brain.ModelRuntime(appScope + env.dispatchers.default, DatabaseFactory.defaultDataDir().toPath())
     val model = models.intent
+
+    /** "Model packs" on the About page (WP D2): signed packs in `%APPDATA%\Pebble\models`, used from the next start. */
+    val modelPacks = object : dev.pebble.desktop.app.pages.ModelPacksPort {
+        private val labels = mapOf("intent" to "Command model", "asr" to "Speech models")
+        private val bundled = System.getProperty("compose.application.resources.dir")?.let { java.nio.file.Path.of(it).resolve("models") }
+
+        override suspend fun models() = withContext(env.dispatchers.io) {
+            val staged = dev.pebble.desktop.brain.ModelPack.staged(models.packsDir)
+            labels.map { (name, label) ->
+                val dir = models.packsDir.resolve(name)
+                val pack = dev.pebble.desktop.brain.ModelPack.installedManifest(dir)
+                val status = when {
+                    staged[name] == "remove" -> "Removed when Pebble starts again"
+
+                    staged[name] != null -> "Installs when Pebble starts again: ${staged.getValue(name).removePrefix("install ")}"
+
+                    pack != null -> when (val r = dev.pebble.desktop.brain.ModelPack.verifyInstalled(dir, name, models.cache)) {
+                        is dev.pebble.desktop.brain.ModelPack.Result.Ok -> "Pack ${pack.version} (signed)"
+                        is dev.pebble.desktop.brain.ModelPack.Result.Invalid -> "Pack not used: ${r.reason}"
+                    }
+
+                    bundled != null && java.nio.file.Files.isDirectory(bundled.resolve(name)) -> "Built in"
+
+                    bundled == null -> "Development build"
+
+                    else -> "Not installed"
+                }
+                dev.pebble.desktop.app.pages.ModelPacksUiState.Row(
+                    name,
+                    label,
+                    status,
+                    canRemove = pack != null && staged[name] != "remove",
+                )
+            }
+        }
+
+        override suspend fun install(zip: java.nio.file.Path) = withContext(env.dispatchers.io) {
+            val r = runCatching {
+                dev.pebble.desktop.brain.ModelPack.stageInstall(zip, models.packsDir, System.getProperty("jpackage.app-version"))
+            }.getOrElse { dev.pebble.desktop.brain.ModelPack.Result.Invalid(it.message ?: "cannot read the file") }
+            val what = when (r) {
+                is dev.pebble.desktop.brain.ModelPack.Result.Ok -> r.manifest.let { "staged ${it.name} ${it.version} (${it.keyId})" }
+                is dev.pebble.desktop.brain.ModelPack.Result.Invalid -> "refused, ${r.reason}"
+            }
+            log.info(TAG, "model pack ${zip.fileName}: $what")
+            (r as? dev.pebble.desktop.brain.ModelPack.Result.Invalid)?.reason
+        }
+
+        override suspend fun remove(name: String) = withContext(env.dispatchers.io) {
+            dev.pebble.desktop.brain.ModelPack.stageRemove(models.packsDir, name)
+            log.info(TAG, "model pack $name: removal staged")
+        }
+    }
     val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
 
     /**
@@ -266,6 +319,7 @@ class PebbleApp(
         @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
         eventLog.attach(bus, appScope, writerDispatcher = env.dispatchers.io.limitedParallelism(1))
         bus.publish(PebbleEvent.AppStarted(now()))
+        models.packChangesAtStart.forEach { log.info(TAG, "model pack: $it") }
         engine.start(appScope)
         // Learning is cheap (a few small queries); every 10 minutes keeps memories fresh.
         appScope.launch {
