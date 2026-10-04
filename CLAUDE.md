@@ -124,6 +124,10 @@ Line numbers can move. If a line does not match, search for the name.
 7. **Code that opens a socket** must obey the privacy invariant above.
 8. **Spotless/ktlint 1.8.0 runs in CI.** Run `./gradlew spotlessApply` before you commit.
 9. **Kotlin warnings are errors** (`allWarningsAsErrors` in both modules). Fix the warning. Do not suppress it without a reason in the PR.
+10. **int8 results depend on the CPU.** x86 CPUs without VNNI (for example AMD Zen 3, older Intel laptops) saturate full 8-bit weights.
+    - Quantize with `reduce_range=True` (`export_onnx.py`). Do not remove it.
+    - A model with 8-bit weights passed on a VNNI laptop but read 3 of 194 commands differently on the CI runner (AMD EPYC 7763).
+    - The CI log step "Runner CPU" shows which CPU ran the tests.
 
 ## Docs
 
