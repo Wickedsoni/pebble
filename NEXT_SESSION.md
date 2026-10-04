@@ -7,7 +7,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current only on branch `wp/c3-personal-layer`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
 
-### 5 Oct: WP C3 done (PR on top of #28)
+### 5 Oct: WP C3 done (PR #29, on top of #28)
 - **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
   - cosine ≥ 0.90 alone let one example reach 3.5 sentences on average (up to 13);
   - `confirmed` rows reinforced mistakes that you did not correct;
@@ -40,7 +40,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 | 11 | #26 | `wp/b7-ui-state-pilot` | B7 pilot: Reminders state holder, `docs/UI-PATTERN.md` |
 | 12 | #27 | `wp/c1-sentence-embedding` | C1: sentence embedding (model `intent-v3-pruned`) |
 | 13 | #28 | `wp/c2-memory-search` | C2: memory search |
-| 14 | (new) | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
+| 14 | #29 | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
 
 - Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
 - If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
