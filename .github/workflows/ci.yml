@@ -27,6 +27,9 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v6
+      - name: Runner CPU
+        # int8 model results depend on the CPU (VNNI or not), so the log records which one ran the tests.
+        run: powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name"
       - name: Cache models
         uses: actions/cache@v6
         with:
