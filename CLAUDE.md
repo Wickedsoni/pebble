@@ -44,6 +44,7 @@ The plan splits the work into work packages (WPs), for example "A1" or "B3".
 |---|---|
 | Start the app | `./gradlew :desktopApp:run` |
 | Format Kotlin | `./gradlew spotlessApply` |
+| Coverage report (both modules) | `./gradlew :desktopApp:koverHtmlReport` → `desktopApp/build/reports/kover/html/` |
 | Check format and run all Kotlin tests | `./gradlew spotlessCheck :shared:jvmTest :desktopApp:test --console=plain` |
 | Get the models (for model tests) | `python brain/src/pebble_brain/download_models.py` |
 | Build the app as a folder | `./gradlew :desktopApp:createDistributable` |
@@ -98,7 +99,7 @@ Line numbers can move. If a line does not match, search for the name.
 | Migration test pattern: build the old schema with raw JDBC, set `PRAGMA user_version`, open with `DatabaseFactory.create(file)` | `shared/src/jvmTest/.../MigrationTest.kt` |
 | jlink modules: `modules("java.sql", "jdk.unsupported")`; JVM `-Xmx256m`, SerialGC | `desktopApp/build.gradle.kts:106-124` |
 | Models bundled from `brain/models/manifest.json` by `stageModel`; the downloader is stdlib-only Python | `desktopApp/build.gradle.kts:69-96`, `brain/src/pebble_brain/download_models.py` |
-| CI: Windows kotlin job (bash), model tests SKIP (no models); Python job runs lint + one test | `.github/workflows/ci.yml` |
+| CI: Windows kotlin job (bash) downloads the models (cached by the hash of `manifest.json`), builds the distributable, runs all tests with Kover coverage; Python job runs lint + one test | `.github/workflows/ci.yml` |
 | Release CI already downloads models: `python brain/src/pebble_brain/download_models.py` | `.github/workflows/release.yml` |
 | Settings keys live in `SettingsRepository.Keys` (string key-value) | `shared/.../settings/SettingsRepository.kt` |
 
@@ -109,16 +110,20 @@ Line numbers can move. If a line does not match, search for the name.
    - **VERIFY** the module name for X25519/Ed25519/ECDHE on the pinned JDK.
    - Always start the built distributable after such a change.
 2. **ONNX before sherpa.** Load the ONNX Runtime env before sherpa-onnx. A refactor of model loading must keep this order in **one** place.
-3. **Model tests skip silently without models.** A green CI run proves nothing for brain changes until WP A3 is merged.
+3. **Model tests skip silently without their data.** CI downloads the models, so `EvalSetRouterTest`, `RouterWithModelTest`, `OnnxParityTest` and `BundledModelTest` run there.
+   - `VoiceSpikeTest` and `VoiceCommandEvalTest` still skip in CI. They need speech models in a local layout, or your own recordings.
+   - `OnnxParityTest` uses `desktopApp/src/test/resources/parity/<model folder>.json` when the model folder has no `parity.json`. When you ship a new command model, copy its `parity.json` to that folder.
+   - Locally, a test that prints `SKIPPED` proves nothing. Run the model download first.
 4. **A new migration needs four changes:**
    - a file `N.sqm`, where N = the current version;
    - the updated `CREATE TABLE` in the `.sq` file;
    - a new `MigrationTest` case;
-   - an extended `SchemaParityTest` (from WP A3).
+   - `SchemaParityTest` must stay green. It migrates a version-1 database through every `.sqm` and compares it with a fresh one.
 5. **Do not delete `event_log` rows without a roll-up.** Growth, `MemoryEngine` and the offline IPS eval all read the history.
 6. **`Understood` is a data class that equality checks use.** Do not add a raw `FloatArray` field: arrays compare by reference. Use a wrapper that uses `contentEquals`.
 7. **Code that opens a socket** must obey the privacy invariant above.
 8. **Spotless/ktlint 1.8.0 runs in CI.** Run `./gradlew spotlessApply` before you commit.
+9. **Kotlin warnings are errors** (`allWarningsAsErrors` in both modules). Fix the warning. Do not suppress it without a reason in the PR.
 
 ## Docs
 

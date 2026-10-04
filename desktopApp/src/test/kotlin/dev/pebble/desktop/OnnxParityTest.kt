@@ -24,12 +24,19 @@ class OnnxParityTest {
 
     @Test
     fun kotlinMatchesPython() {
-        val ref = dir.resolve("parity.json")
-        if (!Files.exists(ref)) {
-            println("SKIPPED: $ref not found (build the model in brain/ first)")
+        // A local build writes parity.json next to the model; the released zip has no parity.json, so CI
+        // uses the copy under test resources (named after the model folder, so a new model can't use a stale one).
+        val local = dir.resolve("parity.json")
+        val text = if (Files.exists(local)) {
+            Files.readString(local)
+        } else {
+            javaClass.getResource("/parity/${dir.fileName}.json")?.readText()
+        }
+        if (text == null) {
+            println("SKIPPED: $local not found (build the model in brain/ first)")
             return
         }
-        val rows = Json.parseToJsonElement(Files.readString(ref)).jsonArray
+        val rows = Json.parseToJsonElement(text).jsonArray
         OnnxIntentModel(dir).use { model ->
             var tokens = 0; var intents = 0; var tags = 0; var maxDp = 0f
             var moods = 0; var moodRows = 0

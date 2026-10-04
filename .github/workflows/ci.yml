@@ -27,11 +27,28 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v6
+      - name: Cache models
+        uses: actions/cache@v6
+        with:
+          path: brain/models/*-*/
+          key: models-${{ hashFiles('brain/models/manifest.json') }}
+      - name: Fetch models (checksums verified)
+        # Same command as release.yml, so the model tests (EvalSetRouterTest, OnnxParityTest, ...) run.
+        run: python brain/src/pebble_brain/download_models.py
       - name: Format check (ktlint via Spotless)
         run: ./gradlew spotlessCheck --console=plain
-      - name: Tests
-        # Tests that need trained models (not in git) skip themselves and print SKIPPED.
-        run: ./gradlew :shared:jvmTest :desktopApp:test --console=plain
+      - name: Build the app folder
+        # BundledModelTest loads the model from it; it also catches missing jlink modules.
+        run: ./gradlew :desktopApp:createDistributable --console=plain
+      - name: Tests and coverage
+        # Tests that still can't find their data skip themselves and print SKIPPED.
+        run: ./gradlew :shared:jvmTest :desktopApp:test :desktopApp:koverHtmlReport --console=plain
+      - name: Coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-html
+          path: desktopApp/build/reports/kover/html/
       - name: Test reports
         if: failure()
         uses: actions/upload-artifact@v7

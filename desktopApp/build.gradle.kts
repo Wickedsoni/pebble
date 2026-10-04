@@ -4,14 +4,19 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose)
+    alias(libs.plugins.kover)
 }
 
 kotlin {
     jvmToolchain(21)
+    // The build has zero warnings; keep it that way.
+    compilerOptions { allWarningsAsErrors.set(true) }
 }
 
 dependencies {
     implementation(project(":shared"))
+    // Coverage: `:desktopApp:koverHtmlReport` merges both modules. Report only; no threshold yet.
+    kover(project(":shared"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing)

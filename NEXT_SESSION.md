@@ -66,7 +66,10 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Done:**
   - WP A1: `CLAUDE.md`, `docs/STYLE-STE.md`, `docs/GLOSSARY.md` and ADRs 0000-0009 in `docs/adr/`.
   - WP A2: stale lines fixed in `README.md`, `docs/ARCHITECTURE.md` and `PetModel.kt`; M8-M10 and the network principle added to `docs/ROADMAP.md`.
-- **Next WP:** A3 (quality gates in CI).
+  - WP A3: CI downloads the models and builds the distributable, so the model tests run on each PR. Added `SchemaParityTest`, Kover 0.9.11 (report only) and `allWarningsAsErrors`.
+- **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
+- **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
+- **Next WP:** B1 (time, dispatchers, scopes).
 
 ### User-only tasks (do not automate)
 1. Merge Dependabot PR #6 (Gradle wrapper 9.4.1 → 9.8.0). The GitHub MCP server is disconnected: its token expired. Authorize it again, or use the `gh` CLI.
