@@ -1,5 +1,7 @@
 package dev.pebble.core.growth
 
+import dev.pebble.core.history.EventHistory
+import dev.pebble.core.reminders.ReminderAction
 import dev.pebble.db.PebbleDatabase
 
 /** The pet's growth levels, earned in order. The desktop pet draws each with its own size and accessory. */
@@ -73,10 +75,12 @@ class GrowthEngine(
     private val dayOf: (Long) -> Long,
     private val waterGoalMl: () -> Int,
 ) {
+    /** Old days come from `daily_stat`, recent ones from the raw log (WP B6), so this stays fast on years of history. */
+    private val history = EventHistory(db, dayOf)
+
     fun stats(): GrowthStats {
-        val events = db.pebbleQueries
-        val activeDays = events.eventsOfTypeSince("active_hour", 0).executeAsList().map { dayOf(it.at_millis) }.toSet().size
-        val done = events.eventsOfTypeSince("reminder_acted", 0).executeAsList().count { it.payload.contains("\"action\":\"DONE\"") }
+        val activeDays = history.days("active_hour").size
+        val done = history.count("reminder_acted", ReminderAction.DONE.name).toInt()
         val goal = waterGoalMl()
         val perDay = db.wellnessQueries.waterLogSince(0).executeAsList().groupBy { dayOf(it.at_millis) }
             .mapValues { (_, rows) -> rows.sumOf { it.ml } }
@@ -94,7 +98,7 @@ class GrowthEngine(
             remindersDone = done,
             waterGoalDays = goalDays.size,
             bestWaterStreak = best,
-            notesDone = events.eventsOfTypeSince("note_completed", 0).executeAsList().size,
+            notesDone = history.count("note_completed").toInt(),
             chats = db.brainQueries.turnCount().executeAsOne().toInt(),
         )
     }

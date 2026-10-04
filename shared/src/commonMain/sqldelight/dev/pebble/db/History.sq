@@ -1,0 +1,26 @@
+-- Per-day counts of log entries before the roll-up watermark (HistoryCompactor). [day] is the local
+-- epoch day; [key] is the detail that matters for a type (reminder_acted: the action), else ''.
+-- event_log keeps every raw row: these counts only make reading long histories fast.
+CREATE TABLE daily_stat (
+    day INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    key TEXT NOT NULL DEFAULT '',
+    count INTEGER NOT NULL,
+    PRIMARY KEY (day, type, key)
+);
+
+addDailyStat:
+INSERT INTO daily_stat(day, type, key, count) VALUES (?, ?, ?, ?)
+ON CONFLICT(day, type, key) DO UPDATE SET count = count + excluded.count;
+
+statDays:
+SELECT DISTINCT day FROM daily_stat WHERE type = ?;
+
+statSum:
+SELECT COALESCE(SUM(count), 0) FROM daily_stat WHERE type = ?;
+
+statSumForKey:
+SELECT COALESCE(SUM(count), 0) FROM daily_stat WHERE type = ? AND key = ?;
+
+eventsBetween:
+SELECT * FROM event_log WHERE at_millis >= ? AND at_millis < ? ORDER BY at_millis;

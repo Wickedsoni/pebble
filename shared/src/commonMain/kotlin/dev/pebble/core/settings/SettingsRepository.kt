@@ -31,5 +31,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
 
         /** Voice input allowed at all. Off: Pebble never opens the microphone or loads speech models. */
         const val MICROPHONE_ENABLED = "voice.microphone"
+
+        /** Log entries before this time (a local midnight) are counted in `daily_stat` (HistoryCompactor). */
+        const val HISTORY_ROLLED_UP_UNTIL = "history.rolledUpUntil"
     }
 }
