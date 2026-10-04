@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +61,8 @@ fun MemoryPage(app: PebbleApp) {
     var keepVoice by remember { mutableStateOf(app.settings.bool(Keys.KEEP_VOICE_CORRECTIONS, false)) }
     var micOn by remember { mutableStateOf(app.settings.bool(Keys.MICROPHONE_ENABLED, true)) }
     var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
+    var smartOn by remember { mutableStateOf(app.settings.bool(Keys.SMART_REPLIES, false)) }
+    val chatInstalled = remember { app.chat.available }
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         // The right column is full (search + privacy), so the Teach card shares the left column.
@@ -97,52 +101,72 @@ fun MemoryPage(app: PebbleApp) {
         }
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             MemorySearchCard(app, Modifier.fillMaxWidth())
-            GlassCard(Modifier.fillMaxWidth()) {
+            // Scrolls: with Smart replies the switches are taller than the card on a small window.
+            GlassCard(Modifier.fillMaxWidth().weight(1f)) {
                 CardLabel("Privacy", PebbleIcons.Shield, c.water)
-                Text("Everything stays on this computer. Nothing is uploaded.", color = c.content, fontSize = 13.sp, lineHeight = 18.sp)
-                Spacer(Modifier.height(12.dp))
-                SettingRow("Notice what I watch", mediaOn) {
-                    mediaOn = it
-                    app.settings.set(Keys.MEDIA_TRACKING, it.toString())
-                }
-                Text(
-                    "Reads the title of video apps and sites (YouTube, Netflix, Prime Video, VLC…) once a minute. Off by default.",
-                    color = c.secondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                Chip("Clear watch history", false) { app.memory.clearMedia(); runCatching { app.brain.learn() } }
-                Spacer(Modifier.height(12.dp))
-                SettingRow("Microphone (talk to Pebble)", micOn) {
-                    micOn = it
-                    app.settings.set(Keys.MICROPHONE_ENABLED, it.toString())
-                }
-                Text(
-                    if (micOn) {
-                        "Only while you hold Ctrl+Alt+Space or press 🎤. Speech is understood on this computer."
-                    } else {
-                        "Off: Pebble never opens the microphone."
-                    },
-                    color = c.secondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                SettingRow("Keep voice clips I correct", keepVoice) {
-                    keepVoice = it
-                    app.settings.set(Keys.KEEP_VOICE_CORRECTIONS, it.toString())
-                }
-                Text(
-                    "When you fix what I heard, I keep that clip and your words, to understand your voice better. " +
-                        "Off by default; the mic is only on while you hold the talk key.",
-                    color = c.secondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                )
-                if (voiceClips > 0) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Everything stays on this computer. Nothing is uploaded.", color = c.content, fontSize = 13.sp, lineHeight = 18.sp)
+                    Spacer(Modifier.height(12.dp))
+                    SettingRow("Notice what I watch", mediaOn) {
+                        mediaOn = it
+                        app.settings.set(Keys.MEDIA_TRACKING, it.toString())
+                    }
+                    Text(
+                        "Reads the title of video apps and sites (YouTube, Netflix, Prime Video, VLC…) once a minute. Off by default.",
+                        color = c.secondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Chip("Delete $voiceClips voice clips", false) { app.clearVoiceSamples(); voiceClips = 0 }
+                    Chip("Clear watch history", false) { app.memory.clearMedia(); runCatching { app.brain.learn() } }
+                    Spacer(Modifier.height(12.dp))
+                    SettingRow("Microphone (talk to Pebble)", micOn) {
+                        micOn = it
+                        app.settings.set(Keys.MICROPHONE_ENABLED, it.toString())
+                    }
+                    Text(
+                        if (micOn) {
+                            "Only while you hold Ctrl+Alt+Space or press 🎤. Speech is understood on this computer."
+                        } else {
+                            "Off: Pebble never opens the microphone."
+                        },
+                        color = c.secondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SettingRow("Smart replies (chat model)", smartOn) {
+                        smartOn = it
+                        app.settings.set(Keys.SMART_REPLIES, it.toString())
+                        if (!it) app.chat.close()
+                    }
+                    Text(
+                        if (chatInstalled) {
+                            "Small talk is answered by a chat model on this computer, in English for now. It runs as a helper " +
+                                "program that only Pebble can reach (127.0.0.1), and stops after 10 idle minutes. Off by default."
+                        } else {
+                            "Needs the chat pack: About → Model packs. Off by default."
+                        },
+                        color = c.secondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SettingRow("Keep voice clips I correct", keepVoice) {
+                        keepVoice = it
+                        app.settings.set(Keys.KEEP_VOICE_CORRECTIONS, it.toString())
+                    }
+                    Text(
+                        "When you fix what I heard, I keep that clip and your words, to understand your voice better. " +
+                            "Off by default; the mic is only on while you hold the talk key.",
+                        color = c.secondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                    if (voiceClips > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Chip("Delete $voiceClips voice clips", false) { app.clearVoiceSamples(); voiceClips = 0 }
+                    }
                 }
             }
         }

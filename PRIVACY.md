@@ -33,7 +33,14 @@ Everything lives in one folder on your PC: `%APPDATA%\Pebble` (for example `C:\U
 
 ## Network
 
-Pebble makes no network connections. The models ship inside the installer. If that ever changes (for example an optional "download a better model" button), it will be off by default, ask you first, and be described here.
+Pebble makes no connections to the internet. The models ship inside the installer, or you install a signed model pack from a file.
+
+**One local connection, off by default: Smart replies.** If you install the chat pack and turn on "Smart replies" (Memory → Privacy), Pebble starts the chat model as a helper program (`llama-server` from llama.cpp) and sends it your small-talk line, the last 3 exchanges and up to 3 matching notes or facts. The helper:
+- listens only on this computer (127.0.0.1), on a random port, and needs a random key that changes at each start;
+- runs with `--offline` (it downloads nothing) and `--no-webui` (no web page);
+- keeps nothing: it stops after 10 idle minutes and when Pebble exits. Its log (`%APPDATA%\Pebble\chat-server.log`) holds timings, not your text.
+
+Lines about a low mood, self-harm, health, law or money never go to the chat model; Pebble answers those with its own reviewed lines.
 
 ## Children
 

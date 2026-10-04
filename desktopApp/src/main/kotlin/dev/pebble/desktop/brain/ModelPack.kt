@@ -45,11 +45,14 @@ object ModelPack {
     const val MANIFEST = "pack.json"
     const val SIGNATURE = "pack.sig"
 
-    /** Models a pack can replace. */
-    val NAMES = setOf("intent", "asr")
+    /** Models a pack can install: the command model, the speech models, and the optional chat model (WP C5). */
+    val NAMES = setOf("intent", "asr", "chat")
 
     /** Larger packs are refused before anything is written (the speech pack is ~300 MB). */
     const val MAX_TOTAL_BYTES = 2L shl 30
+
+    /** A chat pack holds a chat model: up to 24 GB (sarvam-30b Q4_K_M is 19.6 GB). */
+    const val MAX_CHAT_BYTES = 24L shl 30
     private const val MAX_MANIFEST_BYTES = 1 shl 20
 
     data class Entry(val path: String, val size: Long, val sha256: String)
@@ -136,7 +139,11 @@ object ModelPack {
         if (appVersion != null && m.minApp != null && compareVersions(appVersion, m.minApp) < 0) {
             return Result.Invalid("needs Pebble ${m.minApp} or newer")
         }
-        if (m.files.sumOf { it.size } > MAX_TOTAL_BYTES) return Result.Invalid("pack is too large")
+        if (m.files.sumOf { it.size } >
+            (if (m.name == "chat") MAX_CHAT_BYTES else MAX_TOTAL_BYTES)
+        ) {
+            return Result.Invalid("pack is too large")
+        }
         Files.createDirectories(modelsDir)
         val tmp = Files.createTempDirectory(modelsDir, ".${m.name}-")
         try {

@@ -5,7 +5,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ## Session handoff (5 Oct 2026) — read this first
 
-**This file is current only on branch `wp/d2-model-packs`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
+**This file is current only on branch `wp/c5-local-chat`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
 
 ### 5 Oct: WP C3 done (PR #29, on top of #28)
 - **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
@@ -28,6 +28,24 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - The check found that the Teach card was squeezed under the Privacy card. It now shares the left column.
   - Your database is now at schema 11 (C2's `vector_item`). The installed v0.1.2 still starts on it.
 - **Follow-up (not C3):** `pebble.log` shows "history roll-up failed: [SQLITE_BUSY] database is locked" once at start-up (also on 4 Oct). It is probably a deferred transaction that reads, then writes while the event writer commits (WAL returns BUSY at once, so `busy_timeout` does not help). It tries again 10 minutes later. Fix: begin the roll-up transaction as IMMEDIATE.
+
+### 5 Oct: WP C5 done (local chat, "Smart replies")
+- **Model choice (ADR 0012):** four models measured on `brain/eval/chat_v1.jsonl` (24 lines in 3 scripts), and a person read every reply:
+  - Qwen2.5-0.5B and Qwen3-0.6B: Hindi is not correct; one insult in Hindi.
+  - Qwen2.5-1.5B: good English, weak Hinglish and Hindi. **Selected, English only.**
+  - sarvam-30b (19.6 GB): no reply through llama.cpp b11146 (thinking cannot be turned off; the input looked corrupted). A candidate for the hub.
+  - The rejected models were deleted from this PC (about 22 GB). Only `brain/models/chat` (Qwen2.5-1.5B + llama-server b11146, 1.1 GB) stays.
+- **Safety review:** low mood, self-harm, health, law and money lines never reach the model; `ChatSafety.clean` refuses claimed actions, links, insults, the wrong script and echoes. The first eval had found medical advice ("paracetamol or ibuprofen?").
+- **Live check (built app):**
+  - the chat pack installs from About;
+  - Smart replies on → "how was your day?" gets a model reply in about 1 s;
+  - the server listens only on 127.0.0.1; no key → 401; no web UI;
+  - the helper uses 1.7 GB RAM;
+  - a server left by a hard kill is stopped at the next start.
+  - Found and fixed in the check: the About card had no chat row; the Privacy card cut off its last switch (it now scrolls); a "Just chatting" pick skipped Smart replies.
+  - Test data and the test-installed chat pack were removed.
+- **Not published yet:** the chat pack. Sign it with `./gradlew :desktopApp:modelPack --args="sign chat qwen2.5-1.5b-q4km 0.2.0 pebble-2026a <key> brain/models/chat <out.zip>"` and attach it to the next release.
+- **Next for Hindi/Hinglish chat:** distillation (C6). See ADR 0012, "Alternatives".
 
 ### 5 Oct: WP D2 done (signed model packs, lite installer)
 - **Signing review (Opus) → ADR 0011:**
@@ -67,6 +85,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 | 13 | #28 | `wp/c2-memory-search` | C2: memory search |
 | 14 | #29 | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
 | 15 | #30 | `wp/d2-model-packs` | D2: signed model packs, lite installer (ADR 0011) |
+| 16 | (new) | `wp/c5-local-chat` | C5: local chat, Smart replies, English only (ADR 0012) |
 
 - Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
 - If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
@@ -83,8 +102,8 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 - My two test turns ("open reminders", "notes kholo") are in your real Chat history. Delete them if you like.
 
 ### Next session
-1. Say "continue from NEXT_SESSION.md" and check out `wp/d2-model-packs` (or `main`, if you merged the stack).
-2. **C5** (local chat via a llama.cpp sidecar; Opus reviews the prompt and safety) is next in the delivery order. It opens a loopback socket: obey the privacy invariant (setting off by default, PRIVACY/SECURITY/ARCHITECTURE in the same PR).
+1. Say "continue from NEXT_SESSION.md" and check out `wp/c5-local-chat` (or `main`, if you merged the stack).
+2. **E1** is next in the delivery order (then E2, E4, C4). Cut release 0.3.0 after C5 + D2: publish the chat pack and a speech pack with it.
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 4. Then C4 (offline IPS evaluator), D2, C5, as in the delivery order of the plan.
 
@@ -167,12 +186,13 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
   - WP B7 (pilot): `RemindersStateHolder` (`StateFlow<RemindersUiState>`, `onEvent`), stateless `RemindersContent`, `docs/UI-PATTERN.md` (the template for the other pages).
   - WP C1: command model `intent-v3-pruned` (release `models-2026.11`) adds the sentence embedding (384, unit length) as a 4th output; same weights, other outputs identical; `Understood.embedding`.
   - WP C2: memory search (notes, facts, what you said) — `vector_item` (migration `10.sqm`), `MemorySearch`, "Search memory" on the Memory page, "what did I note about X" → search. 14/16 on the frozen search eval.
+  - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
   - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** C5 (local chat), then E1; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`).
+- **Next:** E1, then E2; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)

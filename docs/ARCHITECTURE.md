@@ -88,3 +88,4 @@ Only the nudge policy learns live on your laptop. Deep models change only throug
 - **Mic:** opens only while you hold the key or press the mic button, and is closed on release (`AudioPrepTest`).
 - **Audio:** Pebble discards the audio after transcription. If you turn on "Keep voice clips I correct" (Memory → Privacy, off by default), Pebble keeps only the clips that you corrected, with your text. You can delete them on the Memory page.
 - **No cloud:** no cloud models and no telemetry.
+- **Connections:** none to the internet. One local connection, off by default: with "Smart replies" on, Pebble runs `llama-server` (llama.cpp b11146) as a child process on 127.0.0.1 with a random port and key (`desktopApp/.../brain/LocalChat.kt`, ADR 0012). It starts on the first chat line and stops after 10 idle minutes and on exit.
