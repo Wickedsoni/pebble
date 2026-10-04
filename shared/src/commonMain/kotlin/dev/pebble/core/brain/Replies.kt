@@ -13,7 +13,7 @@ enum class Script {
         private val hinglishMarkers = setOf(
             "hai", "hain", "ho", "hu", "hoon", "kya", "kaise", "kaisa", "kaun", "tum", "tu", "aap", "mera", "meri", "mujhe",
             "karo", "kar", "na", "nahi", "nahin", "bahut", "yaar", "acha", "accha", "theek", "thik", "aaj", "kal", "abhi", "baje",
-            "sunao", "batao", "chalo", "mein", "ka", "ki", "ke", "ko", "se", "koi", "kuch",
+            "sunao", "batao", "chalo", "mein", "ka", "ki", "ke", "ko", "se", "koi", "kuch", "kholo", "khol", "paani", "pani",
         )
 
         fun detect(text: String): Script = when {
@@ -191,6 +191,39 @@ object Replies {
             "पानी पी लो यार, वरना मुझे भी प्यास लग जाएगी।",
         ),
     )
+
+    /** Page names as the pet says them, per script. */
+    private val pageNames = mapOf(
+        "reminders" to Triple("Reminders", "Reminders", "रिमाइंडर"),
+        "notes" to Triple("Notes", "Notes", "नोट्स"),
+        "water" to Triple("Water", "Paani", "पानी"),
+        "chat" to Triple("Chat", "Chat", "चैट"),
+        "today" to Triple("Today", "Today", "आज"),
+        "companion" to Triple("Companion", "Companion", "साथी"),
+        "memory" to Triple("Memory", "Memory", "मेमोरी"),
+        "about" to Triple("About", "About", "अबाउट"),
+    )
+
+    /**
+     * What the pet says when it opens a page. [forRemoval]: you asked to remove a reminder or note; Pebble
+     * doesn't guess which one, so it shows the list and says so.
+     */
+    fun openPage(page: String, text: String, forRemoval: Boolean): String {
+        val (en, roman, deva) = pageNames[page] ?: Triple(page.replaceFirstChar(Char::uppercase), page, page)
+        val what = if (page == "notes") "note" else "reminder"
+        return when (Script.detect(text)) {
+            Script.EN -> if (forRemoval) "Here are your ${en.lowercase()} — remove the $what you want." else "Opening $en."
+
+            Script.HI_ROMAN -> if (forRemoval) {
+                "Yeh rahe aapke ${roman.lowercase()} — jo hatana hai, wahan se hata do."
+            } else {
+                "$roman khol raha hoon."
+            }
+
+            Script.HI_DEVA -> if (forRemoval) "ये रहे आपके $deva — जो हटाना है, वहाँ से हटा दीजिए।" else "$deva खोल रहा हूँ।"
+        }
+    }
+
     private val cant = mapOf(
         Script.EN to "I can't do that yet — want it saved as a note?",
         Script.HI_ROMAN to "Yeh abhi mujhse nahi hoga — note mein save kar doon?",

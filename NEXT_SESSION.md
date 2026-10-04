@@ -70,6 +70,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - WP B1: `AppEnv` (clock, zone, dispatchers) injected into `PebbleApp`; one `appScope` for every coroutine; `ResolveTimeTest` (9 cases on a fixed clock).
   - WP B2: `CommandExecutor` returns `Executed(line, undo)`; `lastUndo` is gone; voice clips moved to `VoiceCorrectionService`; `CommandExecutorTest`.
   - WP B3: `UiPort` replaces the `notifier` / `openPage` vars (bound once in `Main`); `Logger` + `FileLogger` (`pebble.log`); quiet `runCatching` failures in `PebbleApp` and `VoiceCorrectionService` are logged.
+  - Fix (in the B3 PR): "open reminders" / "notes kholo" / "रिमाइंडर खोलो" open that page (a rule before the model). Before, the model read "reminder" and asked "When should I remind you: “Open”?". Checked in the running app.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.

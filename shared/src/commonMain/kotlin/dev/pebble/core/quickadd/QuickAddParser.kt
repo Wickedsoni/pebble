@@ -39,7 +39,9 @@ sealed interface QuickCommand {
     data class Unsupported(val text: String, val intent: String) : QuickCommand
 
     /** Removing reminders/notes happens in the app for now. */
-    data class OpenPage(val page: String) : QuickCommand
+    // Opens a page of the Pebble window. text: what you said (the reply mirrors its script).
+    // forRemoval: you asked to remove a reminder or note, and the page is where you pick which one.
+    data class OpenPage(val page: String, val text: String = "", val forRemoval: Boolean = false) : QuickCommand
 }
 
 /**
@@ -66,6 +68,30 @@ object QuickAddParser {
             """\b(?:drank|had|finished)\s+(?:(a|an|one|two|three|four|\d+)\s+)?(?:glass(?:es)?|cups?|bottles?)\s+of\s+water\b""",
             RegexOption.IGNORE_CASE,
         )
+
+    /** Page names in all three scripts → the page key (`Page` in the desktop app). */
+    private val pageWords = mapOf(
+        "reminders" to "reminders", "reminder" to "reminders", "रिमाइंडर" to "reminders", "रिमाइंडर्स" to "reminders",
+        "notes" to "notes", "note" to "notes", "नोट्स" to "notes", "नोट" to "notes",
+        "water" to "water", "paani" to "water", "pani" to "water", "पानी" to "water",
+        "chat" to "chat", "chats" to "chat", "conversation" to "chat", "baatcheet" to "chat", "चैट" to "chat", "बातचीत" to "chat",
+        "today" to "today", "home" to "today", "dashboard" to "today", "होम" to "today",
+        "companion" to "companion", "pet" to "companion",
+        "memory" to "memory", "memories" to "memory", "privacy" to "memory", "मेमोरी" to "memory",
+        "about" to "about",
+    )
+    private val pageAlt = pageWords.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }
+
+    // Whole-sentence only, so "remind me to open the shop" or "note: open notes later" never match.
+    private val openPageEnRx = Regex(
+        """^(?:please\s+)?(?:open|go\s+to|take\s+me\s+to)\s+(?:the\s+|my\s+)?($pageAlt)(?:\s+(?:page|tab|screen))?(?:\s+please)?[.!]?$""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val openPageHiRx = Regex(
+        """^(?:mera\s+|meri\s+|mere\s+)?($pageAlt)(?:\s+(?:page|tab|पेज))?\s+(?:kholo|khol\s+do|khol\s+de|khol\s+dena|khol|open\s+karo|open\s+kar\s+do|open\s+kardo|खोलो|खोल\s+दो|खोल\s+दीजिए|खोलिए)(?:\s+(?:na|please|plz))?[.!।]?$""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val noteRx = Regex("""^(?:note|n)\s*[:\-]?\s+(.+)$""", RegexOption.IGNORE_CASE)
     private val everyRx = Regex("""\bevery\s+(\d+(?:\.\d+)?)?\s*(m|min|mins|minutes?|h|hr|hrs|hours?)\b""", RegexOption.IGNORE_CASE)
     private val waterLogRx =
@@ -97,6 +123,9 @@ object QuickAddParser {
         val text = input.trim()
         if (text.isEmpty()) return null
 
+        (openPageEnRx.find(text) ?: openPageHiRx.find(text))?.let { m ->
+            return QuickCommand.OpenPage(pageWords.getValue(m.groupValues[1].lowercase()), text)
+        }
         rememberRx.find(text)?.let { return QuickCommand.RememberFact(it.groupValues[1].trim().trimEnd('.')) }
         noteRx.find(text)?.let { return QuickCommand.AddNote(it.groupValues[1].trim()) }
 

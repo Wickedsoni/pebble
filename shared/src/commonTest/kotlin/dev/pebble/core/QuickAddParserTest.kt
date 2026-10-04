@@ -3,6 +3,7 @@ package dev.pebble.core
 import dev.pebble.core.quickadd.QuickAddParser
 import dev.pebble.core.quickadd.QuickCommand.AddNote
 import dev.pebble.core.quickadd.QuickCommand.LogWater
+import dev.pebble.core.quickadd.QuickCommand.OpenPage
 import dev.pebble.core.quickadd.QuickCommand.RememberFact
 import dev.pebble.core.quickadd.QuickCommand.RemindAt
 import dev.pebble.core.quickadd.QuickCommand.RemindIn
@@ -62,5 +63,29 @@ class QuickAddParserTest {
         assertEquals(LogWater(1), p("मैंने एक गिलास पानी पी लिया"))
         assertEquals(LogWater(1), p("i drank a glass of water"))
         assertEquals(LogWater(2), p("had two glasses of water"))
+    }
+
+    @Test fun openAPageInEveryScript() {
+        fun page(text: String) = (QuickAddParser.parseStrict(text) as? OpenPage)?.page
+        assertEquals("reminders", page("open reminders"))
+        assertEquals("reminders", page("open reminder"))
+        assertEquals("reminders", page("Open the reminders page."))
+        assertEquals("notes", page("go to my notes"))
+        assertEquals("water", page("take me to water"))
+        assertEquals("memory", page("open privacy"))
+        assertEquals("reminders", page("reminders kholo"))
+        assertEquals("notes", page("mere notes khol do na"))
+        assertEquals("water", page("paani page open karo"))
+        assertEquals("reminders", page("रिमाइंडर खोलो"))
+        assertEquals("notes", page("नोट्स खोल दो।"))
+        assertEquals(OpenPage("chat", "open chat"), QuickAddParser.parseStrict("open chat"))
+    }
+
+    @Test fun openingIsOnlyAWholeSentence() {
+        fun page(text: String) = (QuickAddParser.parseStrict(text) as? OpenPage)?.page
+        assertNull(page("remind me to open the shop at 9"))
+        assertNull(page("open the window"))
+        assertNull(page("open reminders for tomorrow"))
+        assertEquals(AddNote("open notes later"), QuickAddParser.parseStrict("note: open notes later"))
     }
 }

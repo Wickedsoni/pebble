@@ -36,7 +36,7 @@ class UiPortTest {
     @Test
     fun beforeBindingNothingHappens() {
         app.ui.notify("Pebble", "water")
-        assertEquals("", app.execute(QuickCommand.OpenPage("notes")).text)
+        assertEquals("Opening Notes.", app.execute(QuickCommand.OpenPage("notes", "open notes")).text)
         assertTrue(warnings.isEmpty())
     }
 

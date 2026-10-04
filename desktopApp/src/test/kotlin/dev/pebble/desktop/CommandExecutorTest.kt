@@ -63,11 +63,7 @@ class CommandExecutorTest {
     fun everyCommandSaysSomethingAndOnlyCreationsCanBeUndone() {
         for (cmd in commands) {
             val executed = app.executor.execute(cmd)
-            if (cmd is QuickCommand.OpenPage) {
-                assertEquals("", executed.line.text, "opening a page is silent")
-            } else {
-                assertTrue(executed.line.text.isNotBlank(), "$cmd says something")
-            }
+            assertTrue(executed.line.text.isNotBlank(), "$cmd says something")
             assertEquals(hasUndo(cmd), executed.undo != null, "undo for $cmd")
             assertTrue(app.executor.describe(cmd).isNotBlank(), "preview for $cmd")
         }

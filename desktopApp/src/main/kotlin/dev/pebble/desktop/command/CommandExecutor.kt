@@ -127,7 +127,7 @@ class CommandExecutor(
 
             is QuickCommand.OpenPage -> {
                 ui.openPage(cmd.page)
-                Executed(PetLine(""), undo = null)
+                Executed(PetLine(Replies.openPage(cmd.page, cmd.text, cmd.forRemoval), Mood.HAPPY, 3_000), undo = null)
             }
         }
     }

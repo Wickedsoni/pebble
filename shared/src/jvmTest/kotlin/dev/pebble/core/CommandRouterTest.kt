@@ -220,4 +220,26 @@ class CommandRouterTest {
         val cmd = (CommandRouter({ model(text to reading) }).route(text) as Routed.Run).command as QuickCommand.RemindAt
         assertEquals("Reminder" to 7, cmd.title to cmd.hour)
     }
+
+    @Test
+    fun openReminderOpensThePageInsteadOfAskingWhen() {
+        // The model reads "reminder" and would ask "When should I remind you: “Open”?"; the rule wins first.
+        val text = "open reminder"
+        val m = model(text to u(text, listOf("O", "O"), "calendar_set" to 0.9f))
+        val router = CommandRouter({ m })
+        val r = assertIs<Routed.Run>(router.route(text))
+        assertEquals(QuickCommand.OpenPage("reminders", text), r.command)
+        assertEquals(Source.RULES, r.source)
+    }
+
+    @Test
+    fun repliesForOpeningMirrorTheScript() {
+        assertEquals("Opening Reminders.", Replies.openPage("reminders", "open reminders", forRemoval = false))
+        assertEquals("Notes khol raha hoon.", Replies.openPage("notes", "notes kholo", forRemoval = false))
+        assertEquals("रिमाइंडर खोल रहा हूँ।", Replies.openPage("reminders", "रिमाइंडर खोलो", forRemoval = false))
+        assertEquals(
+            "Here are your reminders — remove the reminder you want.",
+            Replies.openPage("reminders", "delete my reminder", forRemoval = true),
+        )
+    }
 }
