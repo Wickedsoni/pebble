@@ -434,7 +434,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     private fun lessOften(r: ActiveReminder) {
         speech = null
         val minutes = app.engine.lessOften(r.key) ?: return
-        react(PetLine("Okay — every ${dev.pebble.desktop.formatMinutes(minutes)} from now on.", Mood.IDLE, 3_000))
+        react(PetLine("Okay — every ${dev.pebble.desktop.command.formatMinutes(minutes)} from now on.", Mood.IDLE, 3_000))
     }
 
     /** Which line of a reminder kind's copy to use next, so it isn't the same words every time. */

@@ -19,6 +19,8 @@ import dev.pebble.core.wellness.GLASS_ML
 import dev.pebble.core.wellness.NoteRepository
 import dev.pebble.core.wellness.WaterRepository
 import dev.pebble.db.PebbleDatabase
+import dev.pebble.desktop.command.CommandActions
+import dev.pebble.desktop.command.CommandExecutor
 import dev.pebble.desktop.core.AppEnv
 import dev.pebble.desktop.pet.Mood
 import kotlinx.coroutines.CoroutineScope
@@ -32,9 +34,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
-import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /** Something the pet should say out loud (in its speech bubble), with the face to make. */
 data class PetLine(
@@ -48,7 +48,7 @@ data class PetLine(
  * App-wide object graph. Created once in `main`, shared by every window. Lives on the Swing thread.
  * Time and dispatchers come from [env], so tests can fix "now".
  */
-class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
+class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : CommandActions {
     /** Now, from the app's clock ([env]). Use this instead of the top-level [dev.pebble.desktop.now]. */
     fun now(): Long = env.millis()
 
@@ -119,33 +119,28 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
     val voice = dev.pebble.desktop.voice.VoiceInput(speech, appScope + env.dispatchers.default) {
         settings.bool(Keys.MICROPHONE_ENABLED, true)
     }
-    val voiceSamples = dev.pebble.core.brain.VoiceSampleRepository(db)
+
+    /** Voice clips you corrected (opt-in), kept to tune speech recognition to your voice. */
+    val voiceCorrections = dev.pebble.desktop.voice.VoiceCorrectionService(
+        voice,
+        speech,
+        settings,
+        dev.pebble.core.brain.VoiceSampleRepository(db),
+        clock = this::now,
+        dir = DatabaseFactory.defaultDataDir().toPath().resolve("voice"),
+    )
+    val voiceSamples: dev.pebble.core.brain.VoiceSampleRepository get() = voiceCorrections.samples
 
     /** Where kept voice clips go (tests point it elsewhere). */
-    var voiceDir: java.nio.file.Path = DatabaseFactory.defaultDataDir().toPath().resolve("voice")
+    var voiceDir: java.nio.file.Path by voiceCorrections::dir
 
-    /**
-     * After a voice command runs: if you edited what Whisper heard and you've opted in, keep the clip and
-     * your text — the best possible data for tuning speech recognition to your voice. Otherwise nothing.
-     */
-
-    fun noteVoiceCorrection(finalText: String) {
-        val heard = voice.lastHeard ?: return
-        val audio = voice.lastAudio ?: return
-        if (finalText.trim() == heard.text.trim() || !settings.bool(SettingsRepository.Keys.KEEP_VOICE_CORRECTIONS, false)) return
-        runCatching {
-            val wav = voiceDir.resolve("${now()}.wav")
-            dev.pebble.desktop.voice.writeWav(wav, audio)
-            val model = speech.modelDir?.let { dev.pebble.desktop.voice.SpeechRecognizer.whisperSize(it) } ?: "?"
-            voiceSamples.add(dev.pebble.core.brain.VoiceSample(wav.toString(), heard.text, finalText.trim(), "whisper-$model", now()))
-        }
-    }
+    fun noteVoiceCorrection(finalText: String) = voiceCorrections.noteCorrection(finalText)
 
     /** Deletes every kept voice clip, files and rows. */
-    fun clearVoiceSamples() {
-        voiceSamples.all().forEach { runCatching { java.nio.file.Files.deleteIfExists(java.nio.file.Path.of(it.wavPath)) } }
-        voiceSamples.clear()
-    }
+    fun clearVoiceSamples() = voiceCorrections.clear()
+
+    /** Runs every quick-add command; [openPage] is read when a command needs it, so the UI can set it later. */
+    val executor = CommandExecutor(env, bus, notes, reminders, engine, actions = this, openPage = { openPage(it) })
 
     init {
         // Unconfined: events are written on the publisher's thread, so nothing is lost on exit.
@@ -172,7 +167,7 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
         brain.learn()
     }
 
-    fun remember(text: String) {
+    override fun remember(text: String) {
         val key = memory.remember(text, now())
         bus.publish(PebbleEvent.FactRemembered(key, now()))
     }
@@ -184,11 +179,11 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
         _petLines.tryEmit(line)
     }
 
-    val waterGoalGlasses: Int get() = settings.int(Keys.WATER_GOAL_GLASSES, 8)
+    override val waterGoalGlasses: Int get() = settings.int(Keys.WATER_GOAL_GLASSES, 8)
 
     fun startOfToday(): Long = env.startOfToday()
 
-    fun logWater(glasses: Int = 1): Int {
+    override fun logWater(glasses: Int): Int {
         val goalMl = waterGoalGlasses * GLASS_ML
         val before = water.totalSince(startOfToday())
         repeat(glasses) { water.log(GLASS_ML, now()) }
@@ -221,7 +216,7 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
         water.undoLast(startOfToday())
     }
 
-    fun addNote(text: String): Long = notes.add(text, now()).also { bus.publish(PebbleEvent.NoteCreated(it, now())) }
+    override fun addNote(text: String): Long = notes.add(text, now()).also { bus.publish(PebbleEvent.NoteCreated(it, now())) }
 
     /** Your conversation with Pebble (Quick Add and voice), shown in Quick Add and on the Chat page. */
     val conversation = dev.pebble.core.brain.ConversationRepository(db)
@@ -249,21 +244,18 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
         conversation.add(dev.pebble.core.brain.Turn(now(), text.trim(), via, did, line.text.ifBlank { did }))
     }
 
-    /** How to take back what the last [execute] created (a note or reminder); null if nothing to undo. */
-    private var lastUndo: (() -> Unit)? = null
-
     /**
      * Runs a command the model chose, with a way out: Pebble's reply gets a "Not what I meant" button
      * that undoes it, labels it wrong for the next model, and calls [retry] with the text and the wrong
      * action so Quick Add can ask what you did mean. Unchallenged, it stays a "confirmed" label.
      */
     fun executeFromModel(text: String, run: CommandRouter.Routed.Run, retry: (text: String, wrongAction: String) -> Unit): PetLine {
-        val line = execute(run.command)
+        val executed = executor.execute(run.command)
+        val line = executed.line
         val action = run.action ?: return line
-        val undo = lastUndo
         val id = commandFeedback.record(text.trim(), action, run.understood, now(), CommandFeedbackRepository.CONFIRMED)
         val notWhatIMeant = dev.pebble.desktop.pet.BubbleAction("Not what I meant") {
-            undo?.invoke()
+            executed.undo?.invoke()
             commandFeedback.markWrong(id)
             retry(text, action)
         }
@@ -271,133 +263,10 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
     }
 
     /** Runs a quick-add command and returns what the pet should say about it. */
-    fun execute(cmd: QuickCommand): PetLine {
-        bus.publish(PebbleEvent.QuickAddUsed(cmd::class.simpleName ?: "?", now()))
-        lastUndo = null
-        return when (cmd) {
-            is QuickCommand.AddNote -> {
-                val id = addNote(cmd.text)
-                lastUndo = { notes.delete(id) }
-                PetLine("Saved to your notes.")
-            }
-
-            is QuickCommand.RememberFact -> {
-                remember(cmd.text)
-                PetLine("Got it, I'll remember that.")
-            }
-
-            is QuickCommand.LogWater -> {
-                val glasses = logWater(cmd.glasses)
-                PetLine("$glasses of $waterGoalGlasses glasses today.", Mood.HAPPY)
-            }
-
-            is QuickCommand.SetInterval -> {
-                val rule = reminders.rules().first { it.kind == cmd.kind }
-                val strictness = cmd.strictness ?: rule.strictness
-                reminders.updateRule(rule.id, cmd.minutes, strictness, enabled = true)
-                engine.tick()
-                PetLine("Every ${formatMinutes(cmd.minutes)} · ${strictness.label}")
-            }
-
-            is QuickCommand.RemindIn -> {
-                val at = now() + cmd.minutes * 60_000L
-                val id = reminders.addOneOff(cmd.title, at)
-                lastUndo = { reminders.deleteOneOff(id); engine.tick() }
-                PetLine("I'll remind you in ${formatMinutes(cmd.minutes)}.")
-            }
-
-            is QuickCommand.RemindAt -> {
-                val at = resolve(cmd)
-                val id = reminders.addOneOff(cmd.title, env.toMillis(at))
-                lastUndo = { reminders.deleteOneOff(id); engine.tick() }
-                PetLine("I'll remind you ${describeWhen(at)}.")
-            }
-
-            QuickCommand.ShowUpcoming -> {
-                val next = engine.upcoming(3)
-                PetLine(
-                    if (next.isEmpty()) "Nothing coming up." else "Next: " + next.joinToString(" · ") { "${it.title} ${dueIn(it.dueAt)}" },
-                    Mood.IDLE,
-                    6_000,
-                )
-            }
-
-            QuickCommand.ShowNotes -> {
-                val open = notes.recent(3)
-                PetLine(if (open.isEmpty()) "No open notes." else open.joinToString(" · ") { it.text }, Mood.IDLE, 6_000)
-            }
-
-            QuickCommand.TellTime -> PetLine(
-                "It's " + env.localNow().format(DateTimeFormatter.ofPattern("h:mm a, EEEE")) + ".",
-                Mood.IDLE,
-            )
-
-            is QuickCommand.Chitchat -> PetLine(dev.pebble.core.brain.Replies.chitchat(cmd.text, cmd.intent, cmd.mood), Mood.HAPPY, 5_000)
-
-            is QuickCommand.Unsupported -> PetLine(dev.pebble.core.brain.Replies.unsupported(cmd.text), Mood.IDLE, 5_000)
-
-            is QuickCommand.OpenPage -> {
-                openPage(cmd.page)
-                PetLine("")
-            }
-        }
-    }
-
-    private fun dueIn(at: Long): String {
-        val m = ((at - now()) / 60_000).toInt()
-        return if (m <= 0) "now" else "in ${formatMinutes(m)}"
-    }
+    fun execute(cmd: QuickCommand): PetLine = executor.execute(cmd).line
 
     /** One-line preview shown under the quick-add field before you press Enter. */
-    fun describe(cmd: QuickCommand): String = when (cmd) {
-        is QuickCommand.AddNote -> "Save note: “${cmd.text}”"
-
-        is QuickCommand.RememberFact -> "Remember: “${cmd.text}”"
-
-        is QuickCommand.LogWater -> "Log ${cmd.glasses} glass${if (cmd.glasses > 1) "es" else ""} of water"
-
-        is QuickCommand.SetInterval -> "${cmd.kind.name.lowercase().replaceFirstChar {
-            it.uppercase()
-        }} reminder every ${formatMinutes(cmd.minutes)}" +
-            (cmd.strictness?.let { " · ${it.label}" } ?: "")
-
-        is QuickCommand.RemindIn -> "Remind me: “${cmd.title}” in ${formatMinutes(cmd.minutes)}"
-
-        is QuickCommand.RemindAt -> "Remind me: “${cmd.title}” ${describeWhen(resolve(cmd))}"
-
-        QuickCommand.ShowUpcoming -> "Show what's coming up"
-
-        QuickCommand.ShowNotes -> "Show my notes"
-
-        QuickCommand.TellTime -> "Tell me the time"
-
-        is QuickCommand.Chitchat -> "Chat with Pebble"
-
-        is QuickCommand.Unsupported -> "Can't do this yet"
-
-        is QuickCommand.OpenPage -> "Open ${cmd.page} in Pebble"
-    }
-
-    /** When a "remind me at …" command fires, on the app's clock. Internal for [ResolveTimeTest]. */
-    internal fun resolve(cmd: QuickCommand.RemindAt): LocalDateTime {
-        val now = env.localNow()
-        val base = env.today().plusDays((cmd.dayOffset ?: 0).toLong())
-        // "5 baje" without am/pm: whichever of 5:00 / 17:00 comes next on that day.
-        val candidates = if (cmd.flexibleHalfDay && cmd.hour < 12) listOf(cmd.hour, cmd.hour + 12) else listOf(cmd.hour)
-        val onDay = candidates.map { base.atTime(it, cmd.minute) }
-        if (cmd.dayOffset != null) return onDay.firstOrNull { it.isAfter(now) } ?: onDay.last()
-        return onDay.firstOrNull { it.isAfter(now) } ?: base.plusDays(1).atTime(candidates.first(), cmd.minute)
-    }
-
-    private fun describeWhen(at: LocalDateTime): String {
-        val time = at.format(DateTimeFormatter.ofPattern("h:mm a"))
-        val today = env.today()
-        return when (at.toLocalDate()) {
-            today -> "at $time"
-            today.plusDays(1) -> "tomorrow at $time"
-            else -> at.format(DateTimeFormatter.ofPattern("EEE d MMM 'at' h:mm a"))
-        }
-    }
+    fun describe(cmd: QuickCommand): String = executor.describe(cmd)
 
     fun shutdown() {
         bus.publish(PebbleEvent.AppStopping(now()))
@@ -415,9 +284,3 @@ fun now(): Long = System.currentTimeMillis()
 @Deprecated("Uses the system zone directly. Use PebbleApp.env.minuteOfDay().", ReplaceWith("app.env.minuteOfDay(millis)"))
 fun minuteOfDay(millis: Long): Int =
     java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
-
-fun formatMinutes(m: Int): String = when {
-    m < 60 -> "$m min"
-    m % 60 == 0 -> if (m == 60) "1 hour" else "${m / 60} hours"
-    else -> "${m / 60}h ${m % 60}m"
-}

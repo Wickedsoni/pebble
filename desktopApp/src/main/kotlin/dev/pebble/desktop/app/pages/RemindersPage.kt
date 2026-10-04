@@ -31,7 +31,7 @@ import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
 import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
-import dev.pebble.desktop.formatMinutes
+import dev.pebble.desktop.command.formatMinutes
 import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.Toggle
