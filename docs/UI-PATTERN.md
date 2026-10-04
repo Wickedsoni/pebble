@@ -69,6 +69,6 @@ Test these items for each page:
 | Chat | To do |
 | Memory | Search card done (WP C2: `MemorySearchStateHolder`); "Teach Pebble a command" card done (WP C3: `TeachStateHolder`); the rest of the page to do |
 | Companion | To do |
-| About | Not necessary: the page shows only fixed text |
+| About | "Model packs" card done (WP D2: `ModelPacksStateHolder`); the rest is fixed text |
 
 Change one page in each PR. Update this table in the same PR.
