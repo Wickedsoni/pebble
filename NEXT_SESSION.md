@@ -66,7 +66,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 | 12 | #27 | `wp/c1-sentence-embedding` | C1: sentence embedding (model `intent-v3-pruned`) |
 | 13 | #28 | `wp/c2-memory-search` | C2: memory search |
 | 14 | #29 | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
-| 15 | (new) | `wp/d2-model-packs` | D2: signed model packs, lite installer (ADR 0011) |
+| 15 | #30 | `wp/d2-model-packs` | D2: signed model packs, lite installer (ADR 0011) |
 
 - Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
 - If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
