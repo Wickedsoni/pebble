@@ -13,6 +13,14 @@ kotlin {
     compilerOptions { allWarningsAsErrors.set(true) }
 }
 
+// On CI, print what the tests print (parity, router eval, SKIPPED lines), so the log proves the model tests ran.
+tasks.test {
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = System.getenv("CI") != null
+    }
+}
+
 dependencies {
     implementation(project(":shared"))
     // Coverage: `:desktopApp:koverHtmlReport` merges both modules. Report only; no threshold yet.
