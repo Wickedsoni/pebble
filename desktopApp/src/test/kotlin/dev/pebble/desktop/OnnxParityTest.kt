@@ -12,6 +12,7 @@ import java.nio.file.Path
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -42,6 +43,7 @@ class OnnxParityTest {
             var nearTies = 0
             val realFlips = mutableListOf<String>()
             var moods = 0; var moodRows = 0
+            var embeddingRows = 0; var maxDe = 0f
             for (row in rows) {
                 val r = row.jsonObject
                 val text = r.getValue("text").jsonPrimitive.content
@@ -64,6 +66,13 @@ class OnnxParityTest {
                     if (got.tags.size == wantTags.size && confident.isEmpty()) tags++
                 }
                 maxDp = maxOf(maxDp, abs(got.top.confidence - r.getValue("p").jsonPrimitive.float))
+                r["embedding8"]?.let { want ->
+                    embeddingRows++
+                    val e = assertNotNull(got.embedding, "the model has an embedding output, Kotlin must read it").values
+                    want.jsonArray.forEachIndexed { i, v -> maxDe = maxOf(maxDe, abs(e[i] - v.jsonPrimitive.float)) }
+                    val norm = kotlin.math.sqrt(e.sumOf { (it * it).toDouble() })
+                    assertTrue(abs(norm - 1.0) < 1e-3, "embedding is unit length, was $norm")
+                }
                 r["mood"]?.let { want ->
                     moodRows++
                     if (got.mood?.mood == want.jsonPrimitive.content) moods++
@@ -72,7 +81,7 @@ class OnnxParityTest {
             }
             println(
                 "parity over ${rows.size}: tokens $tokens, intents $intents, slot tags $tags (near-tie flips $nearTies), " +
-                    "moods $moods/$moodRows, max |Δp| $maxDp",
+                    "moods $moods/$moodRows, max |Δp| $maxDp, embeddings $embeddingRows (max |Δe| $maxDe)",
             )
             realFlips.forEach { println("slot flip: $it") }
             assertEquals(moodRows, moods, "moods differ")
@@ -80,6 +89,7 @@ class OnnxParityTest {
             assertEquals(rows.size, intents, "intents differ")
             assertEquals(rows.size, tags, "slot tags differ: $realFlips")
             assertTrue(maxDp < MAX_CONFIDENCE_DRIFT, "confidences drift: $maxDp")
+            assertTrue(maxDe < 1e-3f, "embedding values drift: $maxDe")
         }
     }
 

@@ -21,6 +21,8 @@ data class Understood(
     val tags: List<String>,
     /** Null for models without a mood head. */
     val mood: MoodGuess? = null,
+    /** The sentence as a unit-length vector, for search and the personal layer; null for models before v3. */
+    val embedding: Embedding? = null,
 ) {
     val top: IntentGuess get() = guesses.first()
 
@@ -65,4 +67,26 @@ data class Understood(
 fun interface Understanding {
     /** Returns null when no model is available (missing file, failed load) — callers fall back to rules. */
     fun understand(text: String): Understood?
+}
+
+/**
+ * A sentence embedding (mean-pooled encoder output, L2-normalised). Its own class, not a raw `FloatArray`
+ * in [Understood]: arrays compare by reference, which would break `Understood`'s data-class equality.
+ */
+class Embedding(val values: FloatArray) {
+    val size: Int get() = values.size
+
+    /** Cosine similarity; both vectors are unit length, so this is the dot product. */
+    fun cosine(other: Embedding): Float {
+        require(other.size == size) { "embeddings of different size: $size vs ${other.size}" }
+        var s = 0f
+        for (i in values.indices) s += values[i] * other.values[i]
+        return s
+    }
+
+    override fun equals(other: Any?): Boolean = other is Embedding && values.contentEquals(other.values)
+
+    override fun hashCode(): Int = values.contentHashCode()
+
+    override fun toString(): String = "Embedding(${values.size})"
 }

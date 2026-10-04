@@ -90,7 +90,7 @@ Line numbers can move. If a line does not match, search for the name.
 | `ModelManager` and `SpeechRecognizer` are thin wrappers over `LazyModel<T : AutoCloseable>` (locate → verify → load on `io` → idle unload; `status: StateFlow<ModelStatus>`; `getOrNull()` never blocks). Speech models are one `AsrEngines` holder. `ModelRuntime` owns both (WP B4) | `desktopApp/.../brain/LazyModel.kt`, `brain/ModelRuntime.kt` |
 | `VerifiedModelCache` (`%APPDATA%\Pebble\models-verified.json`: path, size, mtime, sha256) skips re-hashing unchanged files; the speech check went from ~180 ms to ~1 ms. Only the `ModelRuntime` instances use it; `ModelManager(scope)` / `SpeechRecognizer(scope)` built directly still hash every load (WP B4) | `brain/VerifiedModelCache.kt`, `brain/ModelChecksums.kt` |
 | **Load-order invariant:** ONNX Runtime env before sherpa `LibraryUtils.load()`, in one place: `ModelRuntime.loadSherpa()` (lazy, not at start-up) | `brain/ModelRuntime.kt`, `VoiceSpikeTest` |
-| Intent ONNX outputs read by name (`intent_logits`, `slot_logits`, `mood_logits`; `OrtSession.Result.get(String): Optional<OnnxValue>`, checked in ORT 1.30), with index fallback. The mean-pooled vector exists in PyTorch but is **not exported** | `OnnxIntentModel.kt:73-94`, `brain/src/pebble_brain/export_onnx.py:48`, `intent_model.py:36-41` |
+| Intent ONNX outputs read by name (`intent_logits`, `slot_logits`, `mood_logits`; `OrtSession.Result.get(String): Optional<OnnxValue>`, checked in ORT 1.30), with index fallback. Since v3 (WP C1) a 4th output `embedding` [batch, 384] (mean-pooled before dropout, L2-normalised) fills `Understood.embedding: Embedding?` (content equality, `cosine()`); null for older models | `OnnxIntentModel.kt:73-94`, `brain/src/pebble_brain/export_onnx.py:48`, `intent_model.py:36-41` |
 | Schema: `.sq` files + migrations `1.sqm`…`9.sqm`. The **current schema version is 10; the next migration file is `10.sqm`** (upgrades 10→11). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
 | `one_off_reminder.id INTEGER AUTOINCREMENT`; hard `DELETE`; no `updated_at` | `Reminders.sq:13-19,43-44` |
 | `ReminderEngine` keys one-off reminders by `Long` id: `oneOffKey(r.id)` | `shared/.../reminders/ReminderEngine.kt:61,91,195` |
@@ -120,7 +120,7 @@ Line numbers can move. If a line does not match, search for the name.
    - a new `MigrationTest` case;
    - `SchemaParityTest` must stay green. It migrates a version-1 database through every `.sqm` and compares it with a fresh one.
 5. **Do not delete `event_log` rows.** The offline IPS eval needs the raw history (ADR 0004). To count over all history, use `EventHistory`, not `eventsOfTypeSince(type, 0)`: rows before the watermark are already in `daily_stat`, and a raw query from 0 is slow on long histories.
-6. **`Understood` is a data class that equality checks use.** Do not add a raw `FloatArray` field: arrays compare by reference. Use a wrapper that uses `contentEquals`.
+6. **`Understood` is a data class that equality checks use.** Do not add a raw `FloatArray` field: arrays compare by reference. Use a wrapper that uses `contentEquals`, like `Embedding`.
 7. **Code that opens a socket** must obey the privacy invariant above.
 8. **Spotless/ktlint 1.8.0 runs in CI.** Run `./gradlew spotlessApply` before you commit.
 9. **Kotlin warnings are errors** (`allWarningsAsErrors` in both modules). Fix the warning. Do not suppress it without a reason in the PR.

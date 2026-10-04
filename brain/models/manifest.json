@@ -2,23 +2,23 @@
   "models": [
     {
       "name": "intent",
-      "version": "v2r-pruned",
-      "task": "command intent + slots + mood (en / hi_deva / hi_roman)",
+      "version": "v3-pruned",
+      "task": "command intent + slots + mood + sentence embedding (en / hi_deva / hi_roman)",
       "base": "intfloat/multilingual-e5-small (MIT), vocab pruned 250002 -> 26649",
       "trained_on": "Amazon MASSIVE 1.1 en-US + hi-IN (CC BY 4.0) + rule-based Roman transliteration with chat spelling + Pebble template data (pebble_data.py, ~1.7k sentences x3) + mood templates (low/neutral/good, incl. compliments) + in-app feedback when present",
       "files": {
         "model": {
-          "path": "intent-v2r-pruned/intent.int8.onnx",
-          "bytes": 32654499,
-          "sha256": "052566aff5dbc3c1f662c2cebfa477f3b41974406601bc311f791e31f667f018"
+          "path": "intent-v3-pruned/intent.int8.onnx",
+          "bytes": 32623863,
+          "sha256": "6e594c5c1654f4479596a6b8554ab80a91f6e988f4bbb3d2d45c34d33781b22e"
         },
         "tokenizer": {
-          "path": "intent-v2r-pruned/tokenizer/tokenizer.json",
+          "path": "intent-v3-pruned/tokenizer/tokenizer.json",
           "bytes": 2031133,
           "sha256": "21404126790c79c4cdf98671b277b8de0103d42cbbf742106a5e35714272ee3d"
         },
         "labels": {
-          "path": "intent-v2r-pruned/labels.json",
+          "path": "intent-v3-pruned/labels.json",
           "bytes": 3602,
           "sha256": "1a98f8675de3e5cff32853be3fbe6be8cb4f36b06a9c342a848eb81c78b15b62"
         }
@@ -46,25 +46,31 @@
           "acted_wrongly": 0,
           "of": 68
         },
-        "cpu_latency_ms_int8_4_threads_median": 4.3,
+        "cpu_latency_ms_int8_4_threads_median": 3.0,
         "mood_v1_acc_int8": 0.8667
       },
       "previous": {
-        "version": "v2-pruned",
+        "version": "v2r-pruned",
         "pebble_v1_router_int8": {
           "right": 65,
-          "right_or_first_choice": 67,
+          "right_or_first_choice": 68,
           "acted_wrongly": 0,
           "of": 68
         },
-        "note": "full 8-bit weights; on AMD EPYC 7763 (no VNNI) 3 of 194 parity intents differed, |dp| up to 0.44"
+        "note": "same weights; v3 adds the embedding output, the other three outputs are identical (parity 194/194, max |dp| 0.0)"
       },
       "download": {
-        "url": "https://github.com/Wickedsoni/pebble/releases/download/models-2026.10b/intent-v2r-pruned.zip",
-        "sha256": "c92f6714d4b1be6943d505a78d4259898c38d306c86c060370141d12d82a0550",
-        "bytes": 24257052
+        "url": "https://github.com/Wickedsoni/pebble/releases/download/models-2026.11/intent-v3-pruned.zip",
+        "sha256": "bd673d140d00ffc0492c1dbf85777b78c62335e3b780b321590dd2c19f5c366f",
+        "bytes": 24257034
       },
-      "quantization": "dynamic int8, QInt8 weights, per-channel, reduce_range (7-bit weights: no U8S8 saturation on x86 CPUs without VNNI)"
+      "quantization": "dynamic int8, QInt8 weights, per-channel, reduce_range (7-bit weights: no U8S8 saturation on x86 CPUs without VNNI)",
+      "outputs": {
+        "intent_logits": "[batch, 60]",
+        "slot_logits": "[batch, seq, 109]",
+        "mood_logits": "[batch, 3]",
+        "embedding": "[batch, 384], mean-pooled before dropout, L2-normalised"
+      }
     },
     {
       "name": "asr",
