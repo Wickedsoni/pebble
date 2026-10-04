@@ -23,6 +23,13 @@ class MigrationTest {
                     "CREATE TABLE command_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, chosen_action TEXT NOT NULL, model_intent TEXT, model_confidence REAL, at_millis INTEGER NOT NULL)",
                 )
                 s.execute("INSERT INTO command_feedback(text, chosen_action, at_millis) VALUES ('tum cute ho', 'chitchat', 1)")
+                // Every real v4 database has these (1.sqm); 11.sqm (WP E1) alters them.
+                s.execute(
+                    "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
+                )
+                s.execute(
+                    "CREATE TABLE one_off_reminder (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, due_at INTEGER NOT NULL, strictness TEXT NOT NULL, done_at INTEGER)",
+                )
                 s.execute(
                     "CREATE TABLE reminder_rule (id TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, interval_minutes INTEGER NOT NULL, strictness TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, active_from_minute INTEGER NOT NULL DEFAULT 480, active_to_minute INTEGER NOT NULL DEFAULT 1380, last_done_at INTEGER)",
                 )
@@ -91,6 +98,47 @@ class MigrationTest {
         assertEquals(0L, db.vectorsQueries.vectorCount().executeAsOne())
         dev.pebble.core.wellness.NoteRepository(db).add("buy milk", 1)
         assertEquals(listOf("buy milk"), db.vectorsQueries.sourceNotes().executeAsList().map { it.text })
+    }
+
+    /** 11.sqm (WP E1): notes and one-off reminders gain uid (unique, backfilled) and the sync columns; rows stay. */
+    @Test
+    fun version11RowsBecomeSyncReady() {
+        val file = Files.createTempFile("pebble-v11", ".db").toFile().apply { deleteOnExit() }
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute("CREATE TABLE setting (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+                s.execute(
+                    "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
+                )
+                s.execute(
+                    "CREATE TABLE one_off_reminder (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, due_at INTEGER NOT NULL, strictness TEXT NOT NULL, done_at INTEGER)",
+                )
+                s.execute("INSERT INTO note(text, created_at, updated_at) VALUES ('buy milk', 1, 2), ('call plumber', 3, 4)")
+                s.execute("INSERT INTO one_off_reminder(title, due_at, strictness) VALUES ('Call mom', 5000, 'NORMAL')")
+                s.execute("INSERT INTO one_off_reminder(title, due_at, strictness, done_at) VALUES ('Old one', 100, 'NORMAL', 200)")
+                s.execute("PRAGMA user_version = 11")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        val notes = dev.pebble.core.wellness.NoteRepository(db)
+        val reminders = dev.pebble.core.reminders.ReminderRepository(db)
+        assertEquals(listOf("call plumber", "buy milk"), notes.recent(10).map { it.text })
+        assertEquals(listOf("Call mom"), reminders.pendingOneOffs().map { it.title })
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                for (table in listOf("note", "one_off_reminder")) {
+                    s.executeQuery("SELECT uid FROM $table").use { r ->
+                        val uids = buildList { while (r.next()) add(r.getString(1)) }
+                        assertEquals(uids.size, uids.toSet().size, "$table uids are unique")
+                        uids.forEach { assertEquals(true, it.matches(Regex("[0-9a-f]{32}")), "$table uid $it") }
+                    }
+                }
+                s.executeQuery("SELECT title, updated_at FROM one_off_reminder ORDER BY id").use { r ->
+                    val rows = buildList { while (r.next()) add(r.getString(1) to r.getLong(2)) }
+                    assertEquals(listOf("Call mom" to 5000L, "Old one" to 200L), rows, "updated_at backfilled from done_at, else due_at")
+                }
+            }
+        }
     }
 
     /** Dry run on a *copy* of this machine's real database, if there is one. */

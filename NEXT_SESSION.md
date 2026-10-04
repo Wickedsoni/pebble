@@ -5,7 +5,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ## Session handoff (5 Oct 2026) — read this first
 
-**This file is current only on branch `wp/c5-local-chat`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
+**This file is current only on branch `wp/e1-sync-ready-rows`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
 
 ### 5 Oct: WP C3 done (PR #29, on top of #28)
 - **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
@@ -28,6 +28,12 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - The check found that the Teach card was squeezed under the Privacy card. It now shares the left column.
   - Your database is now at schema 11 (C2's `vector_item`). The installed v0.1.2 still starts on it.
 - **Follow-up (not C3):** `pebble.log` shows "history roll-up failed: [SQLITE_BUSY] database is locked" once at start-up (also on 4 Oct). It is probably a deferred transaction that reads, then writes while the event writer commits (WAL returns BUSY at once, so `busy_timeout` does not help). It tries again 10 minutes later. Fix: begin the roll-up transaction as IMMEDIATE.
+
+### 5 Oct: WP E1 done (sync-ready rows)
+- Migration `11.sqm`: `note` and `one_off_reminder` gain `uid` (unique, backfilled), `updated_at`, `deleted_at`, `hlc`, `origin_device`. Deletes are tombstones, purged after 90 days. `device.id` is made at the first start (ADR 0013).
+- **Live check:** your real database migrated 11 → 12 (`integrity_check` ok, all rows got uids and the device id). A ✕ on the Reminders page left a tombstone. Backup taken **after** the migration (my pre-migration backup command failed): `%APPDATA%\Pebble\pebble-backup-e1.db`. Delete it when you are happy.
+- Test change: the v4 fixture in `MigrationTest` gained the `note` and `one_off_reminder` tables that every real v4 database has (11.sqm alters them). No assertion changed.
+- **Model work (C6) is deferred by you** (RTX 4050 6 GB, no budget for now). The plan is in ADR 0012; do not start it until you bring it up.
 
 ### 5 Oct: WP C5 done (local chat, "Smart replies")
 - **Model choice (ADR 0012):** four models measured on `brain/eval/chat_v1.jsonl` (24 lines in 3 scripts), and a person read every reply:
@@ -86,6 +92,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 | 14 | #29 | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
 | 15 | #30 | `wp/d2-model-packs` | D2: signed model packs, lite installer (ADR 0011) |
 | 16 | #31 | `wp/c5-local-chat` | C5: local chat, Smart replies, English only (ADR 0012) |
+| 17 | (new) | `wp/e1-sync-ready-rows` | E1: sync-ready rows, tombstones, device id (ADR 0013) |
 
 - Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
 - If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
@@ -103,7 +110,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 
 ### Next session
 1. Say "continue from NEXT_SESSION.md" and check out `wp/c5-local-chat` (or `main`, if you merged the stack).
-2. **E1** is next in the delivery order (then E2, E4, C4). Cut release 0.3.0 after C5 + D2: publish the chat pack and a speech pack with it.
+2. **E2** (calendar) is next in the delivery order (then E4, C4). Cut release 0.3.0 after C5 + D2: publish the chat pack and a speech pack with it.
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 4. Then C4 (offline IPS evaluator), D2, C5, as in the delivery order of the plan.
 
@@ -186,13 +193,14 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
   - WP B7 (pilot): `RemindersStateHolder` (`StateFlow<RemindersUiState>`, `onEvent`), stateless `RemindersContent`, `docs/UI-PATTERN.md` (the template for the other pages).
   - WP C1: command model `intent-v3-pruned` (release `models-2026.11`) adds the sentence embedding (384, unit length) as a 4th output; same weights, other outputs identical; `Understood.embedding`.
   - WP C2: memory search (notes, facts, what you said) — `vector_item` (migration `10.sqm`), `MemorySearch`, "Search memory" on the Memory page, "what did I note about X" → search. 14/16 on the frozen search eval.
+  - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
   - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** E1, then E2; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
+- **Next:** E2 (calendar), then E4; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)

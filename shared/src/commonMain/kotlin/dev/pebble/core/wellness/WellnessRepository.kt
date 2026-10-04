@@ -41,8 +41,20 @@ class NoteRepository(private val db: PebbleDatabase) {
 
     fun archive(id: Long, at: Long) = q.archiveNote(at, id)
 
-    /** Removes a note outright (used to undo a note Pebble created by mistake). */
-    fun delete(id: Long) = q.deleteNote(id)
+    /**
+     * Removes a note from view (used to undo a note Pebble created by mistake). The row stays as a tombstone
+     * (`deleted_at`) so that sync can tell other devices (WP E1); [purgeTombstones] removes it later.
+     */
+    fun delete(id: Long, at: Long? = null) = q.deleteNote(at, id)
+
+    /** Removes tombstones older than [before]. Returns how many. */
+    fun purgeTombstones(before: Long): Long = q.purgeNoteTombstones(before).value
+
+    /** Gives notes made before this device had an id, or by an older Pebble without uids, a uid and [deviceId]. */
+    fun claim(deviceId: String) = db.transaction {
+        q.fillNoteUids()
+        q.claimNotes(deviceId)
+    }
 
     fun recent(limit: Long = 5): List<Note> =
         q.activeNotes(limit).executeAsList().map { Note(it.id, it.text, it.updated_at) }

@@ -32,7 +32,7 @@ SELECT count(*) FROM vector_item;
 
 -- What can be indexed, with its current text.
 sourceNotes:
-SELECT id, text FROM note;
+SELECT id, text FROM note WHERE deleted_at IS NULL;
 
 sourceFacts:
 SELECT id, text FROM memory WHERE kind = 'FACT' AND hidden = 0;

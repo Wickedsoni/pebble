@@ -11,8 +11,15 @@ CREATE TABLE note (
     text TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    archived INTEGER NOT NULL DEFAULT 0
+    archived INTEGER NOT NULL DEFAULT 0,
+    -- Sync-ready (WP E1, 11.sqm): see 11.sqm for each column.
+    uid TEXT,
+    deleted_at INTEGER,
+    hlc TEXT,
+    origin_device TEXT
 );
+
+CREATE UNIQUE INDEX note_uid ON note(uid);
 
 logWater:
 INSERT INTO water_log(at_millis, ml) VALUES (?, ?);
@@ -24,7 +31,8 @@ undoLastWaterSince:
 DELETE FROM water_log WHERE id = (SELECT max(id) FROM water_log WHERE at_millis >= ?);
 
 insertNote:
-INSERT INTO note(text, created_at, updated_at) VALUES (?, ?, ?);
+INSERT INTO note(text, created_at, updated_at, uid, origin_device)
+VALUES (?, ?, ?, lower(hex(randomblob(16))), (SELECT value FROM setting WHERE key = 'device.id'));
 
 lastInsertedId:
 SELECT last_insert_rowid();
@@ -32,14 +40,26 @@ SELECT last_insert_rowid();
 updateNote:
 UPDATE note SET text = ?, updated_at = ? WHERE id = ?;
 
+-- A tombstone, not a DELETE: other devices must learn about the delete (WP E1). Null time: now.
 deleteNote:
-DELETE FROM note WHERE id = ?;
+UPDATE note SET deleted_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000), updated_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000) WHERE id = :id;
+
+-- Tombstones older than the time given (90 days until sync can confirm that every peer has seen them).
+purgeNoteTombstones:
+DELETE FROM note WHERE deleted_at IS NOT NULL AND deleted_at < ?;
+
+-- Rows made before this device had an id, or by an older Pebble that has no uid: they are this device's.
+claimNotes:
+UPDATE note SET origin_device = ? WHERE origin_device IS NULL;
+
+fillNoteUids:
+UPDATE note SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
 
 archiveNote:
 UPDATE note SET archived = 1, updated_at = ? WHERE id = ?;
 
 activeNotes:
-SELECT * FROM note WHERE archived = 0 ORDER BY updated_at DESC LIMIT ?;
+SELECT * FROM note WHERE archived = 0 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?;
 
 waterLogSince:
 SELECT at_millis, ml FROM water_log WHERE at_millis >= ? ORDER BY at_millis;

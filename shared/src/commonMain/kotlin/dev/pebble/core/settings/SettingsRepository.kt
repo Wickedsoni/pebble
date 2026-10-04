@@ -40,5 +40,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
 
         /** Small talk from the local chat model (WP C5). Off by default; it starts a process on 127.0.0.1. */
         const val SMART_REPLIES = "chat.smartReplies"
+
+        /** This device's id for sync (WP E1, [DeviceIdentity]). Never changes once made. */
+        const val DEVICE_ID = "device.id"
     }
 }
