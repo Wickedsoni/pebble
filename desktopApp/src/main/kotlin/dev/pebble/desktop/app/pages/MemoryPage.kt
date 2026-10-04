@@ -6,6 +6,8 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -139,15 +141,7 @@ fun MemoryPage(app: PebbleApp) {
                     Chip("Delete $voiceClips voice clips", false) { app.clearVoiceSamples(); voiceClips = 0 }
                 }
             }
-            GlassCard(Modifier.fillMaxWidth().weight(1f)) {
-                CardLabel("AI assistants", PebbleIcons.Spark, c.accent)
-                Text(
-                    "Coming later: connect Claude Code, Codex or Gemini so I can remember what you worked on together.",
-                    color = c.secondary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                )
-            }
+            TeachCard(app, Modifier.fillMaxWidth().weight(1f))
         }
     }
 }
@@ -221,5 +215,50 @@ fun MemorySearchContent(state: MemorySearchUiState, onEvent: (MemorySearchEvent)
                 }
             }
         }
+    }
+}
+
+/** "Teach Pebble a command": makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
+@Composable
+private fun TeachCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { TeachStateHolder(app.teaching, scope) }
+    val state by holder.state.collectAsState()
+    TeachContent(state, holder::onEvent, modifier)
+}
+
+/** Stateless: what the phrase should do, the phrase field, and what you taught. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TeachContent(state: TeachUiState, onEvent: (TeachEvent) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalGlass.current
+    GlassCard(modifier) {
+        CardLabel("Teach Pebble a command", PebbleIcons.Spark, c.accent)
+        Text(
+            "Pick what it should do, then type 3 to 5 ways you say it. Pebble uses them at once.",
+            color = c.secondary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            state.choices.forEach { ch -> Chip(ch.label, ch.action == state.action) { onEvent(TeachEvent.Choose(ch.action)) } }
+        }
+        Spacer(Modifier.height(8.dp))
+        GlassField("How you say it, e.g. “notes kholo yaar”", Modifier.fillMaxWidth()) { onEvent(TeachEvent.Teach(it)) }
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(Modifier.weight(1f, fill = false)) {
+            items(state.taught, key = { it.id }) { row ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(row.text, color = c.content, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(row.actionLabel, color = c.secondary, fontSize = 11.sp)
+                    }
+                    IconButton(PebbleIcons.Close, size = 22.dp) { onEvent(TeachEvent.Unteach(row.id)) }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Chip("Forget what you taught me", false) { onEvent(TeachEvent.ForgetAll) }
     }
 }

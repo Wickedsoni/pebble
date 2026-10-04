@@ -136,8 +136,44 @@ class PebbleApp(
     /** The local command model, loaded on demand; the router falls back to rules without it. */
     val models = dev.pebble.desktop.brain.ModelRuntime(appScope + env.dispatchers.default, DatabaseFactory.defaultDataDir().toPath())
     val model = models.intent
-    val router = dev.pebble.core.brain.CommandRouter({ model }, today = { env.today().dayOfWeek.value })
     val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
+
+    /**
+     * What you taught, picked and marked wrong, blended into the model's reading at once (WP C3, ADR 0010).
+     * Rows before [Keys.PERSONAL_SINCE] are ignored ("Forget what you taught me"); they stay as training labels.
+     */
+    val personal = dev.pebble.core.brain.PersonalLayer(
+        source = { commandFeedback.personalSince(settings.get(Keys.PERSONAL_SINCE)?.toLongOrNull() ?: 0L) },
+        embed = model::embedIfLoaded,
+        modelVersion = { model.version },
+        hourOf = { env.minuteOfDay(it) / 60 },
+        clock = this::now,
+    )
+    val router = dev.pebble.core.brain.CommandRouter({ model }, today = { env.today().dayOfWeek.value }, personal = personal)
+
+    /** "Teach Pebble a command" on the Memory page. Each change refreshes the layer, so the next sentence uses it. */
+    val teaching = object : dev.pebble.desktop.app.pages.TeachingPort {
+        override suspend fun taught() = withContext(env.dispatchers.io) { commandFeedback.taught() }
+
+        override suspend fun teach(phrase: String, action: String) = withContext(env.dispatchers.io) {
+            commandFeedback.teach(phrase, action, now())
+            personal.refresh()
+            Unit
+        }
+
+        override suspend fun unteach(id: Long) = withContext(env.dispatchers.io) {
+            commandFeedback.delete(id)
+            personal.refresh()
+            Unit
+        }
+
+        override suspend fun forgetAll() = withContext(env.dispatchers.io) {
+            commandFeedback.forgetTaught()
+            settings.set(Keys.PERSONAL_SINCE, now().toString())
+            personal.refresh()
+            Unit
+        }
+    }
 
     /** Offline speech (VAD + Whisper), loaded only when you talk and freed when idle. */
     val speech = models.speech
@@ -212,6 +248,9 @@ class PebbleApp(
                 runCatching { memorySearch.reconcile() }
                     .onSuccess { n -> if (n > 0) log.info(TAG, "memory search: indexed $n items") }
                     .onFailure { log.warn(TAG, "memory search indexing failed", it) }
+                runCatching { personal.refresh() }
+                    .onSuccess { n -> if (n > 0) log.info(TAG, "personal layer: embedded $n examples") }
+                    .onFailure { log.warn(TAG, "personal layer refresh failed", it) }
             }
         }
         appScope.launch {
@@ -327,6 +366,7 @@ class PebbleApp(
     /** You picked [option] from "Did you mean…": a strong label for the next model, and a turn in the chat. */
     fun converseChoice(text: String, via: String, option: CommandRouter.Option, understood: dev.pebble.core.brain.Understood?): PetLine {
         commandFeedback.record(text.trim(), option.action, understood, now())
+        requestIndexing() // the personal layer learns the pick
         val line = execute(option.command)
         remember(text, via, option.command, line)
         return line
@@ -350,6 +390,7 @@ class PebbleApp(
         val notWhatIMeant = dev.pebble.desktop.pet.BubbleAction("Not what I meant") {
             executed.undo?.invoke()
             commandFeedback.markWrong(id)
+            requestIndexing()
             retry(text, action)
         }
         return line.copy(durationMillis = maxOf(line.durationMillis, 8_000), actions = listOf(notWhatIMeant))

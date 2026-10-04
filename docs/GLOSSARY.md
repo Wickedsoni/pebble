@@ -10,6 +10,8 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 | **chat model** | A local large language model that writes free replies (planned, milestone M5). It runs as a separate process. | "LLM" alone, "AI" |
 | **rule** | Deterministic code that reads text without a model: `QuickAddParser`, `HinglishTime`. | "regex", "parser" alone |
 | **router** | The code that sends text through the rules, then the command model, and then the decision policy. Code: `CommandRouter`. | "pipeline", "dispatcher" |
+| **personal layer** | The code that changes the reading of the command model with your own examples: phrases that you taught, your "Did you mean…" picks and your "Not what I meant" taps. It does not train the model. Code: `PersonalLayer` (ADR 0010). | "fine-tuning", "personalization model" |
+| **taught phrase** | A phrase that you gave an action on the Memory page ("Teach Pebble a command"). A row in `command_feedback` with outcome `taught`. | "custom command", "shortcut" |
 | **decision policy** | The code that decides to act, or to ask "Did you mean…". It uses the cost of a mistake. Code: `DecisionPolicy`. | "threshold logic" |
 | **nudge** | A message from a repeating reminder (for example, "drink water"). The nudge policy decides its time. Code: `NudgePolicy`. | "notification", "ping" |
 | **reminder (one-off)** | A reminder that occurs one time, at a set time. Table: `one_off_reminder`. | "alarm", "task" |

@@ -18,6 +18,7 @@ UNDERSTAND  (one pass, ~5 ms on CPU)
   QuickAddParser    exact syntax first: "water every 45m", "note: …", "remind me … at 5pm"
   HinglishTime      times and days in 3 scripts: "kal shaam saade 5", "शुक्रवार", "aadhe ghante baad"
   intent model      e5-small encoder → intent head · slot head · mood head   (int8 ONNX, 31 MB)
+  PersonalLayer     your taught phrases, picks and "Not what I meant" change the reading at once (ADR 0010)
 DECIDE
   Understood.actions  intent probabilities summed per Pebble action (calibrated)
   DecisionPolicy      act / ask "Did you mean…" by what a mistake costs (delete 0.9 … chitchat 0.5)
@@ -28,7 +29,7 @@ ACT + REPLY
 BEHAVE  (its own loop)
   ReminderEngine + NudgePolicy  bandit decides now / +10 / +30 min for repeating reminders
 LEARN
-  command_feedback    picked · confirmed · wrong                    → train_intent --feedback
+  command_feedback    picked · confirmed · wrong · taught           → PersonalLayer (at once), train_intent --feedback
   nudge_stats         Beta beliefs per context × arm                → learns live, on device
   event_log           everything, incl. NudgeDecided propensities   → MemoryEngine, offline eval
   voice corrections   (opt-in) audio + corrected text               → Whisper fine-tune (planned)
@@ -41,6 +42,7 @@ LEARN
 | Mic, prep, VAD, Whisper | `desktopApp/.../voice/` (`MicCapture`, `AudioPrep`, `SpeechRecognizer`, `VoiceInput`) | `models/asr/` (Silero VAD, Whisper int8) |
 | Rules | `shared/.../quickadd/QuickAddParser.kt`, `shared/.../brain/HinglishTime.kt` | — |
 | Intent / slots / mood | `desktopApp/.../brain/OnnxIntentModel.kt`, `ModelManager.kt` | `models/intent/` (from `brain/models/manifest.json`) |
+| Personal layer | `shared/.../brain/PersonalLayer.kt`; "Teach Pebble a command" on the Memory page | `command_feedback` table |
 | Decisions | `shared/.../brain/DecisionPolicy.kt`, `CommandRouter.kt`, `Understanding.kt` | temperatures in `labels.json` |
 | Acting, undo | `desktopApp/.../PebbleApp.kt`, `quickadd/QuickAddWindow.kt` | SQLite (`%APPDATA%\Pebble\pebble.db`) |
 | Nudge timing | `shared/.../brain/NudgePolicy.kt`, `reminders/ReminderEngine.kt` | `nudge_stats` table |

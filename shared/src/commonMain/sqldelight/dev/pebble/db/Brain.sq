@@ -1,6 +1,7 @@
 -- Labels you give the command model (active learning). Local only; exported by brain/feedback.py
 -- when you choose to retrain. outcome: picked ("Did you mean…?" choice), confirmed (model acted, no
--- objection) or wrong ("Not what I meant": chosen_action is what Pebble wrongly did).
+-- objection), wrong ("Not what I meant": chosen_action is what Pebble wrongly did) or taught (you taught
+-- the phrase on the Memory page).
 CREATE TABLE command_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     text TEXT NOT NULL,
@@ -87,3 +88,17 @@ SELECT * FROM command_feedback ORDER BY at_millis;
 
 feedbackCount:
 SELECT count(*) FROM command_feedback;
+
+-- The personal layer's rows (PersonalLayer) since [at_millis]: taught, picked and wrong rows are examples;
+-- picked and confirmed rows show which actions you use at which hour.
+personalFeedbackSince:
+SELECT * FROM command_feedback WHERE at_millis >= ? ORDER BY at_millis, id;
+
+taughtFeedback:
+SELECT * FROM command_feedback WHERE outcome = 'taught' ORDER BY at_millis, id;
+
+deleteFeedback:
+DELETE FROM command_feedback WHERE id = ?;
+
+deleteTaught:
+DELETE FROM command_feedback WHERE outcome = 'taught';
