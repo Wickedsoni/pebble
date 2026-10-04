@@ -70,6 +70,29 @@ class MigrationTest {
         assertEquals(1L, dev.pebble.core.history.EventHistory(db) { it }.count("note_completed"))
     }
 
+    /** 10.sqm (WP C2): an older database gains an empty vector_item table; its notes become searchable. */
+    @Test
+    fun olderDatabaseGainsTheVectorTable() {
+        val file = Files.createTempFile("pebble-v1v", ".db").toFile().apply { deleteOnExit() }
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute(
+                    "CREATE TABLE widget_layout (widget_id TEXT NOT NULL PRIMARY KEY, x INTEGER NOT NULL, y INTEGER NOT NULL, visible INTEGER NOT NULL DEFAULT 1)",
+                )
+                s.execute(
+                    "CREATE TABLE event_log (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, payload TEXT NOT NULL, at_millis INTEGER NOT NULL)",
+                )
+                s.execute("CREATE INDEX event_log_type_at ON event_log(type, at_millis)")
+                s.execute("CREATE TABLE setting (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+                s.execute("PRAGMA user_version = 1")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        assertEquals(0L, db.vectorsQueries.vectorCount().executeAsOne())
+        dev.pebble.core.wellness.NoteRepository(db).add("buy milk", 1)
+        assertEquals(listOf("buy milk"), db.vectorsQueries.sourceNotes().executeAsList().map { it.text })
+    }
+
     /** Dry run on a *copy* of this machine's real database, if there is one. */
     @Test
     fun realDatabaseCopyMigrates() {

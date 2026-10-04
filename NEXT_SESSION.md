@@ -76,10 +76,12 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - WP B6: measured 200 000 log entries (`PEBBLE_BENCH=1 ./gradlew :shared:jvmTest --tests "*GrowthBenchmarkTest*"`): `stats()` 88 ms (158 ms with the decoded check) → 31 ms after the roll-up; `learn()` ~85 ms. Migration `9.sqm` (`daily_stat`); `HistoryCompactor` keeps raw rows (your choice, ADR 0004 revised).
   - WP B7 (pilot): `RemindersStateHolder` (`StateFlow<RemindersUiState>`, `onEvent`), stateless `RemindersContent`, `docs/UI-PATTERN.md` (the template for the other pages).
   - WP C1: command model `intent-v3-pruned` (release `models-2026.11`) adds the sentence embedding (384, unit length) as a 4th output; same weights, other outputs identical; `Understood.embedding`.
+  - WP C2: memory search (notes, facts, what you said) — `vector_item` (migration `10.sqm`), `MemorySearch`, "Search memory" on the Memory page, "what did I note about X" → search. 14/16 on the frozen search eval.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** C2 (vector store + memory search), and B7 page roll-outs one per PR (Today, Notes, Water, Chat, Memory, Companion; `docs/UI-PATTERN.md`).
+- **Next:** C3 (personal layer + teach a command; Opus reviews the formula first), and B7 page roll-outs one per PR (`docs/UI-PATTERN.md`).
+- **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)
 1. Merge Dependabot PR #6 (Gradle wrapper 9.4.1 → 9.8.0). The GitHub MCP server is disconnected: its token expired. Authorize it again, or use the `gh` CLI.

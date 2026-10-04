@@ -67,7 +67,7 @@ Test these items for each page:
 | Notes | To do |
 | Water | To do |
 | Chat | To do |
-| Memory | To do |
+| Memory | Search card done (WP C2: `MemorySearchStateHolder`); the rest of the page to do |
 | Companion | To do |
 | About | Not necessary: the page shows only fixed text |
 

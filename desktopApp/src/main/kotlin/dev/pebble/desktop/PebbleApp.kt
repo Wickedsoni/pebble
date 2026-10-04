@@ -174,6 +174,55 @@ class PebbleApp(
     /** Saves bus events to `event_log`; one writer thread, so the UI thread never waits for SQLite. */
     val eventLog = EventLogger(db)
 
+    /**
+     * Search over notes, facts and what you said (WP C2). It indexes only while the command model is loaded
+     * anyway, so indexing never loads a model; a search you ask for on the Memory page loads it.
+     */
+    val memorySearch = dev.pebble.core.search.MemorySearch(db, embed = model::embedIfLoaded, modelVersion = {
+        model.version
+    }, clock = this::now)
+
+    /** Coalesced: many requests while one runs mean one more pass, not many. */
+    private val indexRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Asks for an index pass soon (in the background, after a short pause so several changes go together). */
+    fun requestIndexing() {
+        indexRequests.tryEmit(Unit)
+    }
+
+    override fun searchMemory(topic: String): List<String> = memorySearch.search(topic, limit = 3).map { it.text }
+
+    /**
+     * A search you asked for (the Memory page): loads the command model if needed, catches up the index,
+     * then searches, all off the UI thread. A question that names a topic ("about the project") searches the
+     * topic. Null when there is no command model at all.
+     */
+    suspend fun searchMemoryLoading(query: String, limit: Int = 5): List<dev.pebble.core.search.MemorySearch.Result>? =
+        withContext(env.dispatchers.io) {
+            if (model.modelDir == null || model.embedLoading(query) == null) return@withContext null
+            runCatching { memorySearch.reconcile() }.onFailure { log.warn(TAG, "memory search indexing failed", it) }
+            memorySearch.search(dev.pebble.core.search.MemorySearch.topicOf(query) ?: query, limit)
+        }
+
+    init {
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        appScope.launch(env.dispatchers.io.limitedParallelism(1)) {
+            indexRequests.collect {
+                delay(1_500)
+                runCatching { memorySearch.reconcile() }
+                    .onSuccess { n -> if (n > 0) log.info(TAG, "memory search: indexed $n items") }
+                    .onFailure { log.warn(TAG, "memory search indexing failed", it) }
+            }
+        }
+        appScope.launch {
+            bus.events.collect { e ->
+                if (e is PebbleEvent.NoteCreated || e is PebbleEvent.FactRemembered || e is PebbleEvent.QuickAddUsed) requestIndexing()
+            }
+        }
+        // The model just loaded (first Quick Add, a voice command): catch up on anything not indexed yet.
+        appScope.launch { model.statusFlow.collect { if (it is dev.pebble.desktop.brain.ModelStatus.Ready) requestIndexing() } }
+    }
+
     init {
         @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
         eventLog.attach(bus, appScope, writerDispatcher = env.dispatchers.io.limitedParallelism(1))
@@ -186,6 +235,7 @@ class PebbleApp(
                     withContext(env.dispatchers.io) { rollUpHistory() }
                 }.onFailure { log.warn(TAG, "history roll-up failed", it) }
                 runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning failed", it) }
+                requestIndexing() // edited notes and cleared chats have no event of their own
                 delay(10 * 60_000L)
             }
         }

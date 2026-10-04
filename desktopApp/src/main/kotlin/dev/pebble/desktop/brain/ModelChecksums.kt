@@ -29,6 +29,22 @@ object ModelChecksums {
         }
     }
 
+    /**
+     * The version the manifest gives the [name] model in [dir] ("v3-pruned"); for a hand-placed model without
+     * a manifest entry, its file size and time — a new file means a new version either way.
+     */
+    fun version(dir: Path, name: String, file: String): String {
+        val fromManifest = runCatching {
+            val manifest = listOf(dir.resolve("manifest.json"), dir.parent.resolve("manifest.json")).first(Files::exists)
+            Json.parseToJsonElement(Files.readString(manifest)).jsonObject.getValue("models").jsonArray
+                .map { it.jsonObject }.first { it["name"]?.jsonPrimitive?.content == name }
+                .getValue("version").jsonPrimitive.content
+        }.getOrNull()
+        if (fromManifest != null) return "$name-$fromManifest"
+        val f = dir.resolve(file)
+        return "$name-local-${Files.size(f)}-${Files.getLastModifiedTime(f).toMillis()}"
+    }
+
     fun sha256(file: Path): String {
         val digest = MessageDigest.getInstance("SHA-256")
         Files.newInputStream(file).use { input ->

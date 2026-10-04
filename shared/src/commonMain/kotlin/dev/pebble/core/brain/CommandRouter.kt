@@ -2,6 +2,7 @@ package dev.pebble.core.brain
 
 import dev.pebble.core.quickadd.QuickAddParser
 import dev.pebble.core.quickadd.QuickCommand
+import dev.pebble.core.search.MemorySearch
 import dev.pebble.core.brain.PebbleActions as A
 
 /**
@@ -88,13 +89,22 @@ class CommandRouter(
     /** Model action → concrete command. [intent] is the finer label behind it (alarm_set, general_joke…). */
     private fun toCommand(action: String, u: Understood, text: String, intent: String): QuickCommand? = when (action) {
         A.REMIND -> reminder(u, text, intent)
+
         A.ADD_NOTE -> QuickCommand.AddNote(text)
+
         A.REMINDERS_QUERY -> QuickCommand.ShowUpcoming
-        A.NOTES_QUERY -> QuickCommand.ShowNotes
+
+        // "what did I note about the project": a named topic is a search; "show my notes" shows the latest.
+        A.NOTES_QUERY -> MemorySearch.topicOf(text)?.let { QuickCommand.SearchMemory(it, text) } ?: QuickCommand.ShowNotes
+
         A.TIME_QUERY -> QuickCommand.TellTime
+
         A.CHITCHAT -> QuickCommand.Chitchat(text, intent, u.mood?.takeIf { it.confidence >= 0.7f }?.mood)
+
         A.REMINDER_REMOVE -> QuickCommand.OpenPage("reminders", text, forRemoval = true)
+
         A.NOTE_REMOVE -> QuickCommand.OpenPage("notes", text, forRemoval = true)
+
         else -> QuickCommand.Unsupported(text, intent)
     }
 

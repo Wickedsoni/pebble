@@ -73,7 +73,7 @@ fun IconButton(icon: ImageVector, filled: Boolean = false, size: Dp = 36.dp, tin
 
 /** Single-line input on glass; Enter submits. */
 @Composable
-fun GlassField(placeholder: String, modifier: Modifier = Modifier, onSubmit: (String) -> Unit) {
+fun GlassField(placeholder: String, modifier: Modifier = Modifier, icon: ImageVector = PebbleIcons.Plus, onSubmit: (String) -> Unit) {
     val c = LocalGlass.current
     var text by remember { mutableStateOf("") }
     fun submit() {
@@ -96,7 +96,7 @@ fun GlassField(placeholder: String, modifier: Modifier = Modifier, onSubmit: (St
                 },
             )
         }
-        IconButton(PebbleIcons.Plus, filled = true, size = 30.dp) { submit() }
+        IconButton(icon, filled = true, size = 30.dp) { submit() }
     }
 }
 

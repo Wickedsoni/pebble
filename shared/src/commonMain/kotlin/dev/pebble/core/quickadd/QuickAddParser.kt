@@ -41,6 +41,9 @@ sealed interface QuickCommand {
     /** Removing reminders/notes happens in the app for now. */
     // Opens a page of the Pebble window. text: what you said (the reply mirrors its script).
     // forRemoval: you asked to remove a reminder or note, and the page is where you pick which one.
+    // Search your notes, facts and chat for [topic] (WP C2); text: what you said (the reply mirrors its script).
+    data class SearchMemory(val topic: String, val text: String) : QuickCommand
+
     data class OpenPage(val page: String, val text: String = "", val forRemoval: Boolean = false) : QuickCommand
 }
 

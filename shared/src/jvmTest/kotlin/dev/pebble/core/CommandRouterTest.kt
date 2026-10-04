@@ -242,4 +242,22 @@ class CommandRouterTest {
             Replies.openPage("reminders", "delete my reminder", forRemoval = true),
         )
     }
+
+    @Test
+    fun aNotesQueryThatNamesATopicSearches() {
+        fun route(text: String): QuickCommand {
+            val m = model(text to u(text, List(text.split(" ").size) { "O" }, "lists_query" to 0.95f))
+            return assertIs<Routed.Run>(CommandRouter({ m }).route(text)).command
+        }
+        assertEquals(
+            QuickCommand.SearchMemory("the project", "what did I note about the project"),
+            route("what did I note about the project"),
+        )
+        assertEquals(
+            QuickCommand.SearchMemory("project", "project ke baare mein kya likha tha"),
+            route("project ke baare mein kya likha tha"),
+        )
+        assertEquals(QuickCommand.ShowNotes, route("read my shopping list"), "no topic named: the latest notes, as before")
+        assertEquals(QuickCommand.ShowNotes, route("meri notes dikhao"))
+    }
 }

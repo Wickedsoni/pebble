@@ -49,6 +49,7 @@ class CommandExecutorTest {
         QuickCommand.Chitchat("tum cute ho", "general_quirky"),
         QuickCommand.Unsupported("book a cab", "transport_taxi"),
         QuickCommand.OpenPage("reminders"),
+        QuickCommand.SearchMemory("the project", "what did I note about the project"),
     )
 
     /** No `else`: a new command type doesn't compile until this test says whether it has an undo. */
@@ -56,7 +57,7 @@ class CommandExecutorTest {
         is QuickCommand.AddNote, is QuickCommand.RemindIn, is QuickCommand.RemindAt -> true
         is QuickCommand.RememberFact, is QuickCommand.LogWater, is QuickCommand.SetInterval -> false
         QuickCommand.ShowUpcoming, QuickCommand.ShowNotes, QuickCommand.TellTime -> false
-        is QuickCommand.Chitchat, is QuickCommand.Unsupported, is QuickCommand.OpenPage -> false
+        is QuickCommand.Chitchat, is QuickCommand.Unsupported, is QuickCommand.OpenPage, is QuickCommand.SearchMemory -> false
     }
 
     @Test

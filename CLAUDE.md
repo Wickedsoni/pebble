@@ -91,7 +91,7 @@ Line numbers can move. If a line does not match, search for the name.
 | `VerifiedModelCache` (`%APPDATA%\Pebble\models-verified.json`: path, size, mtime, sha256) skips re-hashing unchanged files; the speech check went from ~180 ms to ~1 ms. Only the `ModelRuntime` instances use it; `ModelManager(scope)` / `SpeechRecognizer(scope)` built directly still hash every load (WP B4) | `brain/VerifiedModelCache.kt`, `brain/ModelChecksums.kt` |
 | **Load-order invariant:** ONNX Runtime env before sherpa `LibraryUtils.load()`, in one place: `ModelRuntime.loadSherpa()` (lazy, not at start-up) | `brain/ModelRuntime.kt`, `VoiceSpikeTest` |
 | Intent ONNX outputs read by name (`intent_logits`, `slot_logits`, `mood_logits`; `OrtSession.Result.get(String): Optional<OnnxValue>`, checked in ORT 1.30), with index fallback. Since v3 (WP C1) a 4th output `embedding` [batch, 384] (mean-pooled before dropout, L2-normalised) fills `Understood.embedding: Embedding?` (content equality, `cosine()`); null for older models | `OnnxIntentModel.kt:73-94`, `brain/src/pebble_brain/export_onnx.py:48`, `intent_model.py:36-41` |
-| Schema: `.sq` files + migrations `1.sqm`…`9.sqm`. The **current schema version is 10; the next migration file is `10.sqm`** (upgrades 10→11). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
+| Schema: `.sq` files + migrations `1.sqm`…`10.sqm`. The **current schema version is 11; the next migration file is `11.sqm`** (upgrades 11→12). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
 | `one_off_reminder.id INTEGER AUTOINCREMENT`; hard `DELETE`; no `updated_at` | `Reminders.sq:13-19,43-44` |
 | `ReminderEngine` keys one-off reminders by `Long` id: `oneOffKey(r.id)` | `shared/.../reminders/ReminderEngine.kt:61,91,195` |
 | `DatabaseFactory.create(file)`: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=true` (sqlite-jdbc 3.53.4.0 property names); `inMemory()` keeps the defaults (WP B5) | `shared/src/jvmMain/.../db/DatabaseFactory.kt` |
@@ -101,6 +101,7 @@ Line numbers can move. If a line does not match, search for the name.
 | Models bundled from `brain/models/manifest.json` by `stageModel`; the downloader is stdlib-only Python | `desktopApp/build.gradle.kts:69-96`, `brain/src/pebble_brain/download_models.py` |
 | CI: Windows kotlin job (bash) downloads the models (cached by the hash of `manifest.json`), builds the distributable, runs all tests with Kover coverage; Python job runs lint + one test | `.github/workflows/ci.yml` |
 | Release CI already downloads models: `python brain/src/pebble_brain/download_models.py` | `.github/workflows/release.yml` |
+| Memory search (WP C2): `MemorySearch` in `shared/.../search/` indexes notes, facts and said turns into `vector_item` (float32 LE BLOB, `model_version`); rank = 0.6 cosine + 0.4 shared words, `MIN_SCORE` 0.40; hits are read back from the source tables (privacy). Indexing runs only while the command model is loaded (`model.embedIfLoaded`); `app.searchMemoryLoading` loads it for a search you asked for. Gate: `MemorySearchEvalTest` ≥ 14/16 on `brain/eval/memory_search_v1.jsonl` | `shared/.../search/`, `PebbleApp.kt` |
 | Settings keys live in `SettingsRepository.Keys` (string key-value) | `shared/.../settings/SettingsRepository.kt` |
 
 ## Known traps
