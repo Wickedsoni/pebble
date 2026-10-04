@@ -60,7 +60,13 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Small talk is canned lines** (varied, never repeated back-to-back). Real conversation needs M5 (local LLM).
 - **Your own voice test set:** record it with `./gradlew :desktopApp:recordVoiceEval`, then score it with `VoiceCommandEvalTest`.
 
-## Next session — suggested order
+## Master plan (v0.2 → v1.0)
+- **Plan:** `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`, split into work packages (WPs).
+- **Rules for implementers:** `CLAUDE.md` (repo root).
+- **Done:** WP A1. It added `CLAUDE.md`, `docs/STYLE-STE.md`, `docs/GLOSSARY.md` and ADRs 0000-0009 in `docs/adr/`.
+- **Next WP:** A2 (hygiene), then A3 (quality gates in CI).
+
+## Next session — suggested order (before the master plan)
 1. **Battery test + "Start with Windows" check** on the installed 0.1.2. Fix anything heavy.
 2. **Wardrobe + custom SVG avatars + size slider** (design in `docs/ROADMAP.md`): layered renderer and size slider first.
 3. **M5 local chat:** a small open LLM (e.g. Qwen2.5-0.5B via llama.cpp) for real replies; unloads when idle.
