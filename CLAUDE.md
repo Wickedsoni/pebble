@@ -129,6 +129,7 @@ Line numbers can move. If a line does not match, search for the name.
     - A model with 8-bit weights passed on a VNNI laptop but read 3 of 194 commands differently on the CI runner (AMD EPYC 7763).
     - The CI log step "Runner CPU" shows which CPU ran the tests.
 11. **The database runs in WAL mode.** Recent changes can be in `pebble.db-wal`, not in `pebble.db`. To copy the database (backup, export), use SQLite's backup (`VACUUM INTO` or the backup API), not a file copy. `event_log` rows appear a few milliseconds after `bus.publish`; call `eventLog.flush()` before you read your own event.
+    - `DatabaseFactory.inMemory()` (tests) is a temp **file**, not `:memory:`: SQLDelight shares one connection across threads for `:memory:`, and the IO writer and roll-up then collide with the test thread ("cannot start a transaction within a transaction").
 
 ## Docs
 

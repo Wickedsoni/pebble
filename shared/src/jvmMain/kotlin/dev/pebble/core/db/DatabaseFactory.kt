@@ -28,6 +28,17 @@ object DatabaseFactory {
         setProperty("foreign_keys", "true")
     }
 
-    fun inMemory(): PebbleDatabase =
-        PebbleDatabase(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), PebbleDatabase.Schema))
+    /**
+     * A fresh, private database for tests. It is a temp file, not `:memory:`: SQLDelight gives an in-memory
+     * database one connection for all threads, so the event writer and the roll-up (both on IO threads)
+     * would collide with a transaction on the test thread. A file gets one connection per thread, as in the app.
+     * No disk sync: it is thrown away.
+     */
+    fun inMemory(): PebbleDatabase {
+        val file = File.createTempFile("pebble-test", ".db")
+        file.delete()
+        listOf("", "-wal", "-shm").forEach { File(file.path + it).deleteOnExit() }
+        val props = fileProperties().apply { setProperty("synchronous", "OFF") }
+        return PebbleDatabase(JdbcSqliteDriver("jdbc:sqlite:${file.absolutePath}", props, PebbleDatabase.Schema))
+    }
 }
