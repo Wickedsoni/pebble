@@ -63,8 +63,17 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 ## Master plan (v0.2 → v1.0)
 - **Plan:** `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`, split into work packages (WPs).
 - **Rules for implementers:** `CLAUDE.md` (repo root).
-- **Done:** WP A1. It added `CLAUDE.md`, `docs/STYLE-STE.md`, `docs/GLOSSARY.md` and ADRs 0000-0009 in `docs/adr/`.
-- **Next WP:** A2 (hygiene), then A3 (quality gates in CI).
+- **Done:**
+  - WP A1: `CLAUDE.md`, `docs/STYLE-STE.md`, `docs/GLOSSARY.md` and ADRs 0000-0009 in `docs/adr/`.
+  - WP A2: stale lines fixed in `README.md`, `docs/ARCHITECTURE.md` and `PetModel.kt`; M8-M10 and the network principle added to `docs/ROADMAP.md`.
+- **Next WP:** A3 (quality gates in CI).
+
+### User-only tasks (do not automate)
+1. Merge Dependabot PR #6 (Gradle wrapper 9.4.1 → 9.8.0). The GitHub MCP server is disconnected: its token expired. Authorize it again, or use the `gh` CLI.
+2. Set a noreply commit email: `git config user.email <id>+Wickedsoni@users.noreply.github.com`.
+3. Do a battery run with `tools/perf/measure.ps1`, unplugged, with and without Pebble.
+4. Check "Start with Windows" on the installed app.
+5. Select code signing: SignPath Foundation (free signing for open source) or Azure Trusted Signing.
 
 ## Next session — suggested order (before the master plan)
 1. **Battery test + "Start with Windows" check** on the installed 0.1.2. Fix anything heavy.
