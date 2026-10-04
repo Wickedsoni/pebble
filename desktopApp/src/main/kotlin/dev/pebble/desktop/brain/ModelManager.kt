@@ -4,11 +4,7 @@ import dev.pebble.core.brain.Understanding
 import dev.pebble.core.brain.Understood
 import dev.pebble.core.db.DatabaseFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -26,39 +22,42 @@ import java.nio.file.Path
  *  - frees it (~60 MB of RAM) after [idleMillis] without use
  * If anything is missing or wrong, [understand] returns null and the router uses rules only.
  */
-class ModelManager(private val scope: CoroutineScope, private val idleMillis: Long = 10 * 60_000L) : Understanding {
-    @Volatile private var model: OnnxIntentModel? = null
+class ModelManager(
+    scope: CoroutineScope,
+    idleMillis: Long = 10 * 60_000L,
+    /** Skips re-hashing files that passed before (null: hash every load, as tests and the dev tools do). */
+    private val cache: VerifiedModelCache? = null,
+) : Understanding {
+    private val lazy = LazyModel(
+        name = "intent",
+        scope = scope,
+        idleMillis = idleMillis,
+        locate = ::locate,
+        verify = { ModelChecksums.verify(it, "intent", cache) },
+        load = ::OnnxIntentModel,
+        onLoadAttempt = ::log,
+    )
 
-    @Volatile private var lastUse = 0L
+    /** Status for logs and diagnostics ("ready (412 ms load)", "checksum mismatch — not loaded", …). */
+    val status: String get() = lazy.status.value.toString()
 
-    @Volatile var status: String = "not loaded"
-        private set
-    private var loading: Job? = null
+    val statusFlow: StateFlow<ModelStatus> get() = lazy.status
 
-    val modelDir: Path? by lazy { locate() }
+    val modelDir: Path? get() = lazy.dir
 
     /** Start loading if needed (e.g. when the quick-add bar opens). Cheap to call repeatedly. */
-    @Synchronized
-    fun warmUp() {
-        lastUse = System.currentTimeMillis()
-        if (model != null || loading?.isActive == true) return
-        val dir = modelDir ?: run { status = "no model found"; return }
-        loading = scope.launch(Dispatchers.IO) {
-            status = "loading"
-            val ok = verify(dir)
-            if (!ok) { status = "checksum mismatch — not loaded"; log(dir); return@launch }
-            val t0 = System.currentTimeMillis()
-            model = runCatching { OnnxIntentModel(dir) }.onFailure { status = "load failed: ${it.message}" }.getOrNull()
-            if (model != null) {
-                status = "ready (${System.currentTimeMillis() - t0} ms load)"
-                watchIdle()
-            }
-            log(dir)
-        }
+    fun warmUp() = lazy.warmUp()
+
+    /** Waits for a pending load (tests and diagnostics; the app never blocks on this). */
+    suspend fun awaitLoaded(): Boolean = lazy.join()
+
+    override fun understand(text: String): Understood? {
+        val m = lazy.getOrNull() ?: run { lazy.warmUp(); return null }
+        return runCatching { m.understand(text) }.getOrNull()
     }
 
     /** One line per load in `%APPDATA%\Pebble\brain.log`: which model, from where, and how it went. */
-    private fun log(dir: Path) {
+    private fun log(dir: Path, status: ModelStatus) {
         runCatching {
             val file = DatabaseFactory.defaultDataDir().toPath().resolve("brain.log")
             if (Files.exists(file) && Files.size(file) > 64_000) Files.delete(file)
@@ -69,29 +68,6 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
                 java.nio.file.StandardOpenOption.APPEND,
             )
         }
-    }
-
-    /** Waits for a pending load (tests and diagnostics; the app never blocks on this). */
-    suspend fun awaitLoaded(): Boolean { loading?.join(); return model != null }
-
-    override fun understand(text: String): Understood? {
-        val m = model ?: run { warmUp(); return null }
-        lastUse = System.currentTimeMillis()
-        return runCatching { m.understand(text) }.getOrNull()
-    }
-
-    private fun watchIdle() = scope.launch {
-        while (isActive && model != null) {
-            delay(60_000)
-            if (System.currentTimeMillis() - lastUse > idleMillis) unload()
-        }
-    }
-
-    @Synchronized
-    private fun unload() {
-        model?.close()
-        model = null
-        status = "unloaded (idle)"
     }
 
     private fun locate(): Path? {
@@ -120,7 +96,4 @@ class ModelManager(private val scope: CoroutineScope, private val idleMillis: Lo
 
     private fun modelEntry(manifest: Path) = Json.parseToJsonElement(Files.readString(manifest)).jsonObject.getValue("models").jsonArray
         .map { it.jsonObject }.firstOrNull { it["name"]?.jsonPrimitive?.content == "intent" }
-
-    /** Every file of the "intent" manifest entry must match its SHA-256 (see [ModelChecksums]). */
-    private fun verify(dir: Path): Boolean = ModelChecksums.verify(dir, "intent")
 }

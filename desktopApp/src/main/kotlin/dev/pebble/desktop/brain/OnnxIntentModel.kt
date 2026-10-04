@@ -105,14 +105,18 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
         OnnxTensor.createTensor(env, LongBuffer.wrap(ids), shape).use { idT ->
             OnnxTensor.createTensor(env, LongBuffer.wrap(enc.attentionMask), shape).use { maskT ->
                 session.run(mapOf("input_ids" to idT, "attention_mask" to maskT)).use { out ->
-                    @Suppress("UNCHECKED_CAST")
-                    val intent = (out[0].value as Array<FloatArray>)[0]
+                    // By export name (export_onnx.py); by position for a model exported without names.
+                    fun output(name: String, index: Int): Any? = out.get(name).map { it.value }.orElse(null)
+                        ?: if (index < out.size()) out[index].value else null
 
                     @Suppress("UNCHECKED_CAST")
-                    val slots = (out[1].value as Array<Array<FloatArray>>)[0]
+                    val intent = (output("intent_logits", 0) as Array<FloatArray>)[0]
 
                     @Suppress("UNCHECKED_CAST")
-                    val mood = if (out.size() >= 3) (out[2].value as Array<FloatArray>)[0] else null
+                    val slots = (output("slot_logits", 1) as Array<Array<FloatArray>>)[0]
+
+                    @Suppress("UNCHECKED_CAST")
+                    val mood = (output("mood_logits", 2) as Array<FloatArray>?)?.get(0)
                     return Logits(intent, slots, mood)
                 }
             }

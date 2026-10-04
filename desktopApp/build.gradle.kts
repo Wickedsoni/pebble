@@ -37,6 +37,7 @@ dependencies {
     implementation(libs.sherpa.onnx.jvm)
     implementation(libs.sherpa.onnx.native.win)
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 tasks.register<JavaExec>("asrEval") {

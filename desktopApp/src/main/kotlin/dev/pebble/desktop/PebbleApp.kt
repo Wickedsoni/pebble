@@ -131,12 +131,13 @@ class PebbleApp(
     }
 
     /** The local command model, loaded on demand; the router falls back to rules without it. */
-    val model = dev.pebble.desktop.brain.ModelManager(appScope + env.dispatchers.default)
+    val models = dev.pebble.desktop.brain.ModelRuntime(appScope + env.dispatchers.default, DatabaseFactory.defaultDataDir().toPath())
+    val model = models.intent
     val router = dev.pebble.core.brain.CommandRouter({ model }, today = { env.today().dayOfWeek.value })
     val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
 
     /** Offline speech (VAD + Whisper), loaded only when you talk and freed when idle. */
-    val speech = dev.pebble.desktop.voice.SpeechRecognizer(appScope + env.dispatchers.default)
+    val speech = models.speech
     val voice = dev.pebble.desktop.voice.VoiceInput(speech, appScope + env.dispatchers.default) {
         settings.bool(Keys.MICROPHONE_ENABLED, true)
     }
