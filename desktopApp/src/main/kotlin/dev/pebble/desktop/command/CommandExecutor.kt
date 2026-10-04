@@ -9,6 +9,7 @@ import dev.pebble.core.reminders.ReminderRepository
 import dev.pebble.core.wellness.NoteRepository
 import dev.pebble.desktop.PetLine
 import dev.pebble.desktop.core.AppEnv
+import dev.pebble.desktop.core.UiPort
 import dev.pebble.desktop.pet.Mood
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -39,8 +40,8 @@ class CommandExecutor(
     private val reminders: ReminderRepository,
     private val engine: ReminderEngine,
     private val actions: CommandActions,
-    /** Opens the Pebble window on a page ("reminders", "notes", …). */
-    private val openPage: (String) -> Unit,
+    /** For [QuickCommand.OpenPage]. */
+    private val ui: UiPort,
 ) {
     fun execute(cmd: QuickCommand): Executed {
         bus.publish(PebbleEvent.QuickAddUsed(cmd::class.simpleName ?: "?", env.millis()))
@@ -125,7 +126,7 @@ class CommandExecutor(
             is QuickCommand.Unsupported -> Executed(PetLine(Replies.unsupported(cmd.text), Mood.IDLE, 5_000), undo = null)
 
             is QuickCommand.OpenPage -> {
-                openPage(cmd.page)
+                ui.openPage(cmd.page)
                 Executed(PetLine(""), undo = null)
             }
         }

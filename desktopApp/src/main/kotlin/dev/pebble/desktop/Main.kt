@@ -43,7 +43,6 @@ fun main(args: Array<String>) {
     application {
         val dark = rememberSystemDarkTheme()
         val trayState = rememberTrayState()
-        app.notifier = { title, msg -> trayState.sendNotification(Notification(title, msg, Notification.Type.Info)) }
 
         var petVisible by remember { mutableStateOf(app.layouts.get(PET)?.visible ?: true) }
         var autostart by remember { mutableStateOf(Autostart.isEnabled()) }
@@ -57,9 +56,21 @@ fun main(args: Array<String>) {
             PetController(app, openQuickAdd = { quickAddOpen = true }, openApp = { appOpen = true; page = Page.TODAY })
         }
         LaunchedEffect(Unit) { app.petLines.collect { pet.react(it) } }
-        app.openPage = { name ->
+        fun showPage(name: String) {
             page = Page.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Page.TODAY
             appOpen = true
+        }
+
+        // Once: application {} recomposes on every UI change; the callbacks only touch remembered state.
+        LaunchedEffect(Unit) {
+            app.bindUi(
+                object : dev.pebble.desktop.core.UiPort {
+                    override fun notify(title: String, message: String) =
+                        trayState.sendNotification(Notification(title, message, Notification.Type.Info))
+
+                    override fun openPage(page: String) = showPage(page)
+                },
+            )
         }
         LaunchedEffect(Unit) {
             GlobalHotkey(GlobalHotkey.MOD_CONTROL or GlobalHotkey.MOD_ALT, GlobalHotkey.VK_SPACE) {

@@ -4,6 +4,7 @@ import dev.pebble.core.brain.VoiceSample
 import dev.pebble.core.brain.VoiceSampleRepository
 import dev.pebble.core.settings.SettingsRepository
 import dev.pebble.core.settings.SettingsRepository.Keys
+import dev.pebble.desktop.core.Logger
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -16,6 +17,7 @@ class VoiceCorrectionService(
     private val clock: () -> Long,
     /** Where kept voice clips go (tests point it elsewhere). */
     var dir: Path,
+    private val log: Logger = Logger.None,
 ) {
     /**
      * After a voice command runs: if you edited what Whisper heard and you've opted in, keep the clip and
@@ -30,12 +32,14 @@ class VoiceCorrectionService(
             writeWav(wav, audio)
             val model = speech.modelDir?.let { SpeechRecognizer.whisperSize(it) } ?: "?"
             samples.add(VoiceSample(wav.toString(), heard.text, finalText.trim(), "whisper-$model", clock()))
-        }
+        }.onFailure { log.warn("voice", "could not keep the corrected clip", it) }
     }
 
     /** Deletes every kept voice clip, files and rows. */
     fun clear() {
-        samples.all().forEach { runCatching { Files.deleteIfExists(Path.of(it.wavPath)) } }
+        samples.all().forEach { s ->
+            runCatching { Files.deleteIfExists(Path.of(s.wavPath)) }.onFailure { log.warn("voice", "could not delete ${s.wavPath}", it) }
+        }
         samples.clear()
     }
 }

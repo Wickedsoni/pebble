@@ -5,6 +5,7 @@ import dev.pebble.core.quickadd.QuickCommand
 import dev.pebble.core.reminders.ReminderKind
 import dev.pebble.desktop.core.AppEnv
 import dev.pebble.desktop.core.DefaultDispatchers
+import dev.pebble.desktop.core.UiPort
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -23,7 +24,15 @@ class CommandExecutorTest {
     private var opened: String? = null
 
     init {
-        app.openPage = { opened = it }
+        app.bindUi(
+            object : UiPort {
+                override fun notify(title: String, message: String) = Unit
+
+                override fun openPage(page: String) {
+                    opened = page
+                }
+            },
+        )
     }
 
     /** One of every subtype. */

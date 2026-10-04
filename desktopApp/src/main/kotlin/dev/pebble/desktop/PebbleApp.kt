@@ -22,6 +22,9 @@ import dev.pebble.db.PebbleDatabase
 import dev.pebble.desktop.command.CommandActions
 import dev.pebble.desktop.command.CommandExecutor
 import dev.pebble.desktop.core.AppEnv
+import dev.pebble.desktop.core.FileLogger
+import dev.pebble.desktop.core.Logger
+import dev.pebble.desktop.core.UiPort
 import dev.pebble.desktop.pet.Mood
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +51,12 @@ data class PetLine(
  * App-wide object graph. Created once in `main`, shared by every window. Lives on the Swing thread.
  * Time and dispatchers come from [env], so tests can fix "now".
  */
-class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : CommandActions {
+class PebbleApp(
+    db: PebbleDatabase,
+    val env: AppEnv = AppEnv.system(),
+    /** Quiet failures go here (`pebble.log` in the app; dropped in tests unless a test passes one). */
+    val log: Logger = Logger.None,
+) : CommandActions {
     /** Now, from the app's clock ([env]). Use this instead of the top-level [dev.pebble.desktop.now]. */
     fun now(): Long = env.millis()
 
@@ -103,11 +111,24 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : Command
     private val _petLines = MutableSharedFlow<PetLine>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val petLines: SharedFlow<PetLine> = _petLines
 
-    /** Set by the UI once the tray exists; shows a Windows toast. */
-    var notifier: (title: String, message: String) -> Unit = { _, _ -> }
+    @Volatile private var boundUi: UiPort? = null
 
-    /** Set by the UI: opens the Pebble window on a page ("reminders", "notes", …). */
-    var openPage: (String) -> Unit = {}
+    /** The UI (toasts, opening pages). Does nothing until [bindUi]; read at call time, so it can be bound late. */
+    val ui: UiPort = object : UiPort {
+        override fun notify(title: String, message: String) = (boundUi ?: UiPort.None).notify(title, message)
+
+        override fun openPage(page: String) = (boundUi ?: UiPort.None).openPage(page)
+    }
+
+    /** `Main` binds the real UI once the tray exists. Exactly once: a second bind is logged and ignored. */
+    @Synchronized
+    fun bindUi(port: UiPort) {
+        if (boundUi != null) {
+            log.warn(TAG, "UI bound a second time; keeping the first")
+            return
+        }
+        boundUi = port
+    }
 
     /** The local command model, loaded on demand; the router falls back to rules without it. */
     val model = dev.pebble.desktop.brain.ModelManager(appScope + env.dispatchers.default)
@@ -128,6 +149,7 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : Command
         dev.pebble.core.brain.VoiceSampleRepository(db),
         clock = this::now,
         dir = DatabaseFactory.defaultDataDir().toPath().resolve("voice"),
+        log = log,
     )
     val voiceSamples: dev.pebble.core.brain.VoiceSampleRepository get() = voiceCorrections.samples
 
@@ -139,8 +161,8 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : Command
     /** Deletes every kept voice clip, files and rows. */
     fun clearVoiceSamples() = voiceCorrections.clear()
 
-    /** Runs every quick-add command; [openPage] is read when a command needs it, so the UI can set it later. */
-    val executor = CommandExecutor(env, bus, notes, reminders, engine, actions = this, openPage = { openPage(it) })
+    /** Runs every quick-add command. */
+    val executor = CommandExecutor(env, bus, notes, reminders, engine, actions = this, ui = ui)
 
     init {
         // Unconfined: events are written on the publisher's thread, so nothing is lost on exit.
@@ -150,7 +172,7 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : Command
         // Learning is cheap (a few small queries); every 10 minutes keeps memories fresh.
         appScope.launch {
             while (isActive) {
-                runCatching { brain.learn() }
+                runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning failed", it) }
                 delay(10 * 60_000L)
             }
         }
@@ -193,7 +215,7 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : Command
         engine.active.value.firstOrNull { it.kind == ReminderKind.WATER }
             ?.let { engine.act(it.key, dev.pebble.core.reminders.ReminderAction.DONE) }
         if (before < goalMl && total >= goalMl) {
-            runCatching { brain.learn() }
+            runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning after the water goal failed", it) }
             val streak = memory.byKey(MemoryEngine.KEY_WATER_STREAK)?.data
             say(
                 PetLine(
@@ -274,7 +296,13 @@ class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) : Command
     }
 
     companion object {
-        fun create(): PebbleApp = PebbleApp(DatabaseFactory.create())
+        private const val TAG = "app"
+
+        fun create(): PebbleApp {
+            val env = AppEnv.system()
+            val log = FileLogger(DatabaseFactory.defaultDataDir().toPath().resolve("pebble.log"), env::millis, env.zone)
+            return PebbleApp(DatabaseFactory.create(), env, log)
+        }
     }
 }
 
