@@ -61,35 +61,39 @@ fun MemoryPage(app: PebbleApp) {
     var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        GlassCard(Modifier.weight(1.6f).fillMaxHeight(), padding = 20.dp) {
-            CardLabel("What I remember about you", PebbleIcons.Memory, c.calm)
-            GlassField("Tell me something to remember…", Modifier.fillMaxWidth()) { app.remember(it) }
-            Spacer(Modifier.height(10.dp))
-            if (memories.isEmpty()) {
-                Text(
-                    "Nothing yet. I learn from how you use me, and you can tell me things here.",
-                    color = c.secondary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                )
-            }
-            LazyColumn {
-                MemoryKind.entries.forEach { kind ->
-                    val group = memories.filter { it.kind == kind }
-                    if (group.isNotEmpty()) {
-                        item(key = "h-$kind") {
-                            Text(
-                                kind.label,
-                                color = c.secondary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
-                            )
+        // The right column is full (search + privacy), so the Teach card shares the left column.
+        Column(Modifier.weight(1.6f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            GlassCard(Modifier.fillMaxWidth().weight(1f), padding = 20.dp) {
+                CardLabel("What I remember about you", PebbleIcons.Memory, c.calm)
+                GlassField("Tell me something to remember…", Modifier.fillMaxWidth()) { app.remember(it) }
+                Spacer(Modifier.height(10.dp))
+                if (memories.isEmpty()) {
+                    Text(
+                        "Nothing yet. I learn from how you use me, and you can tell me things here.",
+                        color = c.secondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+                LazyColumn {
+                    MemoryKind.entries.forEach { kind ->
+                        val group = memories.filter { it.kind == kind }
+                        if (group.isNotEmpty()) {
+                            item(key = "h-$kind") {
+                                Text(
+                                    kind.label,
+                                    color = c.secondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                                )
+                            }
+                            items(group, key = { it.id }) { MemoryRow(it) { app.forget(it) } }
                         }
-                        items(group, key = { it.id }) { MemoryRow(it) { app.forget(it) } }
                     }
                 }
             }
+            TeachCard(app, Modifier.fillMaxWidth().weight(1f))
         }
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             MemorySearchCard(app, Modifier.fillMaxWidth())
@@ -141,7 +145,6 @@ fun MemoryPage(app: PebbleApp) {
                     Chip("Delete $voiceClips voice clips", false) { app.clearVoiceSamples(); voiceClips = 0 }
                 }
             }
-            TeachCard(app, Modifier.fillMaxWidth().weight(1f))
         }
     }
 }

@@ -21,6 +21,13 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **UI:** a "Teach Pebble a command" card on the Memory page replaces the "AI assistants — coming later" placeholder (`TeachStateHolder`).
 - **Data:** taught phrases are `command_feedback` rows with outcome `taught` (no migration). "Forget what you taught me" deletes them and sets `brain.personalSince`.
 - **Not run locally:** the Python lint and test (`uv` is not on this machine's PATH). CI runs them.
+- **Live check (built distributable, 5 Oct):**
+  - "diary kholo" → "Can't do this yet";
+  - teach it as "Show my notes" on the Memory page → "diary kholo" shows your notes;
+  - "Forget what you taught me" → back to "Can't do this yet". Test data was removed afterwards.
+  - The check found that the Teach card was squeezed under the Privacy card. It now shares the left column.
+  - Your database is now at schema 11 (C2's `vector_item`). The installed v0.1.2 still starts on it.
+- **Follow-up (not C3):** `pebble.log` shows "history roll-up failed: [SQLITE_BUSY] database is locked" once at start-up (also on 4 Oct). It is probably a deferred transaction that reads, then writes while the event writer commits (WAL returns BUSY at once, so `busy_timeout` does not help). It tries again 10 minutes later. Fix: begin the roll-up transaction as IMMEDIATE.
 
 ### The PR stack (nothing is merged yet)
 Each PR is based on the one before it. Merge in this order, squash-merge each, and let GitHub retarget the next PR to `main`:
@@ -49,8 +56,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 ### Checks only you can do (the live app)
 1. Reminders page: click +/−, a toggle, a strictness chip and ✕ once (B7; the synthetic clicks hit the IDE).
 2. Memory page: try one search in "Search memory" (C2).
-2a. Memory page → "Teach Pebble a command": pick "Show my notes", teach "diary kholo", then type "diary kholo" in Quick Add. Pebble shows your notes (before: "can't do that yet"). Then press "Forget what you taught me" (C3).
-3. A reminder toast appears (B3 binding).
+3. ~~A reminder toast appears (B3 binding).~~ Seen in the 5 Oct live check ("Call mom").
 4. The older items below: battery run, "Start with Windows", Dependabot #6, noreply email, code signing.
 
 ### Open decisions
