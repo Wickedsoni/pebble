@@ -39,6 +39,8 @@ class OnnxParityTest {
         val rows = Json.parseToJsonElement(text).jsonArray
         OnnxIntentModel(dir).use { model ->
             var tokens = 0; var intents = 0; var tags = 0; var maxDp = 0f
+            var nearTies = 0
+            val realFlips = mutableListOf<String>()
             var moods = 0; var moodRows = 0
             for (row in rows) {
                 val r = row.jsonObject
@@ -47,7 +49,20 @@ class OnnxParityTest {
                 val got = model.understand(text)!!
                 if (model.tokenIds(text).toList() == wantIds) tokens++
                 if (got.top.intent == r.getValue("intent").jsonPrimitive.content) intents++
-                if (got.tags == r.getValue("tags").jsonArray.map { it.jsonPrimitive.content }) tags++
+                val wantTags = r.getValue("tags").jsonArray.map { it.jsonPrimitive.content }
+                if (got.tags == wantTags) {
+                    tags++
+                } else {
+                    // int8 kernels differ per CPU (AVX2 vs AVX-512/VNNI), so a word whose two best tags are almost
+                    // tied can flip. Only that is allowed; a confident disagreement is a real decoding bug.
+                    val probs = model.slotProbabilities(text)
+                    val flipped = got.tags.indices.filter { got.tags[it] != wantTags.getOrNull(it) }
+                    val margins = flipped.map { w -> w to (probs[w][got.tags[w]] ?: 0f) - (probs[w][wantTags.getOrNull(w)] ?: 0f) }
+                    val confident = margins.filter { (_, m) -> m >= NEAR_TIE }
+                    nearTies += margins.size - confident.size
+                    confident.forEach { (w, m) -> realFlips += "\"$text\" word $w: ${wantTags.getOrNull(w)} -> ${got.tags[w]} (margin $m)" }
+                    if (got.tags.size == wantTags.size && confident.isEmpty()) tags++
+                }
                 maxDp = maxOf(maxDp, abs(got.top.confidence - r.getValue("p").jsonPrimitive.float))
                 r["mood"]?.let { want ->
                     moodRows++
@@ -55,12 +70,21 @@ class OnnxParityTest {
                     maxDp = maxOf(maxDp, abs((got.mood?.confidence ?: 0f) - r.getValue("mood_p").jsonPrimitive.float))
                 }
             }
-            println("parity over ${rows.size}: tokens $tokens, intents $intents, slot tags $tags, moods $moods/$moodRows, max |Δp| $maxDp")
+            println(
+                "parity over ${rows.size}: tokens $tokens, intents $intents, slot tags $tags (near-tie flips $nearTies), " +
+                    "moods $moods/$moodRows, max |Δp| $maxDp",
+            )
+            realFlips.forEach { println("slot flip: $it") }
             assertEquals(moodRows, moods, "moods differ")
             assertEquals(rows.size, tokens, "token ids differ")
             assertEquals(rows.size, intents, "intents differ")
-            assertEquals(rows.size, tags, "slot tags differ")
+            assertEquals(rows.size, tags, "slot tags differ: $realFlips")
             assertTrue(maxDp < 1e-3f, "confidences drift: $maxDp")
         }
+    }
+
+    private companion object {
+        /** Largest probability gap between two slot tags that still counts as a tie across CPUs. */
+        const val NEAR_TIE = 0.01f
     }
 }
