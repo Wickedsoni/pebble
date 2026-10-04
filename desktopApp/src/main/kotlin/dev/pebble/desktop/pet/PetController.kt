@@ -17,7 +17,6 @@ import dev.pebble.core.reminders.Strictness
 import dev.pebble.core.settings.SettingsRepository.Keys
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.PetLine
-import dev.pebble.desktop.now
 import dev.pebble.desktop.platform.Power
 import dev.pebble.desktop.platform.UserActivity
 import java.time.LocalDate
@@ -113,7 +112,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
             else -> "Up late?"
         }
         react(PetLine(listOfNotNull(hello, recallLine()).joinToString(" "), Mood.HAPPY, 4_500))
-        nextRecall = now() + 3 * 60 * 60_000L
+        nextRecall = app.now() + 3 * 60 * 60_000L
     }
 
     /** A streak, a fact you shared, or a habit — whatever is most worth mentioning right now. */
@@ -121,13 +120,13 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         val m = app.memory.visible()
         m.firstOrNull { it.key == MemoryEngine.KEY_WATER_STREAK }?.let { return it.text }
         m.firstOrNull { it.key == MemoryEngine.KEY_DAYS_ACTIVE }?.let { return it.text }
-        m.filter { it.fromUser && now() - it.updatedAt > 12 * 60 * 60_000L }.randomOrNull()?.let { return "You told me: ${it.text}." }
+        m.filter { it.fromUser && app.now() - it.updatedAt > 12 * 60 * 60_000L }.randomOrNull()?.let { return "You told me: ${it.text}." }
         return null
     }
 
     /** Once an hour while you're here: the raw signal for "when are you usually around". */
     private fun noteActivity() {
-        val nowMs = now()
+        val nowMs = app.now()
         val slot = nowMs / (60 * 60_000L)
         if (slot != lastActiveSlot) {
             lastActiveSlot = slot
@@ -161,7 +160,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
                     )
                 }
             },
-            untilMillis = now() + 3 * 60_000L,
+            untilMillis = app.now() + 3 * 60_000L,
         )
     }
 
@@ -193,7 +192,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     /** Make a face and optionally say something for a while (task done, water logged…). */
     fun react(line: PetLine) {
         transient = line
-        transientUntil = now() + line.durationMillis
+        transientUntil = app.now() + line.durationMillis
         // Buttons close the bubble when clicked, like the reminder buttons do.
         val actions = line.actions.map { a -> BubbleAction(a.label) { speech = null; a.onClick() } }
         if (line.text.isNotEmpty()) speech = Speech(line.text, actions, untilMillis = transientUntil)
@@ -203,7 +202,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     // ------------------------------------------------------------------ input
 
     fun onClick() {
-        app.bus.publish(PebbleEvent.PetInteraction("click", now()))
+        app.bus.publish(PebbleEvent.PetInteraction("click", app.now()))
         if (behaviour == Behaviour.SLEEPING) {
             behaviour = Behaviour.IDLE
             react(PetLine("I'm awake.", Mood.IDLE, 2_000))
@@ -228,7 +227,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     private fun closeMenu() { menuOpen = false; speech = null }
 
     fun onDoubleClick() {
-        app.bus.publish(PebbleEvent.PetInteraction("pet", now()))
+        app.bus.publish(PebbleEvent.PetInteraction("pet", app.now()))
         closeMenu()
         react(PetLine("", Mood.LOVE, 1_800))
     }
@@ -242,7 +241,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         dragStartWin = x to y
         dragStartCursor = c.x.toFloat() to c.y.toFloat()
         closeMenu()
-        app.bus.publish(PebbleEvent.PetInteraction("drag", now()))
+        app.bus.publish(PebbleEvent.PetInteraction("drag", app.now()))
     }
 
     fun onDrag() {
@@ -309,7 +308,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
             if (hidden) return
         }
 
-        val nowMs = now()
+        val nowMs = app.now()
         if (transient != null && nowMs > transientUntil) transient = null
         speech?.untilMillis?.let { if (nowMs > it) speech = null }
 
@@ -396,7 +395,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     private fun showReminder(r: ActiveReminder, escalation: Escalation) {
         menuOpen = false
         // A gentle reminder you didn't answer in 3 minutes steps aside for half an hour instead of staying up.
-        if (r.strictness == Strictness.GENTLE && now() - r.dueAt > 3 * 60_000L) {
+        if (r.strictness == Strictness.GENTLE && app.now() - r.dueAt > 3 * 60_000L) {
             app.engine.defer(r.key, minutes = 30)
             return
         }

@@ -39,7 +39,6 @@ import dev.pebble.desktop.app.GlassCard
 import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
 import dev.pebble.desktop.app.drawBottle
-import dev.pebble.desktop.now
 import dev.pebble.desktop.pet.Mood
 import dev.pebble.desktop.pet.PetController
 import dev.pebble.desktop.pet.PetFrame
@@ -182,7 +181,7 @@ private fun NextUpCard(app: PebbleApp, modifier: Modifier) {
     GlassCard(modifier) {
         CardLabel("Next up", PebbleIcons.Bell, c.accent)
         upcoming.forEach { r ->
-            val mins = ((r.dueAt - now()) / 60_000).toInt()
+            val mins = ((r.dueAt - app.now()) / 60_000).toInt()
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     r.title,

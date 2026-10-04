@@ -125,7 +125,7 @@ fun RemindersPage(app: PebbleApp) {
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        val overdue = r.dueAt <= dev.pebble.desktop.now()
+                        val overdue = r.dueAt <= app.now()
                         Text(
                             if (overdue) "Due now" else Instant.ofEpochMilli(r.dueAt).atZone(ZoneId.systemDefault()).format(dueFormat),
                             color = if (overdue) c.warm else c.secondary,
