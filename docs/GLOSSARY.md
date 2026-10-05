@@ -14,6 +14,8 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 | **taught phrase** | A phrase that you gave an action on the Memory page ("Teach Pebble a command"). A row in `command_feedback` with outcome `taught`. | "custom command", "shortcut" |
 | **decision policy** | The code that decides to act, or to ask "Did you mean…". It uses the cost of a mistake. Code: `DecisionPolicy`. | "threshold logic" |
 | **nudge** | A message from a repeating reminder (for example, "drink water"). The nudge policy decides its time. Code: `NudgePolicy`. | "notification", "ping" |
+| **propensity** | The probability that the running nudge policy had of its choice. `ReminderEngine` logs it in each `nudge_decided` log entry. | "score", "confidence" |
+| **offline evaluation** | An estimate of the value of a new nudge policy from the logged choices and reactions, with no live test (IPS, SNIPS, ESS). Code: `NudgeIpsEvaluator` (ADR 0016). | "A/B test", "simulation" |
 | **reminder (one-off)** | A reminder that occurs one time, at a set time. Table: `one_off_reminder`. | "alarm", "task" |
 | **reminder (repeating)** | A reminder that occurs again after a set interval (eyes, water, stretch). | "habit", "recurring task" |
 | **event (calendar)** | An item in the calendar with a start and an end. It can repeat (an RRULE). Table: `calendar_event` (ADR 0014). | "event" without "(calendar)" when the meaning is not clear |
