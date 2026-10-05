@@ -60,6 +60,10 @@ class CalendarRepository(private val db: PebbleDatabase, private val journal: Ch
     /** Events that can have an occurrence in [from, to): expand the repeating ones to find it. */
     fun between(from: Long, to: Long): List<CalendarEvent> = q.eventsBetween(from = from, to = to).executeAsList().map(::toEvent)
 
+    /** [between], each event with the HLC of the version read (null before the journal), for its reminders. */
+    fun betweenWithHlc(from: Long, to: Long): List<Pair<CalendarEvent, String?>> =
+        q.eventsBetween(from = from, to = to).executeAsList().map { toEvent(it) to it.hlc }
+
     fun byUid(uid: String): CalendarEvent? = q.eventByUid(uid).executeAsOneOrNull()?.let(::toEvent)
 
     /** The event with this uid, also a deleted one (WP E3c, "restore as a copy"). */
