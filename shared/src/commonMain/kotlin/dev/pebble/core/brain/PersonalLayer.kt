@@ -143,9 +143,10 @@ class PersonalLayer(
         private const val ACTIONS = 8f
 
         private val wordRx = Regex("""[\p{L}\p{M}\p{N}]+""")
+        private val whitespaceRx = Regex("""\s+""")
 
         /** The key for "the same sentence": lower case, single spaces (as brain/feedback.py does). */
-        fun normalize(text: String): String = text.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        fun normalize(text: String): String = text.lowercase().split(whitespaceRx).filter { it.isNotEmpty() }.joinToString(" ")
 
         private fun words(text: String): Set<String> = wordRx.findAll(text).map { it.value }.filter { it.length > 1 }.toSet()
 
@@ -154,8 +155,7 @@ class PersonalLayer(
 
         private fun slotOf(hour: Int) = hour / 3
 
-        private fun groupOf(intent: String): String =
-            PebbleActions.fromMassive(intent).let { if (it == PebbleActions.OTHER) "other:$intent" else it }
+        private fun groupOf(intent: String): String = actionGroupOf(intent)
 
         /** The formula in the class comment, applied to every intent guess so [Understood.actions] stays consistent. */
         internal fun blend(u: Understood, votes: Map<String, Float>): Understood {

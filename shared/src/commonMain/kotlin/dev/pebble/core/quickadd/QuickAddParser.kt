@@ -27,9 +27,13 @@ sealed interface QuickCommand {
         val flexibleHalfDay: Boolean = false,
     ) : QuickCommand
 
-    // Understood by the command model (M1); no rule syntax needed.
+    /** Show what is coming up. Understood by the command model (M1); no rule syntax needed. */
     data object ShowUpcoming : QuickCommand
+
+    /** Show the latest notes. Understood by the command model (M1); no rule syntax needed. */
     data object ShowNotes : QuickCommand
+
+    /** Tell the time. Understood by the command model (M1); no rule syntax needed. */
     data object TellTime : QuickCommand
 
     /** Small talk; [intent] is the model's finer label (greet / joke / quirky). */
@@ -38,12 +42,14 @@ sealed interface QuickCommand {
     /** Something Pebble understands but can't do yet (music, weather, lights…). */
     data class Unsupported(val text: String, val intent: String) : QuickCommand
 
-    /** Removing reminders/notes happens in the app for now. */
-    // Opens a page of the Pebble window. text: what you said (the reply mirrors its script).
-    // forRemoval: you asked to remove a reminder or note, and the page is where you pick which one.
-    // Search your notes, facts and chat for [topic] (WP C2); text: what you said (the reply mirrors its script).
+    /** Search your notes, facts and chat for [topic] (WP C2); [text]: what you said (the reply mirrors its script). */
     data class SearchMemory(val topic: String, val text: String) : QuickCommand
 
+    /**
+     * Opens a page of the Pebble window. [text]: what you said (the reply mirrors its script).
+     * [forRemoval]: you asked to remove a reminder or note, and the page is where you pick which one
+     * (removing happens in the app for now).
+     */
     data class OpenPage(val page: String, val text: String = "", val forRemoval: Boolean = false) : QuickCommand
 
     /**
@@ -139,6 +145,8 @@ object QuickAddParser {
         Regex("""\s(?:at|@)\s*(\d{1,2})(?::(\d{2}))?()(?=\s)""", RegexOption.IGNORE_CASE),
         Regex("""\s(\d{1,2}):(\d{2})()(?=\s)"""),
     )
+    private val whitespaceRx = Regex("""\s+""")
+    private val trailingPrepositionRx = Regex("""\s+(?:on|at|from)$""", RegexOption.IGNORE_CASE)
     private val months = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
     private const val MONTH = """(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*"""
     private val eventDateRxs = listOf(
@@ -224,10 +232,16 @@ object QuickAddParser {
             }
         }
 
-        val title = rest.trim().replace(Regex("""\s+"""), " ").replace(Regex("""\s+(?:on|at|from)$""", RegexOption.IGNORE_CASE), "")
+        val title = rest.trim().replace(whitespaceRx, " ").replace(trailingPrepositionRx, "")
         if (title.isBlank()) return null
         return QuickCommand.AddEvent(cleanTitle(title), hour, minute, dayOffset, month, dayOfMonth, flexible, duration)
     }
+
+    /** Most glasses one line can log. */
+    private const val MAX_GLASSES = 20
+
+    /** Longest "in N min" reminder: one week. */
+    private const val MAX_REMIND_MINUTES = 7 * 24 * 60
 
     /** Days in each month (February: 29, so 29 Feb is a valid date in a leap year). */
     private val MONTH_DAYS = listOf(31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
@@ -268,25 +282,25 @@ object QuickAddParser {
             val n = m.groupValues[1].let { if (it.isEmpty()) 1 else HinglishTime.numberOf(it.lowercase()) }
             if (kind != null && n != null) {
                 val perHour = m.groupValues[2].lowercase().let { it.startsWith("gh") || it.startsWith("घं") || it.startsWith("hour") }
-                return QuickCommand.SetInterval(kind, (if (perHour) n * 60 else n).coerceIn(1, 24 * 60), strictnessOf(text))
+                return QuickCommand.SetInterval(kind, (if (perHour) n.coerceIn(1, 24) * 60 else n).coerceIn(1, 24 * 60), strictnessOf(text))
             }
         }
 
         if (hiWaterRx.containsMatchIn(text)) return QuickCommand.LogWater(glassesIn(text))
         enWaterRx.find(text)?.let { m ->
             val n = m.groupValues[1].lowercase().let { if (it.isEmpty() || it == "a" || it == "an") 1 else HinglishTime.numberOf(it) ?: 1 }
-            return QuickCommand.LogWater(n.coerceIn(1, 20))
+            return QuickCommand.LogWater(n.coerceIn(1, MAX_GLASSES))
         }
 
         waterLogRx.find(text)?.let { m ->
-            val n = (m.groupValues[1].ifEmpty { m.groupValues[2] }).ifEmpty { "1" }.toInt()
-            return QuickCommand.LogWater(n.coerceIn(1, 20))
+            val n = (m.groupValues[1].ifEmpty { m.groupValues[2] }).ifEmpty { "1" }.toIntOrNull() ?: MAX_GLASSES
+            return QuickCommand.LogWater(n.coerceIn(1, MAX_GLASSES))
         }
 
         inRx.find(text)?.let { m ->
-            val n = m.groupValues[2].toInt()
+            val n = m.groupValues[2].toLongOrNull() ?: Long.MAX_VALUE / 60
             val minutes = if (m.groupValues[3].startsWith("h", ignoreCase = true)) n * 60 else n
-            return QuickCommand.RemindIn(cleanTitle(m.groupValues[1]), minutes)
+            return QuickCommand.RemindIn(cleanTitle(m.groupValues[1]), minutes.coerceIn(1L, MAX_REMIND_MINUTES.toLong()).toInt())
         }
 
         atRx.find(text)?.let { m ->
@@ -312,31 +326,46 @@ object QuickAddParser {
         return null
     }
 
+    private val waterKindRx = Regex("""\b(?:water|drink(?:s|ing)?|hydrat\w*|sips?|paani|pani)\b""")
+    private val stretchKindRx = Regex("""\b(?:stretch\w*|stand(?:s|ing)?|walk\w*|tahal\w*)\b""")
+    private val eyesKindRx = Regex("""\b(?:eyes?|20-20-20|screen break|aankh\w*|ankh\w*)\b""")
+
+    /** Devanagari words, which a word boundary does not bound reliably (combining marks): plain substrings, as before. */
+    private val devanagariKinds = listOf(
+        listOf("पानी") to ReminderKind.WATER,
+        listOf("स्ट्रेच", "टहल") to ReminderKind.STRETCH,
+        listOf("आंख", "आँख") to ReminderKind.EYES,
+    )
+
     private fun kindOf(text: String): ReminderKind? {
         val t = text.lowercase()
         return when {
-            listOf("water", "drink", "hydrat", "sip", "paani", "pani", "पानी").any { it in t } -> ReminderKind.WATER
-            listOf("stretch", "stand", "walk", "स्ट्रेच", "टहल", "tahal").any { it in t } -> ReminderKind.STRETCH
-            listOf("eye", "20-20-20", "screen break", "aankh", "ankh", "आंख", "आँख").any { it in t } -> ReminderKind.EYES
-            else -> null
+            waterKindRx.containsMatchIn(t) -> ReminderKind.WATER
+            stretchKindRx.containsMatchIn(t) -> ReminderKind.STRETCH
+            eyesKindRx.containsMatchIn(t) -> ReminderKind.EYES
+            else -> devanagariKinds.firstOrNull { (words, _) -> words.any { it in t } }?.second
         }
     }
+
+    private val strictRx = Regex("""\b(?:strict|coach)\b""")
+    private val gentleRx = Regex("""\b(?:gentle|soft)\b""")
+    private val normalRx = Regex("""\bnormal\b""")
 
     private fun strictnessOf(text: String): Strictness? {
         val t = text.lowercase()
         return when {
-            "strict" in t || "coach" in t -> Strictness.STRICT
-            "gentle" in t || "soft" in t -> Strictness.GENTLE
-            "normal" in t -> Strictness.NORMAL
+            strictRx.containsMatchIn(t) -> Strictness.STRICT
+            gentleRx.containsMatchIn(t) -> Strictness.GENTLE
+            normalRx.containsMatchIn(t) -> Strictness.NORMAL
             else -> null
         }
     }
 
     /** "ek glass", "do glass", "2 गिलास" → 2; defaults to 1. */
     private fun glassesIn(text: String): Int {
-        val words = text.lowercase().split(Regex("""\s+"""))
+        val words = text.lowercase().split(whitespaceRx)
         val i = words.indexOfFirst { it.startsWith("glass") || it.startsWith("गिलास") || it.startsWith("bottle") }
-        return (if (i > 0) HinglishTime.numberOf(words[i - 1]) else null)?.coerceIn(1, 20) ?: 1
+        return (if (i > 0) HinglishTime.numberOf(words[i - 1]) else null)?.coerceIn(1, MAX_GLASSES) ?: 1
     }
 
     private fun cleanTitle(raw: String) = raw.trim().trimEnd(',', '.').replaceFirstChar { it.uppercase() }

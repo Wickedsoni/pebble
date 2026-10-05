@@ -71,4 +71,40 @@ class HinglishTimeTest {
         assertEquals(2, HinglishTime.dayOf("friday wali meeting", wed))
         assertNull(HinglishTime.dayOf("friday wali meeting"))
     }
+
+    @Test fun aBareNumberWordIsNotAClockHour() {
+        assertNull(p("remind me to do homework tomorrow"))
+        assertNull(p("kal yaad dila do"))
+        assertNull(p("call ek friend kal"))
+        assertNull(p("buy one gift tomorrow"))
+        assertNull(p("buy 3 apples tomorrow"))
+        assertNull(p("do"))
+        assertEquals(false, HinglishTime.hasClock("buy 3 apples tomorrow"))
+    }
+
+    @Test fun aNumberNextToAClockCueIsAnHour() {
+        assertEquals(At(5, 0, null, true), p("at 5"))
+        assertEquals(At(5, 0, null, true), p("at five"))
+        assertEquals(At(3, 0, 1, true), p("tomorrow at 3"))
+        assertEquals(At(3, 0, 1, true), p("kal 3"))
+        assertEquals(At(7, 0, null, true), p("saat baje"))
+        assertEquals(At(2, 0, 1, true), p("kal do baje"))
+        assertEquals(At(19, 0, null, false), p("shaam saat"))
+        assertEquals(At(1, 0, null, true), p("one o'clock"))
+    }
+
+    @Test fun aDurationNeedsItsMarkerNextToIt() {
+        assertEquals(At(4, 0, null, true), p("remind me about the 30 minute standup at 4"))
+        assertEquals(At(16, 0, null, false), p("30 minute standup at 4pm"))
+        assertEquals(In(20), p("call me in 20 min"))
+        assertEquals(In(20), p("20 min mein"))
+        assertEquals(In(20), p("20 min me"))
+        assertEquals(In(60), p("in an hour"))
+        assertEquals(In(30), p("in half an hour"))
+    }
+
+    @Test fun hugeDurationsAreClamped() {
+        assertEquals(In(7 * 24 * 60), p("in 99999999 hours"))
+        assertNull(p("in 99999999999 minutes"))
+    }
 }

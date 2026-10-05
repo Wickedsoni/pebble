@@ -112,4 +112,25 @@ class QuickAddParserTest {
         // The Calendar page's Add field uses the same reader without "event:".
         assertEquals(AddEvent("Dentist", hour = 17, durationMinutes = 30), QuickAddParser.parseEvent("Dentist 5pm for 30 min"))
     }
+
+    @Test fun hugeNumbersNeverThrow() {
+        assertEquals(LogWater(20), p("12345678901 water"))
+        assertEquals(RemindIn("Stretch", 7 * 24 * 60), p("stretch in 99999999999 min"))
+        assertEquals(RemindIn("Stretch", 7 * 24 * 60), p("stretch in 99999999 h"))
+        assertEquals(RemindIn("Stretch", 5), p("stretch in 5 min"))
+        assertEquals(SetInterval(ReminderKind.WATER, 24 * 60, null), p("water every 99999999999 minutes"))
+        assertEquals(SetInterval(ReminderKind.WATER, 24 * 60, null), p("har 99999999 ghante paani"))
+        assertEquals(LogWater(1), p("paani pi 99999999999 glass"))
+        assertEquals(AddEvent("Dentist", durationMinutes = 24 * 60), QuickAddParser.parseEvent("Dentist for 99999999999999999999 min"))
+    }
+
+    @Test fun kindAndStrictnessNeedWholeWords() {
+        assertEquals(AddNote("outstanding tasks every 30 min"), p("outstanding tasks every 30 min"))
+        assertEquals(AddNote("gossip every 10 min"), p("gossip every 10 min"))
+        assertEquals(AddNote("eyebrow trim every 5 min"), p("eyebrow trim every 5 min"))
+        assertEquals(SetInterval(ReminderKind.WATER, 120, null), p("water every 2 hours microsoft"))
+        assertEquals(SetInterval(ReminderKind.STRETCH, 30, Strictness.GENTLE), p("stretch every 30 min soft"))
+        assertEquals(SetInterval(ReminderKind.STRETCH, 30, null), p("stretch every 30 min microsoft"))
+        assertEquals(SetInterval(ReminderKind.EYES, 20, Strictness.STRICT), p("eyes every 20 min strict"))
+    }
 }
