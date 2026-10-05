@@ -81,9 +81,9 @@ Line numbers can move. If a line does not match, search for the name.
 | Modules: `:shared` (KMP, `jvm()` only), `:desktopApp` (JVM Compose). No build-logic. | `settings.gradle.kts`, `shared/build.gradle.kts` |
 | `PebbleApp` = object graph + executor; constructor `PebbleApp(db: PebbleDatabase)`; tests call `PebbleApp(DatabaseFactory.inMemory())` and use `app.executeFromModel`, `app.notes`, `app.commandFeedback` | `desktopApp/.../PebbleApp.kt:47`, `desktopApp/src/test/.../NotWhatIMeantTest.kt:21-40` |
 | Shared mutable undo: `private var lastUndo`, set in `execute`, captured in `executeFromModel` | `PebbleApp.kt:245-263, 266-336` |
-| Ad-hoc scopes in field initialisers (`ModelManager`, `SpeechRecognizer`, `VoiceInput`) | `PebbleApp.kt:93,105,110-111` |
+| One `appScope` (`SupervisorJob` + `env.dispatchers.main`); `ModelManager`, `SpeechRecognizer`, `VoiceInput` get `appScope + env.dispatchers.default`, so `shutdown()` cancels all (WP B1) | `PebbleApp.kt` |
 | Public `var` UI hooks `notifier`, `openPage`, `voiceDir` | `PebbleApp.kt:99,102,117` |
-| Global `fun now()` and `LocalDateTime.now()` inside `resolve/describeWhen` (time that tests cannot control) | `PebbleApp.kt:373-390, 402` |
+| Time comes from `AppEnv` (`clock`, `zone`, `dispatchers`): `PebbleApp(db, env = AppEnv.system())`, `app.now()`, `env.today()`, `env.localNow()`. The top-level `now()` / `minuteOfDay()` are `@Deprecated` (warnings are errors, so do not call them) (WP B1) | `desktopApp/.../core/AppEnv.kt`, `PebbleApp.kt` |
 | `EventLogger` attached with `Dispatchers.Unconfined`, so DB writes happen on the publisher thread (often Swing); comment: "nothing is lost on exit" | `PebbleApp.kt:143-144`, `shared/.../event/EventLogger.kt` |
 | `EventBus`: `MutableSharedFlow`, buffer 256, `DROP_OLDEST` | `shared/.../event/EventBus.kt` |
 | `Understanding` is a synchronous `fun interface understand(text): Understood?`; `CommandRouter(model: () -> Understanding?, ...)`; the router is called on `Dispatchers.Default` | `shared/.../brain/Understanding.kt:65`, `CommandRouter.kt:15`, `desktopApp/.../quickadd/QuickAddWindow.kt:156,165` |

@@ -3,7 +3,6 @@ package dev.pebble.desktop.platform
 import com.sun.jna.platform.win32.User32
 import dev.pebble.core.settings.SettingsRepository.Keys
 import dev.pebble.desktop.PebbleApp
-import dev.pebble.desktop.now
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -22,7 +21,7 @@ class MediaWatcher(private val app: PebbleApp) {
                 withContext(Dispatchers.IO) { foregroundTitle() }?.let(::match)?.let { (source, title) ->
                     if (title != lastTitle) {
                         lastTitle = title
-                        app.memory.logMedia(source, title, now())
+                        app.memory.logMedia(source, title, app.now())
                     }
                 }
             }

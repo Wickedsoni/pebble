@@ -19,6 +19,7 @@ import dev.pebble.core.wellness.GLASS_ML
 import dev.pebble.core.wellness.NoteRepository
 import dev.pebble.core.wellness.WaterRepository
 import dev.pebble.db.PebbleDatabase
+import dev.pebble.desktop.core.AppEnv
 import dev.pebble.desktop.pet.Mood
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.time.LocalDate
+import kotlinx.coroutines.plus
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -43,8 +44,14 @@ data class PetLine(
     val actions: List<dev.pebble.desktop.pet.BubbleAction> = emptyList(),
 )
 
-/** App-wide object graph. Created once in `main`, shared by every window. Lives on the Swing thread. */
-class PebbleApp(db: PebbleDatabase) {
+/**
+ * App-wide object graph. Created once in `main`, shared by every window. Lives on the Swing thread.
+ * Time and dispatchers come from [env], so tests can fix "now".
+ */
+class PebbleApp(db: PebbleDatabase, val env: AppEnv = AppEnv.system()) {
+    /** Now, from the app's clock ([env]). Use this instead of the top-level [dev.pebble.desktop.now]. */
+    fun now(): Long = env.millis()
+
     val bus = EventBus()
     val layouts = WidgetLayoutRepository(db)
     val settings = SettingsRepository(db)
@@ -56,16 +63,16 @@ class PebbleApp(db: PebbleDatabase) {
     /** The pet's growth: levels earned by what you do (reminders done, water goals, active days, chats). */
     val growth = dev.pebble.core.growth.GrowthEngine(
         db,
-        dayOf = { java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() },
+        dayOf = env::dayOf,
         waterGoalMl = { waterGoalGlasses * GLASS_ML },
     )
 
     val brain = MemoryEngine(
         db,
         memory,
-        clock = ::now,
-        hourOf = { minuteOfDay(it) / 60 },
-        dayOf = { java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() },
+        clock = this::now,
+        hourOf = { env.minuteOfDay(it) / 60 },
+        dayOf = env::dayOf,
         waterGoalMl = { waterGoalGlasses * GLASS_ML },
     )
 
@@ -75,8 +82,8 @@ class PebbleApp(db: PebbleDatabase) {
     val engine = ReminderEngine(
         reminders,
         bus,
-        clock = ::now,
-        minuteOfDay = ::minuteOfDay,
+        clock = this::now,
+        minuteOfDay = env::minuteOfDay,
         quietHours = brain::quietHours,
         nudge = nudge,
         busy = dev.pebble.desktop.platform.UserActivity::isFullscreenBusy,
@@ -90,7 +97,8 @@ class PebbleApp(db: PebbleDatabase) {
         }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    /** Every coroutine of the app runs in this scope (or a child of it), so [shutdown] stops them all. */
+    private val appScope = CoroutineScope(SupervisorJob() + env.dispatchers.main)
 
     private val _petLines = MutableSharedFlow<PetLine>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val petLines: SharedFlow<PetLine> = _petLines
@@ -102,13 +110,13 @@ class PebbleApp(db: PebbleDatabase) {
     var openPage: (String) -> Unit = {}
 
     /** The local command model, loaded on demand; the router falls back to rules without it. */
-    val model = dev.pebble.desktop.brain.ModelManager(CoroutineScope(SupervisorJob() + Dispatchers.Default))
-    val router = dev.pebble.core.brain.CommandRouter({ model }, today = { LocalDate.now().dayOfWeek.value })
+    val model = dev.pebble.desktop.brain.ModelManager(appScope + env.dispatchers.default)
+    val router = dev.pebble.core.brain.CommandRouter({ model }, today = { env.today().dayOfWeek.value })
     val commandFeedback = dev.pebble.core.brain.CommandFeedbackRepository(db)
 
     /** Offline speech (VAD + Whisper), loaded only when you talk and freed when idle. */
-    val speech = dev.pebble.desktop.voice.SpeechRecognizer(CoroutineScope(SupervisorJob() + Dispatchers.Default))
-    val voice = dev.pebble.desktop.voice.VoiceInput(speech, CoroutineScope(SupervisorJob() + Dispatchers.Default)) {
+    val speech = dev.pebble.desktop.voice.SpeechRecognizer(appScope + env.dispatchers.default)
+    val voice = dev.pebble.desktop.voice.VoiceInput(speech, appScope + env.dispatchers.default) {
         settings.bool(Keys.MICROPHONE_ENABLED, true)
     }
     val voiceSamples = dev.pebble.core.brain.VoiceSampleRepository(db)
@@ -141,11 +149,11 @@ class PebbleApp(db: PebbleDatabase) {
 
     init {
         // Unconfined: events are written on the publisher's thread, so nothing is lost on exit.
-        EventLogger(db).attach(bus, CoroutineScope(scope.coroutineContext + Dispatchers.Unconfined))
+        EventLogger(db).attach(bus, CoroutineScope(appScope.coroutineContext + Dispatchers.Unconfined))
         bus.publish(PebbleEvent.AppStarted(now()))
-        engine.start(scope)
+        engine.start(appScope)
         // Learning is cheap (a few small queries); every 10 minutes keeps memories fresh.
-        scope.launch {
+        appScope.launch {
             while (isActive) {
                 runCatching { brain.learn() }
                 delay(10 * 60_000L)
@@ -178,7 +186,7 @@ class PebbleApp(db: PebbleDatabase) {
 
     val waterGoalGlasses: Int get() = settings.int(Keys.WATER_GOAL_GLASSES, 8)
 
-    fun startOfToday(): Long = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    fun startOfToday(): Long = env.startOfToday()
 
     fun logWater(glasses: Int = 1): Int {
         val goalMl = waterGoalGlasses * GLASS_ML
@@ -300,7 +308,7 @@ class PebbleApp(db: PebbleDatabase) {
 
             is QuickCommand.RemindAt -> {
                 val at = resolve(cmd)
-                val id = reminders.addOneOff(cmd.title, at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+                val id = reminders.addOneOff(cmd.title, env.toMillis(at))
                 lastUndo = { reminders.deleteOneOff(id); engine.tick() }
                 PetLine("I'll remind you ${describeWhen(at)}.")
             }
@@ -320,7 +328,7 @@ class PebbleApp(db: PebbleDatabase) {
             }
 
             QuickCommand.TellTime -> PetLine(
-                "It's " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm a, EEEE")) + ".",
+                "It's " + env.localNow().format(DateTimeFormatter.ofPattern("h:mm a, EEEE")) + ".",
                 Mood.IDLE,
             )
 
@@ -370,9 +378,10 @@ class PebbleApp(db: PebbleDatabase) {
         is QuickCommand.OpenPage -> "Open ${cmd.page} in Pebble"
     }
 
-    private fun resolve(cmd: QuickCommand.RemindAt): LocalDateTime {
-        val now = LocalDateTime.now()
-        val base = LocalDate.now().plusDays((cmd.dayOffset ?: 0).toLong())
+    /** When a "remind me at …" command fires, on the app's clock. Internal for [ResolveTimeTest]. */
+    internal fun resolve(cmd: QuickCommand.RemindAt): LocalDateTime {
+        val now = env.localNow()
+        val base = env.today().plusDays((cmd.dayOffset ?: 0).toLong())
         // "5 baje" without am/pm: whichever of 5:00 / 17:00 comes next on that day.
         val candidates = if (cmd.flexibleHalfDay && cmd.hour < 12) listOf(cmd.hour, cmd.hour + 12) else listOf(cmd.hour)
         val onDay = candidates.map { base.atTime(it, cmd.minute) }
@@ -382,16 +391,17 @@ class PebbleApp(db: PebbleDatabase) {
 
     private fun describeWhen(at: LocalDateTime): String {
         val time = at.format(DateTimeFormatter.ofPattern("h:mm a"))
+        val today = env.today()
         return when (at.toLocalDate()) {
-            LocalDate.now() -> "at $time"
-            LocalDate.now().plusDays(1) -> "tomorrow at $time"
+            today -> "at $time"
+            today.plusDays(1) -> "tomorrow at $time"
             else -> at.format(DateTimeFormatter.ofPattern("EEE d MMM 'at' h:mm a"))
         }
     }
 
     fun shutdown() {
         bus.publish(PebbleEvent.AppStopping(now()))
-        scope.cancel()
+        appScope.cancel()
     }
 
     companion object {
@@ -399,8 +409,10 @@ class PebbleApp(db: PebbleDatabase) {
     }
 }
 
+@Deprecated("Untestable wall-clock time. Use PebbleApp.now() (the app's clock).", ReplaceWith("app.now()"))
 fun now(): Long = System.currentTimeMillis()
 
+@Deprecated("Uses the system zone directly. Use PebbleApp.env.minuteOfDay().", ReplaceWith("app.env.minuteOfDay(millis)"))
 fun minuteOfDay(millis: Long): Int =
     java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
 

@@ -80,7 +80,7 @@ fun main(args: Array<String>) {
         fun setPetVisible(v: Boolean) {
             petVisible = v
             app.layouts.setVisible(PET, v)
-            app.bus.publish(PebbleEvent.WidgetVisibilityChanged(PET, v, now()))
+            app.bus.publish(PebbleEvent.WidgetVisibilityChanged(PET, v, app.now()))
         }
 
         fun setAutostart(v: Boolean) {
