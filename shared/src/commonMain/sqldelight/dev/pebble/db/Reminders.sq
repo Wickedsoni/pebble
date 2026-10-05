@@ -94,6 +94,11 @@ VALUES (?, ?, ?, lower(hex(randomblob(16))), ?, (SELECT value FROM setting WHERE
 linkedOneOffExists:
 SELECT count(*) FROM one_off_reminder WHERE event_uid = ? AND occurrence_at = ? AND deleted_at IS NULL;
 
+-- The event was deleted (a tombstone): it gets no new reminder. Checked in addLinked's transaction, because the
+-- 10-minute loop can read the event just before a delete on another thread.
+linkedEventDeleted:
+SELECT count(*) FROM calendar_event WHERE uid = ? AND deleted_at IS NOT NULL;
+
 -- The event changed or was deleted: its reminders that did not fire yet go (tombstones).
 deletePendingLinked:
 UPDATE one_off_reminder SET deleted_at = :at, updated_at = :at WHERE event_uid = :eventUid AND done_at IS NULL AND deleted_at IS NULL;

@@ -100,6 +100,9 @@ class PebbleApp(
             .onFailure { log.warn(TAG, "change journal: reconcile failed", it) }
     }
 
+    /** Old versions and lost edits of events, notes and reminders, kept 90 days on this device (WP E3c, ADR 0019). */
+    val history = dev.pebble.core.sync.ChangeHistory(db, journal)
+
     /** The pet's growth: levels earned by what you do (reminders done, water goals, active days, chats). */
     val growth = dev.pebble.core.growth.GrowthEngine(
         db,
@@ -407,6 +410,9 @@ class PebbleApp(
         val purgeBefore = env.millis() - TOMBSTONE_DAYS * 24 * 60 * 60_000L
         val purged = notes.purgeTombstones(purgeBefore) + reminders.purgeTombstones(purgeBefore) + calendar.purgeTombstones(purgeBefore)
         if (purged > 0) log.info(TAG, "purged $purged deleted notes, reminders and events older than $TOMBSTONE_DAYS days")
+        // History (WP E3c): the same 90 days, and all history of the rows purged above.
+        val dropped = history.purge(purgeBefore)
+        if (dropped > 0) log.info(TAG, "purged $dropped history entries")
     }
 
     fun completeNote(id: Long) {

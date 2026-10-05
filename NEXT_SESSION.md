@@ -7,11 +7,10 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (end of 5 Oct 2026, after WP E3b and the E3c spec)
-- **State:** A1 … E4, C4, E3a and E3b are on `main` (last: E3b PR #47, faster CI #48, E3c spec #49). There are no open PRs. Schema version 14; the next migration file is `14.sqm`.
-- **Next WP: E3c-1** (history and restore: data + API). The spec `docs/specs/E3C-HISTORY.md` is **approved** (5 Oct). Your answers: "Recently deleted" is one card on the Memory page; old versions are kept 90 days; a "Clear history" button; a restore brings back everything in the version (also "done" and "archived"), but a delete is never undone in place (a copy instead).
-  - First step: **VERIFY** that a `BEFORE INSERT` trigger on `change_journal` fires for `INSERT OR REPLACE` (sqlite-jdbc 3.53.4.0), and write `new.` in lower case (CLAUDE.md trap 12).
-  - Then E3c-2 (History on the Calendar and Reminders pages, "Recently deleted" on the Memory page) and E3c-3 (Notes page to the state-holder pattern, then History).
+### Start here (end of 5 Oct 2026, after WP E3c-1)
+- **State:** A1 … E4, C4, E3a and E3b are on `main`. **E3c-1** is on branch `wp/e3c1-history-data` (PR open, waiting for CI and your yes to merge). Schema version 15; the next migration file is `15.sqm`.
+- **Next WP: E3c-2** (spec `docs/specs/E3C-HISTORY.md` section 6): a "History" button and dialog on the Calendar and Reminders pages; a "Recently deleted" card on the Memory page with "Restore as a copy" and "Clear history" (asks first). Follow `docs/UI-PATTERN.md`. The data and API are ready: `app.history` (`ChangeHistory`). After a restore or a copy of a calendar event, call `agenda.eventChanged(uid, now)`. When "Clear history" exists, add it to the `PRIVACY.md` history row.
+  - Then E3c-3 (Notes page to the state-holder pattern, then History).
   - After E3c: milestone F (F0 needs an Opus spec and a security review).
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
 - **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.
@@ -22,8 +21,18 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Waiting for your yes:** cut release **0.3.0** (`gh release`). It ships the v3 command model and now the calendar. Publish the chat pack and a speech pack with it: sign them with `./gradlew :desktopApp:modelPack`; the key is in `%USERPROFILE%\.pebble\signing\` (back it up offline).
 - **Deferred by you:** C6 model training (Hindi/Hinglish chat distillation). Do not start it until you ask.
 - **Your housekeeping:**
-  - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db` and `pebble-backup-e3a.db` (taken before the E2 and E3a migrations) when you are happy;
+  - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db`, `pebble-backup-e3a.db` and `pebble-backup-e3c.db` (taken before the E2, E3a and E3c-1 migrations) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
+
+### 5 Oct: WP E3c-1 done (history data + API, branch `wp/e3c1-history-data`)
+- **What:** table `change_history` (`14.sqm`, schema 14 → 15) keeps old values of synced fields of events, notes and one-off reminders for 90 days, only on this device (ADR 0019).
+  - A trigger on `change_journal` keeps each replaced value on every write path (local edit, merge, reconcile). `deleted_at` is never kept.
+  - The merge keeps a peer's losing edit as a **lost edit** (not if the value is the same, not if the edit was this device's).
+  - `ChangeHistory`: `versions`, `restore` (a new edit with a new HLC, through the new `ChangeJournal.edit`), `recentlyDeleted`, `restoreCopy` (new uid; the deleted item stays deleted), `lostSince`, `clear`, `purge`. The daily job purges history after the tombstone purge.
+- **VERIFY done:** `BEFORE INSERT` fires for `INSERT OR REPLACE` with sqlite-jdbc 3.53.4.0 (SQLite 3.53.4).
+- **Differences from the spec (in the PR and ADR 0019):** `restoreCopy` returns `String?` (null if the item is not a tombstone here); a copied note comes back not archived and a copied reminder not done.
+- **Tests:** `ChangeHistoryTest` (15), `MigrationTest` 14 → 15. 322 Kotlin tests, 0 skipped. `apply` of 500 rows: 104 ms (limit 200 ms).
+- **Live check (5 Oct):** backup first: `%APPDATA%\Pebble\pebble-backup-e3c.db` (schema 14, `integrity_check` ok). The built app migrated your real database 14 → 15; `integrity_check` ok; the history is empty (it starts at the migration); no new log lines. E3c-1 has no UI.
 
 ### 5 Oct: WP E3b done (merge + convergence gate, PR #47, merged)
 - **What:** `ChangeJournal.changesSince(cursor, limit)` gives whole rows after a cursor; `ChangeJournal.apply(batch, wall)` merges a peer's batch: the larger HLC wins field by field, a delete always wins, all or nothing. Every name, type and HLC is checked first; a clock more than 60 minutes ahead is refused. A restore gives the journal a new epoch, so peers read again from the start.

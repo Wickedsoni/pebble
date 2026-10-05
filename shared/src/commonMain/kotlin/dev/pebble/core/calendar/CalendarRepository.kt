@@ -62,6 +62,9 @@ class CalendarRepository(private val db: PebbleDatabase, private val journal: Ch
 
     fun byUid(uid: String): CalendarEvent? = q.eventByUid(uid).executeAsOneOrNull()?.let(::toEvent)
 
+    /** The event with this uid, also a deleted one (WP E3c, "restore as a copy"). */
+    fun anyByUid(uid: String): CalendarEvent? = q.eventRowByUid(uid).executeAsOneOrNull()?.let(::toEvent)
+
     /**
      * Adds [e], or changes the live event with the same uid. [at]: when. Returns false, and changes nothing, if
      * the event with this uid was deleted: a deleted event never comes back (spec D5), also from an ICS file.

@@ -21,6 +21,11 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 | **change journal** | The table `change_journal`. It keeps the newest value and HLC of each synced field of each synced row. Code: `ChangeJournal`. | "changelog", "oplog" |
 | **journal entry** | One row in `change_journal`. | "change record" |
 | **grave** | The journal entry `deleted_at` of a row that the purge removed. It keeps the row deleted on all devices. | "marker" |
+| **history entry** | One row in `change_history`: an old value of one synced field, and why Pebble kept it. Code: `ChangeHistory` (ADR 0019). | "audit row", "backup" |
+| **version** | The history entries of one item that one change replaced, shown together. | "revision", "snapshot" |
+| **lost edit** | An edit from another device that lost a merge, because this device had a newer edit of the same field. | "conflict", "overwritten change" |
+| **restore** | Make an old version the current one, as a new edit. | "undo", "roll back" |
+| **restore as a copy** | Make a new item with the fields of a deleted item. The deleted item stays deleted. | "undelete", "recover" |
 | **reminder (one-off)** | A reminder that occurs one time, at a set time. Table: `one_off_reminder`. | "alarm", "task" |
 | **reminder (repeating)** | A reminder that occurs again after a set interval (eyes, water, stretch). | "habit", "recurring task" |
 | **event (calendar)** | An item in the calendar with a start and an end. It can repeat (an RRULE). Table: `calendar_event` (ADR 0014). | "event" without "(calendar)" when the meaning is not clear |

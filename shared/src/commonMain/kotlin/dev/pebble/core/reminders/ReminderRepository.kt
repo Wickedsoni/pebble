@@ -103,10 +103,12 @@ class ReminderRepository(private val db: PebbleDatabase, private val journal: Ch
 
     /**
      * A reminder for one occurrence of a calendar event (WP E2), linked by [eventUid] and [occurrenceAt]. Returns false
-     * when that occurrence already has a live reminder (pending, done or snoozed), so a second call adds nothing.
+     * when that occurrence already has a live reminder (pending, done or snoozed), so a second call adds nothing, and
+     * when the event was deleted in the meantime (the agenda read it before the delete).
      */
     fun addLinked(title: String, dueAt: Long, eventUid: String, occurrenceAt: Long, at: Long): Boolean = db.transactionWithResult {
         if (q.linkedOneOffExists(eventUid, occurrenceAt).executeAsOne() > 0L) return@transactionWithResult false
+        if (q.linkedEventDeleted(eventUid).executeAsOne() > 0L) return@transactionWithResult false
         q.insertLinkedOneOff(title, dueAt, Strictness.NORMAL.name, at, eventUid, occurrenceAt)
         true
     }

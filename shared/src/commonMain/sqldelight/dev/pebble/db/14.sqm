@@ -1,0 +1,29 @@
+-- WP E3c-1 (ADR 0019, docs/specs/E3C-HISTORY.md): the history of synced fields and the trigger that keeps it.
+-- History starts empty: values replaced before this version are not kept.
+
+CREATE TABLE change_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tbl TEXT NOT NULL,
+    uid TEXT NOT NULL,
+    field TEXT NOT NULL,
+    value TEXT NOT NULL,
+    hlc TEXT NOT NULL,
+    replaced_by TEXT,
+    kept_at INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('replaced', 'lost')),
+    UNIQUE (tbl, uid, field, hlc)
+);
+
+CREATE INDEX change_history_row ON change_history(tbl, uid);
+CREATE INDEX change_history_kept ON change_history(kept_at);
+
+-- Keeps the entry that a new journal entry replaces, on every path (record, merge, reconcile). A journal entry is
+-- replaced with INSERT OR REPLACE, which fires BEFORE INSERT (checked with sqlite-jdbc 3.53.4.0). A delete is final,
+-- so deleted_at is not kept. The same entry again (the same HLC) keeps nothing.
+CREATE TRIGGER change_journal_keep_history BEFORE INSERT ON change_journal
+BEGIN
+    INSERT OR IGNORE INTO change_history(tbl, uid, field, value, hlc, replaced_by, kept_at, kind)
+    SELECT tbl, uid, field, value, hlc, new.hlc, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 'replaced'
+    FROM change_journal
+    WHERE tbl = new.tbl AND uid = new.uid AND field = new.field AND hlc <> new.hlc AND field <> 'deleted_at';
+END;

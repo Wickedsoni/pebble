@@ -19,6 +19,7 @@ Everything lives in one folder on your PC: `%APPDATA%\Pebble` (for example `C:\U
 | Search index: for each note, each fact you told Pebble and each thing you said, a list of 384 numbers that the command model makes on your computer, and a copy of the text it was made from (to notice when you edit a note) | So Memory → **Search memory** (and "what did I note about …") can find them by meaning | Delete the note or fact, or clear the conversation. A deleted item never shows in search results, and its numbers and copy are removed at the next index pass. Or remove the folder |
 | Settings (pet, sizes, toggles) | To remember your choices | Remove the folder |
 | Calendar events you add or import | That's the app | Delete them on the Calendar page, or remove the folder |
+| Old versions of your events, notes and one-off reminders: the old text or time each time you (or one of your own devices) change one, and deleted items. Pebble keeps them only on this computer and never syncs them | So you can get back an older version, or a deleted item as a copy | Pebble removes each old version after 90 days, and all old versions of an item when its delete is purged (also 90 days). Or remove the folder |
 
 ### Backups
 

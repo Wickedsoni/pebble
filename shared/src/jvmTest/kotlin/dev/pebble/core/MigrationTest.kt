@@ -211,6 +211,40 @@ class MigrationTest {
         assertEquals(setOf("r1"), tables, "the reminder that the event made is not synced")
     }
 
+    /**
+     * 14.sqm (WP E3c-1): a version-14 database gains `change_history` and the trigger that keeps replaced values. Its
+     * history starts empty; the next edit keeps the old value.
+     */
+    @Test
+    fun version14DatabaseGainsTheChangeHistory() {
+        val file = Files.createTempFile("pebble-v14", ".db").toFile().apply { deleteOnExit() }
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute("CREATE TABLE setting (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+                s.execute("INSERT INTO setting(key, value) VALUES ('device.id', 'aaaaaaaaaaaaaaaaaaaaaaaaaa')")
+                s.execute(NOTE_V11)
+                s.execute(
+                    "CREATE TABLE change_journal (seq INTEGER PRIMARY KEY AUTOINCREMENT, tbl TEXT NOT NULL, uid TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL, hlc TEXT NOT NULL, UNIQUE (tbl, uid, field))",
+                )
+                val hlc = "019a00000000.0000.aaaaaaaaaaaaaaaaaaaaaaaaaa"
+                s.execute("INSERT INTO note(text, created_at, updated_at, uid, hlc) VALUES ('buy milk', 1, 2, 'n1', '$hlc')")
+                listOf("text" to "\"buy milk\"", "created_at" to "1", "archived" to "0", "deleted_at" to "null").forEach { (f, v) ->
+                    s.execute("INSERT INTO change_journal(tbl, uid, field, value, hlc) VALUES ('note', 'n1', '$f', '$v', '$hlc')")
+                }
+                s.execute("PRAGMA user_version = 14")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        val history = dev.pebble.core.sync.ChangeHistory(db)
+        val notes = dev.pebble.core.wellness.NoteRepository(db)
+        assertEquals(emptyList(), history.versions(dev.pebble.core.sync.SyncTable.NOTE, "n1"))
+        notes.update(notes.recent().single().id, "buy oat milk", 0x019a00000010L)
+        assertEquals(
+            listOf(mapOf("text" to kotlinx.serialization.json.JsonPrimitive("buy milk"))),
+            history.versions(dev.pebble.core.sync.SyncTable.NOTE, "n1").map { it.fields },
+        )
+    }
+
     /** Dry run on a *copy* of this machine's real database, if there is one. */
     @Test
     fun realDatabaseCopyMigrates() {
