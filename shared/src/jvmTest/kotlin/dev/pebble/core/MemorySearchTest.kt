@@ -83,7 +83,7 @@ class MemorySearchTest {
         val id = notes.add("buy milk", 1)
         val other = notes.add("call plumber", 1)
         search.reconcile()
-        db.wellnessQueries.updateNote("buy milk and bread", 2, id)
+        notes.update(id, "buy milk and bread", 2)
         notes.delete(other)
         assertEquals(2, search.reconcile(), "one re-embedded, one removed")
         assertEquals(1L, count())

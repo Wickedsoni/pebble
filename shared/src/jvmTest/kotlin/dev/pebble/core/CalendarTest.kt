@@ -13,6 +13,8 @@ import java.time.ZoneId
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -40,7 +42,7 @@ class CalendarTest {
         assertEquals(device to device, row.origin_device to row.owner_device)
         assertEquals("private", row.visibility)
         assertEquals(1L, row.updated_at)
-        assertNull(row.hlc, "filled by sync (WP E3)")
+        assertNotNull(row.hlc?.let(dev.pebble.core.sync.Hlc::parse), "the change journal gives it an HLC (WP E3)")
 
         calendar.delete(uid, at = 10)
         assertTrue(calendar.live().isEmpty())
@@ -51,13 +53,18 @@ class CalendarTest {
     }
 
     @Test
-    fun savingTheSameUidAgainReplacesItAndBringsATombstoneBack() {
+    fun savingTheSameUidAgainReplacesItButADeletedEventNeverComesBack() {
+        // WP E3, spec D5 (the maintainer's decision): a delete always wins. Before E3 a save brought a tombstone back.
         calendar.save(event("a", 9, 17), at = 1)
-        calendar.delete("a", at = 2)
-        calendar.save(event("a", 9, 18).copy(title = "Moved"), at = 3)
+        assertTrue(calendar.save(event("a", 9, 18).copy(title = "Moved"), at = 2))
         val e = calendar.live().single()
         assertEquals("Moved" to at(9, 18), e.title to e.startAt)
-        assertEquals(3L, db.calendarQueries.eventByUid("a").executeAsOne().updated_at)
+        assertEquals(2L, db.calendarQueries.eventByUid("a").executeAsOne().updated_at)
+        calendar.delete("a", at = 3)
+        assertFalse(calendar.save(event("a", 9, 18).copy(title = "Again"), at = 4), "an ICS import of a deleted uid is skipped")
+        assertTrue(calendar.live().isEmpty())
+        assertEquals(1, calendar.saveAll(listOf(event("a", 9, 18), event("b", 9, 19)), at = 5), "one skipped, one new")
+        assertEquals(listOf("b"), calendar.live().map { it.uid })
     }
 
     @Test
@@ -108,7 +115,15 @@ class CalendarTest {
     @Test
     fun eventsMadeBeforeTheDeviceHadAnIdAreClaimed() {
         val fresh = DatabaseFactory.inMemory()
-        CalendarRepository(fresh).save(event("x", 9, 17), at = 1) // no device.id setting yet
+        // An event from before this device had an id: since WP E3 a save makes the id first, so write it as an old app did.
+        fresh.calendarQueries.upsertEvent(
+            "x", "Dentist", null,
+            at(
+                9,
+                17,
+            ),
+            at(9, 18), 0, "Asia/Kolkata", null, null, null, "private", 1, null, null,
+        )
         assertNull(fresh.calendarQueries.eventByUid("x").executeAsOne().origin_device)
         val id = DeviceIdentity.ensure(SettingsRepository(fresh), Random(9))
         CalendarRepository(fresh).claim(id)

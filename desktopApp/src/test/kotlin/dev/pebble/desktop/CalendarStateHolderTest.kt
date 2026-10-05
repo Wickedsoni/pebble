@@ -236,6 +236,35 @@ class CalendarStateHolderTest {
         assertTrue(h.state.value.message!!.startsWith("That did not work"))
     }
 
+    /** WP E3, spec D5: a deleted event never comes back, also when you import the same file again. */
+    @Test
+    fun aDeletedEventIsNotImportedAgain() = runTest {
+        val dir = Files.createTempDirectory("pebble-ics")
+        val inFile = dir.resolve("in.ics")
+        Files.writeString(
+            inFile,
+            Ics.write(
+                listOf(
+                    CalendarEvent("a", "Standup", at(5, 9), at(5, 9, 15), zone.id),
+                    CalendarEvent("b", "Review", at(5, 10), at(5, 11), zone.id),
+                ),
+                now,
+            ),
+        )
+        val h = holder()
+        h.onEvent(CalendarPageEvent.Import(inFile))
+        advanceUntilIdle()
+        h.onEvent(CalendarPageEvent.Delete("a"))
+        advanceUntilIdle()
+        h.onEvent(CalendarPageEvent.Import(inFile))
+        advanceUntilIdle()
+        assertEquals(listOf("b"), calendar.live().map { it.uid })
+        assertTrue(
+            h.state.value.message!!.startsWith("Imported 1 event from in.ics. 1 event was deleted before and was not imported again."),
+            h.state.value.message,
+        )
+    }
+
     @Test
     fun theAgendaCardShowsWhatIsLeftOfTodayThenTomorrow() = runTest {
         calendar.save(CalendarEvent("past", "Breakfast", at(4, 8), at(4, 9), zone.id), at = 1)

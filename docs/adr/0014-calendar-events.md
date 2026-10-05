@@ -1,6 +1,6 @@
 # ADR 0014: Store each calendar event as one row with an RRULE, and expand it with java.time
 
-- **Status:** Accepted
+- **Status:** Accepted (revised in WP E3a: a deleted event never comes back)
 - **Date:** 2026-10-05
 - **Work package:** E2 (calendar)
 
@@ -38,3 +38,10 @@ The plan puts `RecurrenceExpander` in `commonMain`. The `:shared` module has no 
 - **One row for each occurrence.** We did not select it. A series without an end has no last row, and an edit must change many rows.
 - **kotlinx-datetime in commonMain.** We did not select it. The WP does not name it (CLAUDE.md rule 3), and `:shared` has only the `jvm()` target.
 - **A library for ICS (ical4j).** We did not select it. The plan says "no new dependency", and ical4j is large for the subset that we need.
+
+## Revision (WP E3a, 2026-10-05)
+
+A delete always wins (`docs/specs/E3-CHANGE-JOURNAL.md`, D5, the maintainer's decision).
+- `CalendarRepository.save` returns false for the uid of a deleted event, and changes nothing. Before E3, a save brought the tombstone back.
+- The ICS import counts these events and shows "N events were deleted before and were not imported again".
+- A trigger stops each write that sets `deleted_at` back to null.

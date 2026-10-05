@@ -218,10 +218,19 @@ class CalendarStateHolder(
     /** Timed events get the reminder chosen on the page ([remind]); all-day events get none, like events you add. */
     private fun import(file: Path, remind: Int?): String {
         val result = Ics.parse(Files.readString(file), env.zone())
-        calendar.saveAll(result.events.map { if (it.allDay) it else it.copy(remindMinutes = remind) }, env.millis())
+        val skipped = calendar.saveAll(result.events.map { if (it.allDay) it else it.copy(remindMinutes = remind) }, env.millis())
         agenda.scheduleReminders(env.millis())
+        val imported = result.events.size - skipped
         return buildList {
-            add("Imported ${result.events.size} event${if (result.events.size == 1) "" else "s"} from ${file.fileName}.")
+            add("Imported $imported event${if (imported == 1) "" else "s"} from ${file.fileName}.")
+            // A deleted event never comes back, also from a file (WP E3, spec D5).
+            if (skipped >
+                0
+            ) {
+                add(
+                    "$skipped event${if (skipped == 1) " was" else "s were"} deleted before and ${if (skipped == 1) "was" else "were"} not imported again.",
+                )
+            }
             if (result.events.any { !it.allDay }) {
                 add(remind?.let { "Timed events remind you ${formatMinutes(it).replace("24 hours", "1 day")} before." } ?: "No reminders.")
             }

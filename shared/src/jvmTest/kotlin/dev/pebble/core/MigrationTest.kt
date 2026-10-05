@@ -152,6 +152,8 @@ class MigrationTest {
                     "CREATE TABLE one_off_reminder (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, due_at INTEGER NOT NULL, strictness TEXT NOT NULL, done_at INTEGER, uid TEXT, updated_at INTEGER, deleted_at INTEGER, hlc TEXT, origin_device TEXT)",
                 )
                 s.execute("CREATE UNIQUE INDEX one_off_reminder_uid ON one_off_reminder(uid)")
+                // Every real version-12 database has the note table (11.sqm); 13.sqm (WP E3) adds triggers to it.
+                s.execute(NOTE_V11)
                 s.execute(
                     "INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at) VALUES ('Call mom', 5000, 'NORMAL', 'u1', 1)",
                 )
@@ -165,6 +167,48 @@ class MigrationTest {
         calendar.save(dev.pebble.core.calendar.CalendarEvent("e", "Dentist", 10, 20, "Asia/Kolkata", remindMinutes = 15), at = 1)
         assertEquals(listOf("Dentist"), calendar.live().map { it.title })
         assertEquals(true, dev.pebble.core.reminders.ReminderRepository(db).addLinked("Dentist at 5", 5, "e", 10, at = 1))
+    }
+
+    /**
+     * 13.sqm (WP E3a): a version-13 database gains the change journal and its guard triggers; its rows stay. At the
+     * next start ChangeJournal.reconcile gives each synced row its entries and an HLC; a calendar-made reminder gets none.
+     */
+    @Test
+    fun version13DatabaseGainsTheChangeJournal() {
+        val file = Files.createTempFile("pebble-v13", ".db").toFile().apply { deleteOnExit() }
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute("CREATE TABLE setting (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+                s.execute("INSERT INTO setting(key, value) VALUES ('device.id', 'aaaaaaaaaaaaaaaaaaaaaaaaaa')")
+                s.execute(NOTE_V11)
+                s.execute(
+                    "CREATE TABLE one_off_reminder (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, due_at INTEGER NOT NULL, strictness TEXT NOT NULL, done_at INTEGER, uid TEXT, updated_at INTEGER, deleted_at INTEGER, hlc TEXT, origin_device TEXT, event_uid TEXT, occurrence_at INTEGER)",
+                )
+                s.execute(
+                    "CREATE TABLE calendar_event (uid TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, notes TEXT, start_at INTEGER NOT NULL, end_at INTEGER NOT NULL, all_day INTEGER NOT NULL DEFAULT 0, tz TEXT NOT NULL, rrule TEXT, exdates TEXT, remind_minutes INTEGER, owner_device TEXT, visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'busy', 'full')), hlc TEXT, updated_at INTEGER NOT NULL, deleted_at INTEGER, origin_device TEXT)",
+                )
+                s.execute("INSERT INTO note(text, created_at, updated_at, uid) VALUES ('buy milk', 1, 2, 'n1')")
+                s.execute("INSERT INTO note(text, created_at, updated_at, uid, deleted_at) VALUES ('old', 1, 3, 'n2', 3)")
+                s.execute(
+                    "INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at) VALUES ('Call mom', 5000, 'NORMAL', 'r1', 1)",
+                )
+                s.execute(
+                    "INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at, event_uid, occurrence_at) VALUES ('Dentist', 900, 'NORMAL', 'r2', 1, 'e1', 1000)",
+                )
+                s.execute(
+                    "INSERT INTO calendar_event(uid, title, start_at, end_at, tz, updated_at, owner_device) VALUES ('e1', 'Dentist', 1000, 2000, 'Asia/Kolkata', 1, 'aaaaaaaaaaaaaaaaaaaaaaaaaa')",
+                )
+                s.execute("PRAGMA user_version = 13")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        val journal = dev.pebble.core.sync.ChangeJournal(db)
+        assertEquals(listOf("buy milk"), dev.pebble.core.wellness.NoteRepository(db).recent().map { it.text })
+        assertEquals(dev.pebble.core.sync.Reconciled(backfilled = 4, repaired = 0, graves = 0), journal.reconcile(10_000))
+        assertEquals(emptyList(), journal.verify())
+        assertEquals(dev.pebble.core.sync.Reconciled(0, 0, 0), journal.reconcile(20_000), "a second start changes nothing")
+        val tables = db.journalQueries.entriesOfTable("one_off_reminder").executeAsList().map { it.uid }.toSet()
+        assertEquals(setOf("r1"), tables, "the reminder that the event made is not synced")
     }
 
     /** Dry run on a *copy* of this machine's real database, if there is one. */
@@ -182,5 +226,11 @@ class MigrationTest {
                 }
             }
         }
+    }
+
+    private companion object {
+        /** The note table as 11.sqm (WP E1) left it. */
+        const val NOTE_V11 =
+            "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, archived INTEGER NOT NULL DEFAULT 0, uid TEXT, deleted_at INTEGER, hlc TEXT, origin_device TEXT)"
     }
 }

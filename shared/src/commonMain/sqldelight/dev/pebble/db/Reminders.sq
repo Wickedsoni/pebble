@@ -47,16 +47,18 @@ UPDATE reminder_rule SET last_done_at = ? WHERE id = ?;
 pendingOneOffs:
 SELECT * FROM one_off_reminder WHERE done_at IS NULL AND deleted_at IS NULL ORDER BY due_at;
 
+-- Writes to synced fields carry the HLC of their journal entries (WP E3, ChangeJournal). A null :hlc keeps the
+-- row's HLC: for rows that are not synced (a reminder that an event made, or no uid yet).
 insertOneOff:
-INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at, origin_device)
-VALUES (?, ?, ?, lower(hex(randomblob(16))), coalesce(?, CAST(strftime('%s', 'now') AS INTEGER) * 1000), (SELECT value FROM setting WHERE key = 'device.id'));
+INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at, hlc, origin_device)
+VALUES (:title, :dueAt, :strictness, :uid, :at, :hlc, (SELECT value FROM setting WHERE key = 'device.id'));
 
 lastOneOffId:
 SELECT last_insert_rowid();
 
 -- A tombstone, not a DELETE (WP E1). Null time: now.
 deleteOneOff:
-UPDATE one_off_reminder SET deleted_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000), updated_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000) WHERE id = :id;
+UPDATE one_off_reminder SET deleted_at = :at, updated_at = :at, hlc = coalesce(:hlc, hlc) WHERE id = :id;
 
 purgeOneOffTombstones:
 DELETE FROM one_off_reminder WHERE deleted_at IS NOT NULL AND deleted_at < ?;
@@ -68,10 +70,21 @@ fillOneOffUids:
 UPDATE one_off_reminder SET uid = lower(hex(randomblob(16))), updated_at = coalesce(updated_at, done_at, due_at) WHERE uid IS NULL;
 
 markOneOffDone:
-UPDATE one_off_reminder SET done_at = :at, updated_at = :at WHERE id = :id;
+UPDATE one_off_reminder SET done_at = :at, updated_at = :at, hlc = coalesce(:hlc, hlc) WHERE id = :id;
 
 rescheduleOneOff:
-UPDATE one_off_reminder SET due_at = :dueAt, updated_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000) WHERE id = :id;
+UPDATE one_off_reminder SET due_at = :dueAt, updated_at = :at, hlc = coalesce(:hlc, hlc) WHERE id = :id;
+
+-- What sync needs to know of a reminder: its uid (null: not synced yet) and its event (non-null: not synced).
+oneOffSyncInfo:
+SELECT uid, event_uid FROM one_off_reminder WHERE id = ?;
+
+-- The synced fields of each synced reminder, live and tombstones (ChangeJournal.reconcile).
+syncOneOffs:
+SELECT uid, title, due_at, strictness, done_at, deleted_at, hlc FROM one_off_reminder WHERE uid IS NOT NULL AND event_uid IS NULL;
+
+setOneOffHlc:
+UPDATE one_off_reminder SET hlc = ? WHERE uid = ?;
 
 insertLinkedOneOff:
 INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at, origin_device, event_uid, occurrence_at)

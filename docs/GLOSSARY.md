@@ -16,6 +16,11 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 | **nudge** | A message from a repeating reminder (for example, "drink water"). The nudge policy decides its time. Code: `NudgePolicy`. | "notification", "ping" |
 | **propensity** | The probability that the running nudge policy had of its choice. `ReminderEngine` logs it in each `nudge_decided` log entry. | "score", "confidence" |
 | **offline evaluation** | An estimate of the value of a new nudge policy from the logged choices and reactions, with no live test (IPS, SNIPS, ESS). Code: `NudgeIpsEvaluator` (ADR 0016). | "A/B test", "simulation" |
+| **HLC** (hybrid logical clock) | A time for a change: the wall-clock milliseconds, a counter and the device id. HLC times have a total order. Code: `Hlc`, `HlcClock` (ADR 0018). | "timestamp" alone, "version" |
+| **synced field** | A column that sync copies to other devices. `SyncTable` names each one. | "replicated column" |
+| **change journal** | The table `change_journal`. It keeps the newest value and HLC of each synced field of each synced row. Code: `ChangeJournal`. | "changelog", "oplog" |
+| **journal entry** | One row in `change_journal`. | "change record" |
+| **grave** | The journal entry `deleted_at` of a row that the purge removed. It keeps the row deleted on all devices. | "marker" |
 | **reminder (one-off)** | A reminder that occurs one time, at a set time. Table: `one_off_reminder`. | "alarm", "task" |
 | **reminder (repeating)** | A reminder that occurs again after a set interval (eyes, water, stretch). | "habit", "recurring task" |
 | **event (calendar)** | An item in the calendar with a start and an end. It can repeat (an RRULE). Table: `calendar_event` (ADR 0014). | "event" without "(calendar)" when the meaning is not clear |
