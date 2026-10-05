@@ -44,6 +44,10 @@ SELECT count(*) FROM (SELECT DISTINCT tbl, uid, hlc FROM change_history WHERE ki
 clearHistory:
 DELETE FROM change_history;
 
+-- "Delete old versions" of one item (its History dialog).
+clearHistoryOfRow:
+DELETE FROM change_history WHERE tbl = ? AND uid = ?;
+
 purgeHistoryBefore:
 DELETE FROM change_history WHERE kept_at < ?;
 

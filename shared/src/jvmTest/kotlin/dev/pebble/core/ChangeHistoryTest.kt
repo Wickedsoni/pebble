@@ -265,6 +265,20 @@ class ChangeHistoryTest {
         assertEquals(emptyList(), a.rawHistory())
     }
 
+    @Test
+    fun clearOfOneItemRemovesOnlyItsHistoryAndKeepsTheItem() {
+        val a = Replica(1)
+        val secret = a.notes.add("pin 4821", a.now)
+        a.notes.update(secret, "pin: ask me", a.now + 1)
+        val other = a.notes.add("a", a.now)
+        a.notes.update(other, "b", a.now + 1)
+        assertEquals(1L, a.history.clear(SyncTable.NOTE, a.noteUid(secret)))
+        assertEquals(emptyList(), a.history.versions(SyncTable.NOTE, a.noteUid(secret)))
+        assertEquals(1, a.history.versions(SyncTable.NOTE, a.noteUid(other)).size, "other items keep their history")
+        assertEquals(setOf("pin: ask me", "b"), a.notes.recent().map { it.text }.toSet())
+        assertEquals(emptyList(), a.journal.verify())
+    }
+
     // ------------------------------------------------------------------ sync never sends history (spec 2)
 
     @Test

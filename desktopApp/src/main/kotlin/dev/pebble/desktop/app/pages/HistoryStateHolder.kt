@@ -28,8 +28,10 @@ data class HistoryUiState(
     val open: Boolean = false,
     val title: String = "",
     val versions: List<VersionRow> = emptyList(),
-    /** The result of the last restore; null: none. */
+    /** The result of the last restore or delete; null: the hint. */
     val message: String? = null,
+    /** True after "Delete old versions": the dialog asks before it deletes. */
+    val confirmDelete: Boolean = false,
 ) {
     /**
      * One version, newest first. [changes]: "Title: old → now", one for each field that differs from now. [canRestore]:
@@ -53,6 +55,14 @@ sealed interface HistoryEvent {
     data object Close : HistoryEvent
 
     data class Restore(val index: Int) : HistoryEvent
+
+    /** "Delete old versions" of this item: asks first. */
+    data object AskDelete : HistoryEvent
+
+    data object CancelDelete : HistoryEvent
+
+    /** Deletes all old versions of this item (for example, private text that you edited out). */
+    data object ConfirmDelete : HistoryEvent
 }
 
 /**
@@ -92,6 +102,12 @@ class HistoryStateHolder(
             }
 
             is HistoryEvent.Restore -> restore(e.index)
+
+            HistoryEvent.AskDelete -> _state.value = _state.value.copy(confirmDelete = true, message = null)
+
+            HistoryEvent.CancelDelete -> _state.value = _state.value.copy(confirmDelete = false)
+
+            HistoryEvent.ConfirmDelete -> deleteAll()
         }
     }
 
@@ -107,6 +123,16 @@ class HistoryStateHolder(
             if (item != it) return@launch
             versions = list
             _state.value = HistoryUiState(open = true, title = it.title, versions = rows, message = message)
+        }
+    }
+
+    private fun deleteAll() {
+        val it = item ?: return
+        scope.launch {
+            val n = withContext(env.dispatchers.io) { history.clear(it.table, it.uid) }
+            load(
+                "Deleted ${versions.size} old ${if (versions.size == 1) "version" else "versions"} ($n history ${if (n == 1L) "entry" else "entries"}).",
+            )
         }
     }
 

@@ -109,6 +109,9 @@ class ChangeHistory(private val db: PebbleDatabase, private val journal: ChangeJ
     /** "Clear history": deletes all history entries on this device. Returns how many. */
     fun clear(): Long = q.clearHistory().value
 
+    /** "Delete old versions" of one item: all its history entries (replaced and lost). The item itself does not change. */
+    fun clear(table: SyncTable, uid: String): Long = q.clearHistoryOfRow(table.sqlName, uid).value
+
     /**
      * The daily purge: entries kept before [before], and all entries of rows that are gone (after the tombstone purge).
      * Returns how many.

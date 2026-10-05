@@ -7,8 +7,8 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (6 Oct 2026, after "edit a note")
-- **State:** A1 … E4, C4, E3a, E3b and all of **E3c** (#51, #52, #53, #54) are on `main`. **"Edit a note"** is on branch `wp/notes-edit` (PR open, waiting for your yes to merge). Schema version 15; the next migration file is `15.sqm`.
+### Start here (6 Oct 2026, after "edit a note" and per-item history delete)
+- **State:** A1 … E4, C4, E3a, E3b, all of **E3c** (#51–#54), "edit a note" (#55) and "delete old versions of one item" (#56) are on `main`. Schema version 15; the next migration file is `15.sqm`.
 - **Next: milestone F.** F0 needs an Opus spec and a security review first (CLAUDE.md rule 9): do not start code without an approved spec.
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
 - **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.
@@ -22,7 +22,12 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db`, `pebble-backup-e3a.db` and `pebble-backup-e3c.db` (taken before the E2, E3a and E3c-1 migrations) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 6 Oct: edit a note (your request, branch `wp/notes-edit`)
+### 6 Oct: "Delete old versions" of one item (your choice, PR #56)
+- **Why:** with note editing, private text that you edit out stays in History for 90 days. "Clear history" removed the history of every item at once.
+- **What:** each History dialog has "Delete old versions" (asks first; "Backups you made before keep them"). It deletes only that item's history (`ChangeHistory.clear(table, uid)`); the item does not change. The dialog hint now says that Pebble keeps old versions for 90 days. `PRIVACY.md` names both ways to delete.
+- **Tests:** `ChangeHistoryTest.clearOfOneItemRemovesOnlyItsHistoryAndKeepsTheItem`, `HistoryStateHolderTest.deleteOldVersionsAsksFirstThenRemovesOnlyThisItemsHistory`. Live check on a copy of your data: an event version, then "Delete old versions" → "Delete them" → "Deleted 1 old version".
+
+### 6 Oct: edit a note (your request, PR #55, merged)
 - **What:** an "Edit" chip on each note (Notes page) opens an edit field with the text; Enter saves, Escape cancels, one field at a time. A save goes through the new `PebbleApp.editNote` (a journaled `NoteRepository.update`, then the search index catches up), so the note's History keeps the old text. The same text, or a blank text, writes nothing. `GlassField` gets `initial`, `onCancel` (Escape) and `autoFocus`; the defaults keep every other field as it was.
 - **Tests:** `NotesStateHolderTest` (9, 4 new).
 
