@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,13 +48,14 @@ import dev.pebble.desktop.pet.PetPose
 import dev.pebble.desktop.pet.defaultPose
 import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
+import dev.pebble.desktop.ui.pressable
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 val MOODS = listOf("Rough", "Low", "Okay", "Good", "Great")
 
-/** Bento overview: time and greeting, companion and mood, water, what's next, streaks, notes, memory. */
+/** Bento overview: time and greeting, companion and mood, water, what's next, streaks, agenda, notes, memory. */
 @Composable
 fun TodayPage(app: PebbleApp, pet: PetController) {
     var clock by remember { mutableStateOf(LocalDateTime.now()) }
@@ -74,7 +76,8 @@ fun TodayPage(app: PebbleApp, pet: PetController) {
             StreakCard(app, Modifier.weight(1f).fillMaxHeight())
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            NotesPreviewCard(app, Modifier.weight(1.55f).fillMaxHeight())
+            AgendaCard(app, Modifier.weight(1.2f).fillMaxHeight())
+            NotesPreviewCard(app, Modifier.weight(1.2f).fillMaxHeight())
             MemoryHighlightCard(app, Modifier.weight(1f).fillMaxHeight())
         }
     }
@@ -222,6 +225,50 @@ private fun StreakCard(app: PebbleApp, modifier: Modifier) {
         if (streaks.isEmpty()) Text("Keep showing up — streaks appear here.", color = c.secondary, fontSize = 13.sp)
         streaks.take(3).forEach {
             Text(it.text, color = c.content, fontSize = 13.sp, modifier = Modifier.padding(vertical = 3.dp))
+        }
+    }
+}
+
+/** Today's and tomorrow's events (WP E2); a click opens the Calendar page through the UI port. */
+@Composable
+private fun AgendaCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { AgendaStateHolder(app.calendar, app.agenda, app.env, scope) }
+    val state by holder.state.collectAsState()
+    AgendaContent(state, modifier) { app.ui.openPage("calendar") }
+}
+
+/** Stateless: draws the Agenda card. */
+@Composable
+fun AgendaContent(state: AgendaUiState, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    val c = LocalGlass.current
+    GlassCard(modifier.pressable(onOpen)) {
+        CardLabel("Agenda", PebbleIcons.Calendar, c.accent)
+        if (state.rows.isEmpty()) {
+            Text(
+                "No events today or tomorrow. Type “event: dentist fri 5pm” in Quick Add.",
+                color = c.secondary,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+            )
+        }
+        state.rows.forEach { r ->
+            Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    r.title,
+                    color = c.content,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (r.day == "Today") r.time else "${r.day} ${r.time}",
+                    color = if (r.now) c.warm else c.secondary,
+                    fontSize = 12.sp,
+                )
+            }
         }
     }
 }

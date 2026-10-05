@@ -63,7 +63,8 @@ Test these items for each page:
 | Page | Status |
 |---|---|
 | Reminders | Done (WP B7, the template) |
-| Today | To do |
+| Calendar | Done (WP E2: `CalendarStateHolder`) |
+| Today | "Agenda" card done (WP E2: `AgendaStateHolder`); the rest of the page to do |
 | Notes | To do |
 | Water | To do |
 | Chat | To do |

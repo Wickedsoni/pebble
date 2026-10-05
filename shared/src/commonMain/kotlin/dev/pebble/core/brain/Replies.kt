@@ -202,6 +202,7 @@ object Replies {
         "companion" to Triple("Companion", "Companion", "साथी"),
         "memory" to Triple("Memory", "Memory", "मेमोरी"),
         "about" to Triple("About", "About", "अबाउट"),
+        "calendar" to Triple("Calendar", "Calendar", "कैलेंडर"),
     )
 
     /**

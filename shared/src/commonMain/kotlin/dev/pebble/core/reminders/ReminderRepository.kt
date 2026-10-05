@@ -73,6 +73,19 @@ class ReminderRepository(private val db: PebbleDatabase) {
         q.pendingOneOffs().asFlow().mapToList(context)
             .map { rows -> rows.map { OneOffReminder(it.id, it.title, it.due_at, Strictness.parse(it.strictness)) } }
 
+    /**
+     * A reminder for one occurrence of a calendar event (WP E2), linked by [eventUid] and [occurrenceAt]. Returns false
+     * when that occurrence already has a live reminder (pending, done or snoozed), so a second call adds nothing.
+     */
+    fun addLinked(title: String, dueAt: Long, eventUid: String, occurrenceAt: Long, at: Long): Boolean = db.transactionWithResult {
+        if (q.linkedOneOffExists(eventUid, occurrenceAt).executeAsOne() > 0L) return@transactionWithResult false
+        q.insertLinkedOneOff(title, dueAt, Strictness.NORMAL.name, at, eventUid, occurrenceAt)
+        true
+    }
+
+    /** The event [eventUid] changed or was deleted: its reminders that did not fire yet become tombstones. */
+    fun deletePendingLinked(eventUid: String, at: Long) = q.deletePendingLinked(at, eventUid)
+
     fun markOneOffDone(id: Long, at: Long) = q.markOneOffDone(at, id)
 
     fun rescheduleOneOff(id: Long, dueAt: Long, at: Long? = null) = q.rescheduleOneOff(dueAt, at, id)

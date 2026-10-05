@@ -15,7 +15,7 @@ INPUT ────────────────────────�
           transcript lands in the text box, editable ────────────────────────┤
                                                                              ▼
 UNDERSTAND  (one pass, ~5 ms on CPU)
-  QuickAddParser    exact syntax first: "water every 45m", "note: …", "remind me … at 5pm"
+  QuickAddParser    exact syntax first: "water every 45m", "note: …", "remind me … at 5pm", "event: dentist fri 5pm"
   HinglishTime      times and days in 3 scripts: "kal shaam saade 5", "शुक्रवार", "aadhe ghante baad"
   intent model      e5-small encoder → intent head · slot head · mood head   (int8 ONNX, 31 MB)
   PersonalLayer     your taught phrases, picks and "Not what I meant" change the reading at once (ADR 0010)
@@ -24,10 +24,11 @@ DECIDE
   DecisionPolicy      act / ask "Did you mean…" by what a mistake costs (delete 0.9 … chitchat 0.5)
   low mood            caring reply, unless a real command was understood (then it runs)
 ACT + REPLY
-  PebbleApp.execute   notes, reminders, water, queries; pet bubble in the script you used
+  PebbleApp.execute   notes, reminders, calendar events, water, queries; pet bubble in the script you used
   "Not what I meant"  on every model-chosen action: undo + ask again
 BEHAVE  (its own loop)
   ReminderEngine + NudgePolicy  bandit decides now / +10 / +30 min for repeating reminders
+  CalendarAgenda               every 10 min: one-off reminders for the events of the next 2 days
 LEARN
   command_feedback    picked · confirmed · wrong · taught           → PersonalLayer (at once), train_intent --feedback
   nudge_stats         Beta beliefs per context × arm                → learns live, on device
@@ -46,6 +47,7 @@ LEARN
 | Personal layer | `shared/.../brain/PersonalLayer.kt`; "Teach Pebble a command" on the Memory page | `command_feedback` table |
 | Decisions | `shared/.../brain/DecisionPolicy.kt`, `CommandRouter.kt`, `Understanding.kt` | temperatures in `labels.json` |
 | Acting, undo | `desktopApp/.../PebbleApp.kt`, `quickadd/QuickAddWindow.kt` | SQLite (`%APPDATA%\Pebble\pebble.db`) |
+| Calendar | `shared/.../calendar/` (`CalendarRepository`; jvmMain: `RecurrenceExpander`, `Ics`, `CalendarAgenda`); Calendar page, Agenda card on Today | `calendar_event` table; linked `one_off_reminder` rows (ADR 0014) |
 | Nudge timing | `shared/.../brain/NudgePolicy.kt`, `reminders/ReminderEngine.kt` | `nudge_stats` table |
 | Memory | `shared/.../memory/MemoryEngine.kt` | `event_log`, `memory` tables |
 | Training | `brain/src/pebble_brain/` | `brain/models/`, `brain/eval/` |

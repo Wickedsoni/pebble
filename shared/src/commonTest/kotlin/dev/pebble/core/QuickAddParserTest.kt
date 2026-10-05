@@ -1,6 +1,7 @@
 package dev.pebble.core
 
 import dev.pebble.core.quickadd.QuickAddParser
+import dev.pebble.core.quickadd.QuickCommand.AddEvent
 import dev.pebble.core.quickadd.QuickCommand.AddNote
 import dev.pebble.core.quickadd.QuickCommand.LogWater
 import dev.pebble.core.quickadd.QuickCommand.OpenPage
@@ -87,5 +88,28 @@ class QuickAddParserTest {
         assertNull(page("open the window"))
         assertNull(page("open reminders for tomorrow"))
         assertEquals(AddNote("open notes later"), QuickAddParser.parseStrict("note: open notes later"))
+    }
+
+    /** WP E2: explicit event syntax only. Today is a Sunday (7) in these cases. */
+    @Test fun events() {
+        fun e(s: String) = QuickAddParser.parseStrict(s, today = 7)
+        assertEquals(AddEvent("Dentist", hour = 17, dayOffset = 5), e("event: dentist fri 5pm"))
+        assertEquals(
+            AddEvent("Dentist", hour = 17, minute = 30, dayOffset = 5, durationMinutes = 30),
+            e("event: Dentist on friday at 5:30 pm for 30 min"),
+        )
+        assertEquals(AddEvent("Team lunch", hour = 13, dayOffset = 1, durationMinutes = 90), e("cal: team lunch tomorrow 13:00 for 1.5h"))
+        assertEquals(AddEvent("Diwali", month = 11, dayOfMonth = 8), e("event: Diwali 8 nov"))
+        assertEquals(AddEvent("Exam", hour = 10, month = 10, dayOfMonth = 20), e("event: exam oct 20th 10am"))
+        assertEquals(AddEvent("Trip", dayOffset = 6), e("event: trip sat all day"))
+        assertEquals(AddEvent("Standup", hour = 9, flexibleHalfDay = true), e("calendar: standup at 9"))
+        assertEquals(AddEvent("Party", hour = 19, dayOffset = 7), e("event: party next sunday 7pm"))
+        assertEquals(AddEvent("Holiday"), e("event: holiday"))
+        assertEquals(AddEvent("Monster truck show", hour = 18, dayOffset = 1), e("event: monster truck show tmrw 6pm"))
+        assertNull(QuickAddParser.parseEvent("5pm"), "no title left")
+        assertEquals(AddNote("event planning tomorrow"), QuickAddParser.parse("event planning tomorrow"), "no colon: not an event")
+        assertEquals(OpenPage("calendar", "open calendar"), e("open calendar"))
+        // The Calendar page's Add field uses the same reader without "event:".
+        assertEquals(AddEvent("Dentist", hour = 17, durationMinutes = 30), QuickAddParser.parseEvent("Dentist 5pm for 30 min"))
     }
 }

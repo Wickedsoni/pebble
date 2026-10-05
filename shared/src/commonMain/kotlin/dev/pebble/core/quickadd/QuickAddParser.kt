@@ -45,12 +45,30 @@ sealed interface QuickCommand {
     data class SearchMemory(val topic: String, val text: String) : QuickCommand
 
     data class OpenPage(val page: String, val text: String = "", val forRemoval: Boolean = false) : QuickCommand
+
+    /**
+     * A calendar event (WP E2), from explicit syntax only: `event: dentist fri 5pm for 30 min`.
+     * [hour] null: an all-day event. The day: [month] + [dayOfMonth] (the next such date), else [dayOffset] from today,
+     * else today (or tomorrow, if the time has already passed). [flexibleHalfDay] as in [RemindAt].
+     * [durationMinutes] null: the default length.
+     */
+    data class AddEvent(
+        val title: String,
+        val hour: Int? = null,
+        val minute: Int = 0,
+        val dayOffset: Int? = null,
+        val month: Int? = null,
+        val dayOfMonth: Int? = null,
+        val flexibleHalfDay: Boolean = false,
+        val durationMinutes: Int? = null,
+    ) : QuickCommand
 }
 
 /**
  * Offline, rule-based parser for the quick-add bar. Examples:
  * `note: buy milk`, `+2 water`, `water every 45m strict`, `remind me to call mom at 7pm`,
- * `stretch in 20 min`, `submit DBMS assignment tomorrow 5:30pm`, `remember my exam is on 20 Oct`.
+ * `stretch in 20 min`, `submit DBMS assignment tomorrow 5:30pm`, `remember my exam is on 20 Oct`,
+ * `event: dentist fri 5pm`.
  * Anything else becomes a note.
  */
 object QuickAddParser {
@@ -82,6 +100,7 @@ object QuickAddParser {
         "companion" to "companion", "pet" to "companion",
         "memory" to "memory", "memories" to "memory", "privacy" to "memory", "मेमोरी" to "memory",
         "about" to "about",
+        "calendar" to "calendar", "agenda" to "calendar", "events" to "calendar", "कैलेंडर" to "calendar",
     )
     private val pageAlt = pageWords.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) }
 
@@ -111,6 +130,108 @@ object QuickAddParser {
         RegexOption.IGNORE_CASE,
     )
 
+    private val eventRx = Regex("""^(?:event|calendar|cal)\s*:\s*(.+)$""", RegexOption.IGNORE_CASE)
+    private val eventDurationRx =
+        Regex("""\sfor\s+(\d+(?:\.\d+)?)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)(?=\s)""", RegexOption.IGNORE_CASE)
+    private val eventAllDayRx = Regex("""\sall[\s-]?day(?=\s)""", RegexOption.IGNORE_CASE)
+    private val eventTimeRxs = listOf(
+        Regex("""\s(?:at\s+|@\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?=\s)""", RegexOption.IGNORE_CASE),
+        Regex("""\s(?:at|@)\s*(\d{1,2})(?::(\d{2}))?()(?=\s)""", RegexOption.IGNORE_CASE),
+        Regex("""\s(\d{1,2}):(\d{2})()(?=\s)"""),
+    )
+    private val months = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+    private const val MONTH = """(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*"""
+    private val eventDateRxs = listOf(
+        Regex("""\s(?:on\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+$MONTH(?=\s)""", RegexOption.IGNORE_CASE) to false,
+        Regex("""\s(?:on\s+)?$MONTH\s+(\d{1,2})(?:st|nd|rd|th)?(?=\s)""", RegexOption.IGNORE_CASE) to true,
+    )
+    private val eventDayRx = Regex(
+        """\s(?:on\s+)?((?:next\s+)?(?:monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat|sunday|sun)|today|tomorrow|tmrw|kal|aaj|parso)(?=\s)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * The part after `event:` (also used by the Add field of the Calendar page): a title with an optional day
+     * (`fri`, `tomorrow`, `20 oct`), time (`5pm`, `at 17:30`), length (`for 30 min`) and `all day`. No time: all day.
+     * Null when no title is left.
+     */
+    fun parseEvent(body: String, today: Int? = null): QuickCommand.AddEvent? {
+        var rest = " ${body.trim()} "
+        fun cut(m: MatchResult) {
+            rest = rest.removeRange(m.range).let { if (it.startsWith(" ")) it else " $it" }.let { if (it.endsWith(" ")) it else "$it " }
+        }
+
+        val duration = eventDurationRx.find(rest)?.let { m ->
+            cut(m)
+            val n = m.groupValues[1].toDouble()
+            (if (m.groupValues[2].startsWith("h", ignoreCase = true)) n * 60 else n).toInt().coerceIn(5, 24 * 60)
+        }
+        val allDay = eventAllDayRx.find(rest)?.also(::cut) != null
+
+        var hour: Int? = null
+        var minute = 0
+        var flexible = false
+        if (!allDay) {
+            for (rx in eventTimeRxs) {
+                val m = rx.find(rest) ?: continue
+                var h = m.groupValues[1].toInt()
+                val min = m.groupValues[2].ifEmpty { "0" }.toInt()
+                val meridiem = m.groupValues[3].lowercase()
+                if (meridiem.isNotEmpty()) {
+                    if (h !in 1..12) continue
+                    h = (h % 12) + if (meridiem == "pm") 12 else 0
+                }
+                if (h !in 0..23 || min !in 0..59) continue
+                cut(m)
+                hour = h
+                minute = min
+                flexible = meridiem.isEmpty() && h in 1..11 && rx !== eventTimeRxs[2]
+                break
+            }
+        }
+
+        var month: Int? = null
+        var dayOfMonth: Int? = null
+        for ((rx, monthFirst) in eventDateRxs) {
+            val m = rx.find(rest) ?: continue
+            val mo = months.indexOf((if (monthFirst) m.groupValues[1] else m.groupValues[2]).lowercase().take(3)) + 1
+            val d = (if (monthFirst) m.groupValues[2] else m.groupValues[1]).toInt()
+            if (mo < 1 || d !in 1..MONTH_DAYS[mo - 1]) continue
+            cut(m)
+            month = mo
+            dayOfMonth = d
+            break
+        }
+        var dayOffset: Int? = null
+        if (month == null) {
+            eventDayRx.find(rest)?.let { m ->
+                // "sat" / "sun" are not weekday words in Hinglish ("seven", "listen"); after "event:" they are.
+                val word = m.groupValues[1].lowercase().split(' ').joinToString(" ") {
+                    if (it ==
+                        "sat"
+                    ) {
+                        "saturday"
+                    } else if (it == "sun") {
+                        "sunday"
+                    } else {
+                        it
+                    }
+                }
+                HinglishTime.dayOf(word, today)?.let {
+                    cut(m)
+                    dayOffset = it
+                }
+            }
+        }
+
+        val title = rest.trim().replace(Regex("""\s+"""), " ").replace(Regex("""\s+(?:on|at|from)$""", RegexOption.IGNORE_CASE), "")
+        if (title.isBlank()) return null
+        return QuickCommand.AddEvent(cleanTitle(title), hour, minute, dayOffset, month, dayOfMonth, flexible, duration)
+    }
+
+    /** Days in each month (February: 29, so 29 Feb is a valid date in a leap year). */
+    private val MONTH_DAYS = listOf(31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
     /** Like [parseStrict], but anything unrecognised becomes a note (the pre-model behaviour). */
     fun parse(input: String, today: Int? = null): QuickCommand? {
         val text = input.trim()
@@ -129,6 +250,7 @@ object QuickAddParser {
         (openPageEnRx.find(text) ?: openPageHiRx.find(text))?.let { m ->
             return QuickCommand.OpenPage(pageWords.getValue(m.groupValues[1].lowercase()), text)
         }
+        eventRx.find(text)?.let { m -> parseEvent(m.groupValues[1], today)?.let { return it } }
         rememberRx.find(text)?.let { return QuickCommand.RememberFact(it.groupValues[1].trim().trimEnd('.')) }
         noteRx.find(text)?.let { return QuickCommand.AddNote(it.groupValues[1].trim()) }
 

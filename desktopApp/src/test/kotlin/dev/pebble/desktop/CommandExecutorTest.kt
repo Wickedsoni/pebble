@@ -50,11 +50,12 @@ class CommandExecutorTest {
         QuickCommand.Unsupported("book a cab", "transport_taxi"),
         QuickCommand.OpenPage("reminders"),
         QuickCommand.SearchMemory("the project", "what did I note about the project"),
+        QuickCommand.AddEvent("Dentist", hour = 17, dayOffset = 1),
     )
 
     /** No `else`: a new command type doesn't compile until this test says whether it has an undo. */
     private fun hasUndo(cmd: QuickCommand): Boolean = when (cmd) {
-        is QuickCommand.AddNote, is QuickCommand.RemindIn, is QuickCommand.RemindAt -> true
+        is QuickCommand.AddNote, is QuickCommand.RemindIn, is QuickCommand.RemindAt, is QuickCommand.AddEvent -> true
         is QuickCommand.RememberFact, is QuickCommand.LogWater, is QuickCommand.SetInterval -> false
         QuickCommand.ShowUpcoming, QuickCommand.ShowNotes, QuickCommand.TellTime -> false
         is QuickCommand.Chitchat, is QuickCommand.Unsupported, is QuickCommand.OpenPage, is QuickCommand.SearchMemory -> false
@@ -107,5 +108,42 @@ class CommandExecutorTest {
         val executed = app.executor.execute(QuickCommand.OpenPage("notes"))
         assertEquals("notes", opened)
         assertNull(executed.undo)
+    }
+
+    /** WP E2: an event from Quick Add, its reminder 15 min before, and its undo. */
+    @Test
+    fun anEventIsAddedWithAReminderAndUndoRemovesBoth() {
+        val executed = app.executor.execute(QuickCommand.AddEvent("Dentist", hour = 17))
+        assertEquals("added to your calendar: dentist, today, 5:00 pm–6:00 pm.", executed.line.text.lowercase())
+        val e = app.calendar.live().single()
+        assertEquals(now.withHour(17).withMinute(0).atZone(zone).toInstant().toEpochMilli(), e.startAt)
+        assertEquals("Asia/Kolkata" to 15, e.tz to e.remindMinutes)
+        val reminder = app.reminders.pendingOneOffs().single()
+        assertEquals(now.withHour(16).withMinute(45).atZone(zone).toInstant().toEpochMilli(), reminder.dueAt)
+        assertNotNull(executed.undo).invoke()
+        assertTrue(app.calendar.live().isEmpty())
+        assertTrue(app.reminders.pendingOneOffs().isEmpty())
+    }
+
+    @Test
+    fun eventTimesResolveLikeReminders() {
+        fun start(cmd: QuickCommand.AddEvent) =
+            java.time.Instant.ofEpochMilli(app.executor.event(cmd).startAt).atZone(zone).toLocalDateTime()
+        assertEquals(
+            now.withHour(21).withMinute(0),
+            start(QuickCommand.AddEvent("Standup", hour = 9, flexibleHalfDay = true)),
+            "9 has passed: 21:00",
+        )
+        assertEquals(now.plusDays(1).withHour(8).withMinute(0), start(QuickCommand.AddEvent("Gym", hour = 8)), "8:00 has passed: tomorrow")
+        assertEquals(LocalDateTime.of(2026, 11, 8, 0, 0), start(QuickCommand.AddEvent("Diwali", month = 11, dayOfMonth = 8)))
+        assertEquals(
+            LocalDateTime.of(2027, 1, 1, 0, 0),
+            start(QuickCommand.AddEvent("New year", month = 1, dayOfMonth = 1)),
+            "the next 1 Jan",
+        )
+        val allDay = app.executor.event(QuickCommand.AddEvent("Trip", dayOffset = 6))
+        assertTrue(allDay.allDay)
+        assertNull(allDay.remindMinutes, "no reminder for an all-day event")
+        assertEquals(24 * 60 * 60_000L, allDay.endAt - allDay.startAt)
     }
 }
