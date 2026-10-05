@@ -7,10 +7,9 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (6 Oct 2026, after WP E3c-3)
-- **State:** A1 … E4, C4, E3a, E3b, E3c-1 (#51), E3c-2 (#52) and the agenda race fix (#53) are on `main`. **E3c-3** is on branch `wp/e3c3-notes-history` (PR open, waiting for your yes to merge). With it, WP E3c is complete. Schema version 15; the next migration file is `15.sqm`.
+### Start here (6 Oct 2026, after "edit a note")
+- **State:** A1 … E4, C4, E3a, E3b and all of **E3c** (#51, #52, #53, #54) are on `main`. **"Edit a note"** is on branch `wp/notes-edit` (PR open, waiting for your yes to merge). Schema version 15; the next migration file is `15.sqm`.
 - **Next: milestone F.** F0 needs an Opus spec and a security review first (CLAUDE.md rule 9): do not start code without an approved spec.
-- **Open question for you:** Pebble has no way to **edit** a note (only add and complete). `NoteRepository.update` has no caller. So a note's History is empty until sync (F) brings edits from another device, or after a restore. A small "edit a note" WP would make History useful for notes now.
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
 - **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.
 - **How each WP lands:**
@@ -23,7 +22,11 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db`, `pebble-backup-e3a.db` and `pebble-backup-e3c.db` (taken before the E2, E3a and E3c-1 migrations) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 6 Oct: WP E3c-3 done (Notes page to the state-holder pattern + History, branch `wp/e3c3-notes-history`)
+### 6 Oct: edit a note (your request, branch `wp/notes-edit`)
+- **What:** an "Edit" chip on each note (Notes page) opens an edit field with the text; Enter saves, Escape cancels, one field at a time. A save goes through the new `PebbleApp.editNote` (a journaled `NoteRepository.update`, then the search index catches up), so the note's History keeps the old text. The same text, or a blank text, writes nothing. `GlassField` gets `initial`, `onCancel` (Escape) and `autoFocus`; the defaults keep every other field as it was.
+- **Tests:** `NotesStateHolderTest` (9, 4 new).
+
+### 6 Oct: WP E3c-3 done (Notes page to the state-holder pattern + History, PR #54, merged)
 - **What:** `NotesStateHolder` + stateless `NotesContent` (the B7 roll-out for Notes). Add and complete go through `app::addNote` / `app::completeNote`, so the bus events are the same (checked in the event log). Times use `env.zone()` (before: `ZoneId.systemDefault()`). Each note with a uid has a "History" chip (the shared dialog). `Note.uid` added.
 - **Tests:** `NotesStateHolderTest` (5). 336 Kotlin tests, 0 skipped.
 - **Live check (on a copy of your data):** added two notes, opened History ("No older versions yet"), completed one; `note_created` and `note_completed` were logged.

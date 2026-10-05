@@ -59,6 +59,7 @@ class NotesStateHolderTest {
     /** What the page asked the app to do (the app's own actions publish the bus events). */
     private val added = mutableListOf<String>()
     private val completed = mutableListOf<Long>()
+    private val edited = mutableListOf<Pair<Long, String>>()
 
     private class TestDispatchers(d: CoroutineDispatcher) : DispatcherProvider {
         override val main = d
@@ -81,6 +82,7 @@ class NotesStateHolderTest {
             notes,
             addNote = { text -> added += text; notes.add(text, now) },
             completeNote = { id -> completed += id; notes.archive(id, now) },
+            editNote = { id, text -> edited += id to text; notes.update(id, text, now) },
             env = env,
             scope = scope,
         )
@@ -150,5 +152,69 @@ class NotesStateHolderTest {
         advanceUntilIdle()
         assertEquals(listOf("buy milk"), page.state.value.notes.map { it.text })
         assertEquals(emptyList(), journal.verify())
+    }
+
+    // ------------------------------------------------------------------ edit a note
+
+    @Test
+    fun editOpensOneFieldAndCancelClosesIt() = runTest {
+        val a = notes.add("a", at(9))
+        val b = notes.add("b", at(9, 1))
+        val h = holder()
+        advanceUntilIdle()
+        h.onEvent(NotesEvent.StartEdit(a))
+        advanceUntilIdle()
+        assertEquals(a, h.state.value.editingId)
+        h.onEvent(NotesEvent.StartEdit(b))
+        advanceUntilIdle()
+        assertEquals(b, h.state.value.editingId, "one field at a time")
+        h.onEvent(NotesEvent.CancelEdit)
+        advanceUntilIdle()
+        assertEquals(null, h.state.value.editingId)
+        assertTrue(edited.isEmpty())
+    }
+
+    @Test
+    fun saveChangesTheTextThroughTheAppAndKeepsTheOldTextInHistory() = runTest {
+        val id = notes.add("buy milk", at(9))
+        val h = holder()
+        advanceUntilIdle()
+        h.onEvent(NotesEvent.StartEdit(id))
+        h.onEvent(NotesEvent.SaveEdit(id, "buy oat milk"))
+        advanceUntilIdle()
+        assertEquals(listOf(id to "buy oat milk"), edited)
+        assertEquals(listOf("buy oat milk"), h.state.value.notes.map { it.text })
+        assertEquals(null, h.state.value.editingId)
+        val uid = h.state.value.notes.single().uid!!
+        val versions = ChangeHistory(db, journal).versions(SyncTable.NOTE, uid)
+        assertEquals(listOf("buy milk"), versions.map { (it.fields.getValue("text") as kotlinx.serialization.json.JsonPrimitive).content })
+        assertEquals(emptyList(), journal.verify())
+    }
+
+    @Test
+    fun theSameTextOrABlankTextWritesNothing() = runTest {
+        val id = notes.add("buy milk", at(9))
+        val h = holder()
+        advanceUntilIdle()
+        h.onEvent(NotesEvent.StartEdit(id))
+        h.onEvent(NotesEvent.SaveEdit(id, "buy milk"))
+        advanceUntilIdle()
+        h.onEvent(NotesEvent.StartEdit(id))
+        h.onEvent(NotesEvent.SaveEdit(id, "   "))
+        advanceUntilIdle()
+        assertTrue(edited.isEmpty(), "no edit, so no empty version in History")
+        assertEquals(null, h.state.value.editingId)
+    }
+
+    @Test
+    fun aNoteCompletedElsewhereClosesItsField() = runTest {
+        val id = notes.add("buy milk", at(9))
+        val h = holder()
+        advanceUntilIdle()
+        h.onEvent(NotesEvent.StartEdit(id))
+        advanceUntilIdle()
+        notes.archive(id, at(9, 5)) // Quick Add or voice completed it
+        advanceUntilIdle()
+        assertEquals(null, h.state.value.editingId)
     }
 }
