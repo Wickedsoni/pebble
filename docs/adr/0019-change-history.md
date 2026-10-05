@@ -30,6 +30,7 @@ The change journal (ADR 0018) keeps only the newest value of each synced field. 
 - Each journal write does one more indexed lookup. The tests show no change: `apply` of 500 rows stays in the E3b limit (< 200 ms).
 - History starts empty at the migration: values replaced before schema 15 are not kept.
 - If the history of a value is purged or cleared, and a peer then sends back that old value of a third device, the merge keeps it as a lost edit. This is rare and safe (only one more version to see).
+- A copied reminder whose time has passed alerts at once as overdue (`ReminderEngine` fires every pending one-off with `due_at` in the past). The maintainer accepted this on 2026-10-05: a copy must show on the pages; you can reschedule it.
 - Differences from the spec: `restoreCopy` returns `String?` (null if the item is not a tombstone here, for example after the purge). The note repository is `NoteRepository` in `WellnessRepository.kt`. `CalendarRepository.anyByUid` was added to read a deleted event.
 
 ## Alternatives
