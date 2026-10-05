@@ -16,7 +16,8 @@ import kotlin.coroutines.CoroutineContext
 
 const val GLASS_ML = 250
 
-data class Note(val id: Long, val text: String, val updatedAt: Long)
+/** [uid]: its sync uid, for its history (WP E3c); null for a note of an older Pebble that has no uid yet. */
+data class Note(val id: Long, val text: String, val updatedAt: Long, val uid: String? = null)
 
 class WaterRepository(private val db: PebbleDatabase) {
     private val q get() = db.wellnessQueries
@@ -84,8 +85,8 @@ class NoteRepository(private val db: PebbleDatabase, private val journal: Change
     }
 
     fun recent(limit: Long = 5): List<Note> =
-        q.activeNotes(limit).executeAsList().map { Note(it.id, it.text, it.updated_at) }
+        q.activeNotes(limit).executeAsList().map { Note(it.id, it.text, it.updated_at, it.uid) }
 
     fun activeFlow(limit: Long = 20, context: CoroutineContext = Dispatchers.Default): Flow<List<Note>> =
-        q.activeNotes(limit).asFlow().mapToList(context).map { rows -> rows.map { Note(it.id, it.text, it.updated_at) } }
+        q.activeNotes(limit).asFlow().mapToList(context).map { rows -> rows.map { Note(it.id, it.text, it.updated_at, it.uid) } }
 }

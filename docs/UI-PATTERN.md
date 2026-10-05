@@ -65,7 +65,7 @@ Test these items for each page:
 | Reminders | Done (WP B7, the template); "History" dialog (WP E3c-2: `HistoryStateHolder`, shared with Calendar) |
 | Calendar | Done (WP E2: `CalendarStateHolder`); "History" dialog (WP E3c-2: `HistoryStateHolder`) |
 | Today | "Agenda" card done (WP E2: `AgendaStateHolder`); the rest of the page to do |
-| Notes | To do |
+| Notes | Done (WP E3c-3: `NotesStateHolder`); "History" dialog (`HistoryStateHolder`) |
 | Water | To do |
 | Chat | To do |
 | Memory | Search card done (WP C2: `MemorySearchStateHolder`); "Teach Pebble a command" card done (WP C3: `TeachStateHolder`); "Recently deleted" card done (WP E3c-2: `RecentlyDeletedStateHolder`); the rest of the page to do |
