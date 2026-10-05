@@ -58,6 +58,7 @@ import dev.pebble.desktop.ui.FrostedPanel
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.glassColors
 import dev.pebble.desktop.voice.VoiceInput
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -147,6 +148,10 @@ fun QuickAddWindow(
                 scope.launch {
                     val reply = try {
                         app.smartReply(r.command)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null // the canned line answers
                     } finally {
                         thinking = false
                     }
@@ -168,6 +173,10 @@ fun QuickAddWindow(
                 scope.launch {
                     val reply = try {
                         app.smartReply(option.command)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null // the canned line answers
                     } finally {
                         thinking = false
                     }

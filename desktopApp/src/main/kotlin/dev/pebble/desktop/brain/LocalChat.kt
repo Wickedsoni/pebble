@@ -238,7 +238,8 @@ class LocalChat(
                 }
                 delay(150)
             }
-        } catch (e: CancellationException) {
+        } catch (e: Throwable) {
+            // Cancelled or failed: the child must not stay behind.
             stop(process)
             throw e
         } finally {
@@ -291,6 +292,8 @@ class LocalChat(
                 .header("Authorization", "Bearer ${r.key}")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build()
+            // Last check before the key leaves: the server must still be the one that we verified.
+            if (running !== r || !r.process.isAlive) return null
             val res = http.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             if (res.statusCode() != 200) return null
             Json.parseToJsonElement(res.body()).jsonObject.getValue("choices").jsonArray.first().jsonObject
@@ -308,12 +311,12 @@ class LocalChat(
             delay(30_000)
             val r = running ?: return@launch
             if (!r.process.isAlive) {
-                running = null
+                synchronized(state) { if (running === r) running = null }
                 return@launch
             }
             if (System.currentTimeMillis() - lastUse > idleMillis) {
                 log.info(TAG, "chat server stopped after ${idleMillis / 60_000} idle minutes")
-                running = null
+                synchronized(state) { if (running === r) running = null }
                 stop(r.process)
                 return@launch
             }
@@ -374,6 +377,7 @@ class LocalChat(
                 .forEach { p ->
                     log.info(TAG, "stopping a chat server left from an earlier run (pid ${p.pid()})")
                     p.destroyForcibly()
+                    runCatching { p.onExit().get(2, TimeUnit.SECONDS) }
                 }
         }
 
@@ -386,23 +390,29 @@ class LocalChat(
         }
 
         /**
-         * The process ids that listen on local TCP [port], from `netstat -ano` (the JDK has no API for this).
+         * The process ids that listen on local TCP [port], from `netstat -ano` (the JDK has no API for this). TCP over IPv4 and IPv6.
          * Null if netstat cannot run.
          */
         fun netstatOwners(port: Int): Set<Long>? = runCatching {
             val exe = Path.of(System.getenv("SystemRoot") ?: "C:\\Windows", "System32", "netstat.exe")
             val out = Files.createTempFile("pebble-netstat", ".txt")
             try {
-                val p = ProcessBuilder(exe.toString(), "-ano", "-p", "tcp").redirectErrorStream(true).redirectOutput(out.toFile()).start()
+                val p = ProcessBuilder(exe.toString(), "-ano").redirectErrorStream(true).redirectOutput(out.toFile()).start()
                 if (!p.waitFor(5, TimeUnit.SECONDS)) {
                     p.destroyForcibly()
                     return@runCatching null
                 }
-                parseListeners(Files.readAllLines(out), port)
+                parseNetstat(Files.readAllBytes(out), port)
             } finally {
                 Files.deleteIfExists(out)
             }
         }.getOrNull()
+
+        /**
+         * [parseListeners] for the raw output of netstat. netstat writes the OEM code page, which is not UTF-8 on many
+         * Windows languages. Only the ASCII tokens are read, so every byte is decoded as one character.
+         */
+        fun parseNetstat(bytes: ByteArray, port: Int): Set<Long> = parseListeners(String(bytes, Charsets.ISO_8859_1).lines(), port)
 
         /**
          * The pids of the listening sockets on [port] in `netstat -ano` [lines]. A listener has the foreign address

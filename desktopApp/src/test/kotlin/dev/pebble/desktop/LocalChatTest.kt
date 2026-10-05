@@ -4,10 +4,14 @@ import com.sun.net.httpserver.HttpServer
 import dev.pebble.core.brain.ReplyContext
 import dev.pebble.desktop.brain.LocalChat
 import dev.pebble.desktop.core.Logger
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.InputStream
@@ -98,7 +102,17 @@ class LocalChatTest {
         owners: (Int) -> Set<Long>? = { null },
         locate: () -> LocalChat.ChatFiles? = { files },
         replyMillis: Long = 4_000,
-    ) = LocalChat(locate, scope, Logger.None, replyMillis = replyMillis, startMillis = 30_000, launcher = launcher, portOwners = owners)
+        dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    ) = LocalChat(
+        locate,
+        scope,
+        Logger.None,
+        replyMillis = replyMillis,
+        startMillis = 30_000,
+        launcher = launcher,
+        portOwners = owners,
+        dispatcher = dispatcher,
+    )
 
     private fun waitFor(what: String, check: () -> Boolean) {
         val end = System.currentTimeMillis() + 5_000
@@ -227,5 +241,37 @@ class LocalChatTest {
         )
         assertEquals(setOf(4148L, 77L), LocalChat.parseListeners(lines, 18765))
         assertEquals(emptySet(), LocalChat.parseListeners(lines, 1))
+    }
+
+    @Test
+    fun `parseNetstat reads output that is not UTF-8`() {
+        // The byte 0xC9 (E acute in the OEM code page) is not valid UTF-8.
+        val header = byteArrayOf(0x20, 0xC9.toByte(), 0x74, 0x61, 0x74)
+        val line = "\n  TCP    [::]:18765             [::]:0                 LISTENING       77\n".toByteArray()
+        assertEquals(setOf(77L), LocalChat.parseNetstat(header + line, 18765))
+    }
+
+    @Test
+    fun `a reply in flight does not block the thread of its dispatcher`() = runBlocking {
+        val seen = CopyOnWriteArrayList<Pair<String, String?>>()
+        val single = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        try {
+            val c = chat(
+                { cmd, _, _, _ -> FakeProcess(600).also { serve(portOf(cmd), seen, chatDelayMillis = 2_500) } },
+                owners = { setOf(600L) },
+                replyMillis = 6_000,
+                dispatcher = single,
+            )
+            val reply = async(single) { c.reply(ctx) }
+            waitFor("the chat request is in flight") { seen.any { it.first.contains("completions") } }
+            var ticked = false
+            launch(single) { ticked = true }.join()
+            assertTrue(ticked, "the dispatcher must run other work while the request waits")
+            assertTrue(!reply.isCompleted, "the request was still in flight")
+            assertNotNull(reply.await())
+            c.close()
+        } finally {
+            single.close()
+        }
     }
 }

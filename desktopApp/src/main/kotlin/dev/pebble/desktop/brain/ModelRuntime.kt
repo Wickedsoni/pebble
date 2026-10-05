@@ -5,6 +5,7 @@ import com.k2fsa.sherpa.onnx.LibraryUtils
 import dev.pebble.desktop.core.Logger
 import dev.pebble.desktop.voice.SpeechRecognizer
 import kotlinx.coroutines.CoroutineScope
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -17,7 +18,10 @@ class ModelRuntime(scope: CoroutineScope, dataDir: Path, idleMillis: Long = 10 *
 
     // A chat server left by a Pebble that did not exit cleanly would lock the files of a pack install.
     init {
-        runCatching { LocalChat.killLeftovers(packsDir.resolve("chat").resolve("llama-server.exe"), Logger.None) }
+        // Only when a chat pack install or removal waits: then applyStaged needs the files unlocked.
+        if (Files.exists(packsDir.resolve("chat.staged")) || Files.exists(packsDir.resolve("chat.remove"))) {
+            runCatching { LocalChat.killLeftovers(packsDir.resolve("chat").resolve("llama-server.exe"), Logger.None) }
+        }
     }
 
     /** Pack installs and removals staged in the last run, done now: no model is loaded yet. */

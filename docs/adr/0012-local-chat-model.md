@@ -60,3 +60,13 @@ We measured four models with `ChatEvalTest` on `brain/eval/chat_v1.jsonl` (24 li
 - **sarvam-30b on the laptop.** Not selected: 23 GB of RAM, and no usable reply through llama.cpp b11146. It is a candidate for the family hub (F5/F6), with the runtime that Sarvam recommends.
 - **A sub-1B model for all scripts.** Not selected: the Hindi is not correct, and there is a risk of insults.
 - **Distillation into one small Hinglish chat model.** This is the real fix for Hindi on small laptops. It is a training run (C6): a larger teacher writes Hindi and Hinglish replies, a person reviews a sample, and a small student is fine-tuned. Then `chat_v1` and a person's review decide if a script can use it.
+
+## Revision (QA P9a): check the port owner before the key is sent
+
+The free port is found with a socket that is closed before `llama-server` binds it. Another local program could take the port in this gap and read the key and the chat text.
+
+- `LocalChat` asks `/health` first. It needs no key. We checked this live with the pinned build b11146: with `LLAMA_API_KEY` set, `/health` gave 503 while the model loaded and then 200, and `/v1/models` gave 401 without the key.
+- Only when `/health` answers 200 does Pebble read the listeners on the port with `netstat -ano` (the JDK has no API for this; IPv4 and IPv6, the output is read as ISO-8859-1 because it uses the OEM code page). If the child process is not the only listener, or netstat fails, Pebble sends no key, stops the child, and tries again on a new port (3 tries at most). Without a check, Smart replies stays off.
+- A start that was cancelled or closed stops its child at once, also while the model loads. A server left by a hard kill is stopped before a staged chat pack is installed.
+- A small gap remains between the check and the request. The key is not sent if the child has already stopped.
+
