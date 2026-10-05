@@ -136,4 +136,5 @@ Line numbers can move. If a line does not match, search for the name.
 - Write new and rewritten docs in ASD-STE100 Simplified Technical English. See `docs/STYLE-STE.md`.
 - Use the terms in `docs/GLOSSARY.md`.
 - Record design decisions as ADRs in `docs/adr/` (template: `docs/adr/0000-template.md`).
+- UI pages follow `docs/UI-PATTERN.md` (state holder + stateless content; the Reminders page is the template).
 - Code comments keep the style of the surrounding code.

@@ -74,10 +74,11 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - WP B4: `LazyModel<T>` + `ModelStatus`, `ModelRuntime` (one place for ONNX-before-sherpa), `VerifiedModelCache`, outputs read by name, no boxing in the speech trim. First voice command after an idle unload: 1.33-1.60 s -> 1.12-1.21 s (speech checksum check ~180 ms -> ~1 ms).
   - WP B5: `EventLogger` queues events and one IO writer saves them in batches (nothing lost: full queue or exit writes at once); `shutdown()` waits up to 2 s for the queue. File databases use WAL + `busy_timeout=5000`.
   - WP B6: measured 200 000 log entries (`PEBBLE_BENCH=1 ./gradlew :shared:jvmTest --tests "*GrowthBenchmarkTest*"`): `stats()` 88 ms (158 ms with the decoded check) → 31 ms after the roll-up; `learn()` ~85 ms. Migration `9.sqm` (`daily_stat`); `HistoryCompactor` keeps raw rows (your choice, ADR 0004 revised).
+  - WP B7 (pilot): `RemindersStateHolder` (`StateFlow<RemindersUiState>`, `onEvent`), stateless `RemindersContent`, `docs/UI-PATTERN.md` (the template for the other pages).
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next WP:** B7 (UI state holders, pilot on the Reminders page).
+- **Next:** B7 roll-outs, one page per PR (Today, Notes, Water, Chat, Memory, Companion; follow `docs/UI-PATTERN.md`), in parallel with milestone C (C1 next).
 
 ### User-only tasks (do not automate)
 1. Merge Dependabot PR #6 (Gradle wrapper 9.4.1 → 9.8.0). The GitHub MCP server is disconnected: its token expired. Authorize it again, or use the `gh` CLI.

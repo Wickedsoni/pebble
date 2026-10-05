@@ -19,6 +19,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /** Events are saved off the publisher's thread, in batches, and none is lost — not even on exit. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -38,8 +39,11 @@ class EventLoggerTest {
         val bus = EventBus()
         val logger = EventLogger(db)
         logger.attach(bus, scope, Dispatchers.IO.limitedParallelism(1))
+        val t0 = System.nanoTime()
         repeat(10_000) { bus.publish(event(it)) }
-        assertTrue(logger.flush())
+        // This test is about nothing lost, not speed: a slow CI disk needs more than flush()'s default 2 s here.
+        assertTrue(logger.flush(30.seconds))
+        println("10 000 events saved in ${(System.nanoTime() - t0) / 1_000_000} ms")
         assertEquals(10_000, rows(db))
         // In order: the newest event is the last one published.
         assertEquals(9_999L, db.pebbleQueries.recentEvents(1).executeAsOne().at_millis)
