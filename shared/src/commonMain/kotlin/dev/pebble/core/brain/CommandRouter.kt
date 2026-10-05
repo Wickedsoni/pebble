@@ -93,8 +93,8 @@ class CommandRouter(
         A.NOTES_QUERY -> QuickCommand.ShowNotes
         A.TIME_QUERY -> QuickCommand.TellTime
         A.CHITCHAT -> QuickCommand.Chitchat(text, intent, u.mood?.takeIf { it.confidence >= 0.7f }?.mood)
-        A.REMINDER_REMOVE -> QuickCommand.OpenPage("reminders")
-        A.NOTE_REMOVE -> QuickCommand.OpenPage("notes")
+        A.REMINDER_REMOVE -> QuickCommand.OpenPage("reminders", text, forRemoval = true)
+        A.NOTE_REMOVE -> QuickCommand.OpenPage("notes", text, forRemoval = true)
         else -> QuickCommand.Unsupported(text, intent)
     }
 

@@ -411,7 +411,7 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         if (speech?.text != text) speech = Speech(text, actions, detail = line.tip)
         reminderBubble = text
         if (escalation == Escalation.TOAST && toasted.add(r.key + r.dueAt)) {
-            app.notifier("Pebble", r.title)
+            app.ui.notify("Pebble", r.title)
         }
     }
 

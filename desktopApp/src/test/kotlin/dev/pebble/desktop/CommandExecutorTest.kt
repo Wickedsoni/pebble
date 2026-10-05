@@ -5,6 +5,7 @@ import dev.pebble.core.quickadd.QuickCommand
 import dev.pebble.core.reminders.ReminderKind
 import dev.pebble.desktop.core.AppEnv
 import dev.pebble.desktop.core.DefaultDispatchers
+import dev.pebble.desktop.core.UiPort
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -23,7 +24,15 @@ class CommandExecutorTest {
     private var opened: String? = null
 
     init {
-        app.openPage = { opened = it }
+        app.bindUi(
+            object : UiPort {
+                override fun notify(title: String, message: String) = Unit
+
+                override fun openPage(page: String) {
+                    opened = page
+                }
+            },
+        )
     }
 
     /** One of every subtype. */
@@ -54,11 +63,7 @@ class CommandExecutorTest {
     fun everyCommandSaysSomethingAndOnlyCreationsCanBeUndone() {
         for (cmd in commands) {
             val executed = app.executor.execute(cmd)
-            if (cmd is QuickCommand.OpenPage) {
-                assertEquals("", executed.line.text, "opening a page is silent")
-            } else {
-                assertTrue(executed.line.text.isNotBlank(), "$cmd says something")
-            }
+            assertTrue(executed.line.text.isNotBlank(), "$cmd says something")
             assertEquals(hasUndo(cmd), executed.undo != null, "undo for $cmd")
             assertTrue(app.executor.describe(cmd).isNotBlank(), "preview for $cmd")
         }
