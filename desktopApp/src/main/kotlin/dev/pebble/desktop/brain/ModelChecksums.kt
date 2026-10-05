@@ -12,9 +12,10 @@ import java.security.MessageDigest
  * Checks a model folder against `manifest.json` (next to it, or one level up — the installed and dev
  * layouts) before anything is loaded: every file the manifest lists for [name] must match its SHA-256.
  * A hand-placed model without a manifest entry is allowed (nothing to check against).
+ * With a [VerifiedModelCache], files that passed before and didn't change are not hashed again.
  */
 object ModelChecksums {
-    fun verify(dir: Path, name: String): Boolean {
+    fun verify(dir: Path, name: String, cache: VerifiedModelCache? = null): Boolean {
         val manifest = listOf(dir.resolve("manifest.json"), dir.parent.resolve("manifest.json")).firstOrNull(Files::exists)
             ?: return true
         val entry = Json.parseToJsonElement(Files.readString(manifest)).jsonObject.getValue("models").jsonArray
@@ -23,7 +24,8 @@ object ModelChecksums {
             val o = f.jsonObject
             // Manifest paths start with the model's folder ("intent-v2-pruned/…"); the folder is [dir].
             val file = dir.resolve(o.getValue("path").jsonPrimitive.content.substringAfter('/'))
-            Files.exists(file) && sha256(file) == o.getValue("sha256").jsonPrimitive.content
+            val expected = o.getValue("sha256").jsonPrimitive.content
+            if (cache != null) cache.matches(file, expected) else Files.exists(file) && sha256(file) == expected
         }
     }
 

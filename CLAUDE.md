@@ -87,10 +87,10 @@ Line numbers can move. If a line does not match, search for the name.
 | `EventLogger` attached with `Dispatchers.Unconfined`, so DB writes happen on the publisher thread (often Swing); comment: "nothing is lost on exit" | `PebbleApp.kt:143-144`, `shared/.../event/EventLogger.kt` |
 | `EventBus`: `MutableSharedFlow`, buffer 256, `DROP_OLDEST` | `shared/.../event/EventBus.kt` |
 | `Understanding` is a synchronous `fun interface understand(text): Understood?`; `CommandRouter(model: () -> Understanding?, ...)`; the router is called on `Dispatchers.Default` | `shared/.../brain/Understanding.kt:65`, `CommandRouter.kt:15`, `desktopApp/.../quickadd/QuickAddWindow.kt:156,165` |
-| `ModelManager` and `SpeechRecognizer` duplicate locate → verify → lazy load → idle unload → status | `desktopApp/.../brain/ModelManager.kt`, `voice/SpeechRecognizer.kt` |
-| SHA-256 re-hash of every model file on **every** load (≈300 MB for speech after each idle unload) | `brain/ModelChecksums.kt:17-28` |
-| **Load-order invariant:** ONNX Runtime env before sherpa `LibraryUtils.load()` | `SpeechRecognizer.kt:66-69`, `VoiceSpikeTest` |
-| Intent ONNX outputs by index: `out[0]` intent, `out[1]` slots, `out[2]` mood. Export names: `intent_logits`, `slot_logits`, `mood_logits`. The mean-pooled vector exists in PyTorch but is **not exported** | `OnnxIntentModel.kt:73-94`, `brain/src/pebble_brain/export_onnx.py:48`, `intent_model.py:36-41` |
+| `ModelManager` and `SpeechRecognizer` are thin wrappers over `LazyModel<T : AutoCloseable>` (locate → verify → load on `io` → idle unload; `status: StateFlow<ModelStatus>`; `getOrNull()` never blocks). Speech models are one `AsrEngines` holder. `ModelRuntime` owns both (WP B4) | `desktopApp/.../brain/LazyModel.kt`, `brain/ModelRuntime.kt` |
+| `VerifiedModelCache` (`%APPDATA%\Pebble\models-verified.json`: path, size, mtime, sha256) skips re-hashing unchanged files; the speech check went from ~180 ms to ~1 ms. Only the `ModelRuntime` instances use it; `ModelManager(scope)` / `SpeechRecognizer(scope)` built directly still hash every load (WP B4) | `brain/VerifiedModelCache.kt`, `brain/ModelChecksums.kt` |
+| **Load-order invariant:** ONNX Runtime env before sherpa `LibraryUtils.load()`, in one place: `ModelRuntime.loadSherpa()` (lazy, not at start-up) | `brain/ModelRuntime.kt`, `VoiceSpikeTest` |
+| Intent ONNX outputs read by name (`intent_logits`, `slot_logits`, `mood_logits`; `OrtSession.Result.get(String): Optional<OnnxValue>`, checked in ORT 1.30), with index fallback. The mean-pooled vector exists in PyTorch but is **not exported** | `OnnxIntentModel.kt:73-94`, `brain/src/pebble_brain/export_onnx.py:48`, `intent_model.py:36-41` |
 | Schema: `.sq` files + migrations `1.sqm`…`8.sqm`. The **current schema version is 9; the next migration file is `9.sqm`** (upgrades 9→10). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
 | `one_off_reminder.id INTEGER AUTOINCREMENT`; hard `DELETE`; no `updated_at` | `Reminders.sq:13-19,43-44` |
 | `ReminderEngine` keys one-off reminders by `Long` id: `oneOffKey(r.id)` | `shared/.../reminders/ReminderEngine.kt:61,91,195` |
@@ -109,7 +109,7 @@ Line numbers can move. If a line does not match, search for the name.
    - `java.net.http` (HttpClient), `jdk.httpserver`, `jdk.crypto.ec` and `java.naming` each need an entry in `modules(...)` in `desktopApp/build.gradle.kts`.
    - **VERIFY** the module name for X25519/Ed25519/ECDHE on the pinned JDK.
    - Always start the built distributable after such a change.
-2. **ONNX before sherpa.** Load the ONNX Runtime env before sherpa-onnx. A refactor of model loading must keep this order in **one** place.
+2. **ONNX before sherpa.** Load the ONNX Runtime env before sherpa-onnx. Only `ModelRuntime.loadSherpa()` loads sherpa; do not call `LibraryUtils.load()` anywhere else.
 3. **Model tests skip silently without their data.** CI downloads the models, so `EvalSetRouterTest`, `RouterWithModelTest`, `OnnxParityTest` and `BundledModelTest` run there.
    - `VoiceSpikeTest` and `VoiceCommandEvalTest` still skip in CI. They need speech models in a local layout, or your own recordings.
    - `OnnxParityTest` uses `desktopApp/src/test/resources/parity/<model folder>.json` when the model folder has no `parity.json`. When you ship a new command model, copy its `parity.json` to that folder.
