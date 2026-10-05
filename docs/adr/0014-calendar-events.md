@@ -24,7 +24,7 @@ The plan puts `RecurrenceExpander` in `commonMain`. The `:shared` module has no 
 4. **Reminders are linked one-off reminders.** `one_off_reminder` gains `event_uid` and `occurrence_at`. Every 10 minutes, and after each change to an event, `CalendarAgenda` makes the missing reminders for the next 2 days. A change or a delete makes the pending linked reminders into tombstones, then makes them again. The `ReminderEngine` does not change.
 5. **ICS is hand-written** (no dependency). Import reads `VEVENT` only: `TZID` as an IANA zone (a Windows zone name is read in your zone, with a count in the message), `EXDATE`, and `RECURRENCE-ID` (the changed occurrence becomes its own event; the series skips that day). Export writes `TZID` without a `VTIMEZONE` block. Google Calendar and Outlook accept IANA names.
 6. **Quick Add uses explicit syntax only:** `event: dentist fri 5pm for 30 min`. The command model does not make events yet. That needs rows in a new eval file and a passing gate (plan, WP E2).
-7. **Defaults:** an event lasts 1 hour. A timed event reminds you 15 minutes before. An all-day event and an imported event have no reminder.
+7. **Defaults:** an event lasts 1 hour. A timed event reminds you 15 minutes before. An all-day event has no reminder. An import gives its timed events the reminder that is selected on the page (15 minutes before, or "No reminder"). Reminders are made only 2 days ahead, so a large import does not make many reminders at one time.
 
 ## Consequences
 

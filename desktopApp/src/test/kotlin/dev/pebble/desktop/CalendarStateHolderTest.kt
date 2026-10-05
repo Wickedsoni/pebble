@@ -207,11 +207,23 @@ class CalendarStateHolderTest {
         val h = holder()
         h.onEvent(CalendarPageEvent.Import(inFile))
         advanceUntilIdle()
-        assertEquals("Imported 2 events from in.ics. 1 repeat in a way Pebble shows only once.", h.state.value.message)
-        assertEquals(setOf("a", "b"), calendar.live().map { it.uid }.toSet())
+        assertEquals(
+            "Imported 2 events from in.ics. Timed events remind you 15 min before. 1 repeat in a way Pebble shows only once.",
+            h.state.value.message,
+        )
+        assertEquals(
+            setOf("a" to 15, "b" to null),
+            calendar.live().map {
+                it.uid to it.remindMinutes
+            }.toSet(),
+            "the page's reminder, timed events only",
+        )
+        h.onEvent(CalendarPageEvent.SetRemind(null))
         h.onEvent(CalendarPageEvent.Import(inFile))
         advanceUntilIdle()
         assertEquals(2, calendar.live().size, "the same file again replaces, it does not duplicate")
+        assertTrue(calendar.live().all { it.remindMinutes == null }, "\"No reminder\" before an import: none")
+        assertTrue(h.state.value.message!!.contains("No reminders."))
 
         val outFile = dir.resolve("out.ics")
         h.onEvent(CalendarPageEvent.Export(outFile))

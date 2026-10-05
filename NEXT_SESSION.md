@@ -28,7 +28,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **UI:** Calendar page (month grid + the selected day; Add field uses the Quick Add syntax; chips for repeat and reminder; Import / Export .ics). "Agenda" card on the Today page. Quick Add: `event: dentist fri 5pm for 30 min` (rules only; the model has no calendar action yet).
 - **Tests:** 248 Kotlin tests, 0 skipped (models present).
 - **Live check (built distributable, 5 Oct):** your real database migrated 12 → 13 (`integrity_check` ok, new columns present); the app started with no errors in `pebble.log`. Computer use was not available in the session, so the page was checked as rendered images (dark and light) of the real `CalendarContent` and Agenda card. **Please click through the Calendar page once yourself:** add an event, Skip day on a repeating one, import an .ics from Google Calendar.
-- **Defaults to review:** an event lasts 1 hour; a timed event reminds 15 min before; all-day and imported events have no reminder.
+- **Defaults to review:** an event lasts 1 hour; a timed event reminds 15 min before (also imported ones: the import uses the reminder chip on the page; pick "No reminder" first to import without); all-day events have no reminder.
 - **Follow-ups:** edit an event (today: delete and add again); change one occurrence other than "skip"; `calendar_set` from the command model (needs a new eval file and gate).
 
 ### 5 Oct: WP C3 done (PR #29, on top of #28)

@@ -158,7 +158,7 @@ class CalendarStateHolder(
 
             is CalendarPageEvent.SkipDay -> write { skip(e.uid, e.occurrenceAt) }
 
-            is CalendarPageEvent.Import -> write { import(e.file) }
+            is CalendarPageEvent.Import -> view.value.remind.let { remind -> write { import(e.file, remind) } }
 
             is CalendarPageEvent.Export -> write { export(e.file) }
         }
@@ -215,12 +215,16 @@ class CalendarStateHolder(
         return "Skipped “${e.title}” on this day. The other days stay."
     }
 
-    private fun import(file: Path): String {
+    /** Timed events get the reminder chosen on the page ([remind]); all-day events get none, like events you add. */
+    private fun import(file: Path, remind: Int?): String {
         val result = Ics.parse(Files.readString(file), env.zone())
-        calendar.saveAll(result.events, env.millis())
+        calendar.saveAll(result.events.map { if (it.allDay) it else it.copy(remindMinutes = remind) }, env.millis())
         agenda.scheduleReminders(env.millis())
         return buildList {
             add("Imported ${result.events.size} event${if (result.events.size == 1) "" else "s"} from ${file.fileName}.")
+            if (result.events.any { !it.allDay }) {
+                add(remind?.let { "Timed events remind you ${formatMinutes(it).replace("24 hours", "1 day")} before." } ?: "No reminders.")
+            }
             if (result.shownOnce > 0) add("${result.shownOnce} repeat in a way Pebble shows only once.")
             if (result.unknownZones >
                 0
