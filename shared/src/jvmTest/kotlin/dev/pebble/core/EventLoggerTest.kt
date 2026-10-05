@@ -97,4 +97,27 @@ class EventLoggerTest {
             }
         }
     }
+
+    @Test
+    fun aFailedWriteDoesNotStopTheWriterOrHangFlush() = runBlocking {
+        val file = Files.createTempFile("pebble-poison", ".db").toFile().apply { delete(); deleteOnExit() }
+        val db = DatabaseFactory.create(file)
+        // Event 5 cannot be saved, like a write that fails on a busy or full disk.
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use {
+                it.execute("CREATE TRIGGER poison BEFORE INSERT ON event_log WHEN new.at_millis = 5 BEGIN SELECT RAISE(ABORT, 'boom'); END")
+            }
+        }
+        val errors = mutableListOf<Throwable>()
+        val bus = EventBus()
+        val logger = EventLogger(db) { synchronized(errors) { errors += it } }
+        logger.attach(bus, scope, Dispatchers.IO.limitedParallelism(1))
+        repeat(10) { bus.publish(event(it)) }
+        assertTrue(logger.flush(10.seconds), "flush completes after a failed batch")
+        assertEquals(9, rows(db), "only the bad event is lost")
+        assertEquals(1, errors.size)
+        repeat(3) { bus.publish(event(100 + it)) } // the writer is still alive
+        assertTrue(logger.flush(10.seconds))
+        assertEquals(12, rows(db))
+    }
 }

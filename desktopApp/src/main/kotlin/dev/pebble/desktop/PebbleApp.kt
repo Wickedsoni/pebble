@@ -323,7 +323,7 @@ class PebbleApp(
     private val compactor = dev.pebble.core.history.HistoryCompactor(db, env::dayOf)
 
     /** Saves bus events to `event_log`; one writer thread, so the UI thread never waits for SQLite. */
-    val eventLog = EventLogger(db)
+    val eventLog = EventLogger(db) { log.warn(TAG, "event log write failed", it) }
 
     /**
      * Search over notes, facts and what you said (WP C2). It indexes only while the command model is loaded
@@ -633,7 +633,16 @@ class PebbleApp(
             // A restore staged on the About page replaces the database before it is opened (WP E4).
             runCatching { dev.pebble.core.backup.Backup.applyStaged(dir) }
                 .onSuccess { it?.let { line -> log.info(TAG, line) } }
-                .onFailure { log.warn(TAG, "restoring the backup failed; the old database stays", it) }
+                .onFailure {
+                    log.warn(TAG, "restoring the backup failed; the old database stays", it)
+                    // A swap cut short must not open a new empty database: put the old files back first.
+                    runCatching { dev.pebble.core.backup.Backup.recoverInterrupted(dir) }
+                        .onFailure { e ->
+                            // Stop here: an empty database next to the old files would hide the user's data.
+                            log.warn(TAG, "putting the old database back failed", e)
+                            throw IllegalStateException("Pebble could not put the old database back after a failed restore.", e)
+                        }
+                }
             return PebbleApp(DatabaseFactory.create(), env, log)
         }
     }
