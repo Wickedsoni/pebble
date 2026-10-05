@@ -29,7 +29,6 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Live check (on a copy of your data):** added two notes, opened History ("No older versions yet"), completed one; `note_created` and `note_completed` were logged.
 
 ### 6 Oct: agenda race fix for moved events (PR #53, merged)
-
 - **What:** the 10-minute loop reads each event with its HLC (`CalendarRepository.betweenWithHlc`) and passes it to `addLinked(..., eventHlc)`. In its IMMEDIATE transaction, `addLinked` refuses when the event changed since (a new HLC: moved, edited) or was deleted. The event's own `eventChanged` makes the reminders of the new version. This closes the gap left by PR #51.
 - **Test:** `CalendarTest.aReminderIsNotMadeForAnEventMovedAfterTheAgendaReadIt`. 331 Kotlin tests, 0 skipped. The built app started on a copy of your data; the loop made the event reminders; no new log lines.
 
