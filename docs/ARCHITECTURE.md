@@ -83,5 +83,5 @@ Only the nudge policy learns live on your laptop. Deep models change only throug
 ## Privacy
 
 - **Mic:** opens only while you hold the key or press the mic button, and is closed on release (`AudioPrepTest`).
-- **Audio:** discarded after transcription, unless you turn on "keep corrected clips" (planned). Then only clips you corrected are kept, and you can delete them on the Memory page.
+- **Audio:** Pebble discards the audio after transcription. If you turn on "Keep voice clips I correct" (Memory → Privacy, off by default), Pebble keeps only the clips that you corrected, with your text. You can delete them on the Memory page.
 - **No cloud:** no cloud models and no telemetry.

@@ -11,7 +11,7 @@ enum class Character(val displayName: String, val base: Color, val shade: Color)
     DRIP("Drip", Color(0xFF7FA9C9), Color(0xFF5F89AA)),
 }
 
-/** Evolution stage, unlocked by XP later. Adds a small accessory on top of any character. */
+/** Evolution stage, earned through growth levels ([dev.pebble.core.growth.GrowthEngine]). Adds a small accessory on top of any character. */
 enum class Stage { BABY, TEEN, ADULT, LEGENDARY }
 
 enum class Mood { IDLE, HAPPY, SLEEPY, THIRSTY, WORRIED, SAD, CELEBRATE, WORKING, NEEDS_INPUT, LOVE }

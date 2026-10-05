@@ -9,7 +9,7 @@ Everything runs on the user's laptop. The minimum target is **8 GB RAM, an i5, n
 
 ## Design principles
 
-- **Local first.** No cloud models, no telemetry. Cloud AI agents are only ever an explicit, approval-gated user action.
+- **Local first.** Pebble talks only to your own paired devices, only when you turn it on, end-to-end encrypted. Pebble runs no servers. No cloud models, no telemetry. Cloud AI agents are only ever an explicit, approval-gated user action.
 - **Permissive licences only** for anything we train on or ship (see `brain/data/licenses.json`). No training on outputs of proprietary models.
 - **Mirror the user's language:** Hinglish → Hinglish, Devanagari → Devanagari, English → English.
 - **When unsure, ask.** "Did you mean…" picks and "Not what I meant" become training labels (active learning).
@@ -29,6 +29,9 @@ Everything runs on the user's laptop. The minimum target is **8 GB RAM, an i5, n
 | M5 | **Local chat:** a small open LLM (e.g. Qwen2.5-0.5B, Apache-2.0) via llama.cpp with persona + retrieved memories; unloads when idle | planned |
 | M6 | **Situation, mood and context:** self-supervised situation model over the event log; mood head (✅ in intent-v2) and context head feeding the bandit | planned |
 | M7 | **Continual learning:** overnight on-device updates for heads, prototypes and bandit; dev-machine LoRA pipeline with replay, eval gates and rollback | planned |
+| M8 | **Calendar:** calendar events with an agenda on the Today page; ICS import and export | planned |
+| M9 | **Family circle (sync):** pair your own devices with a pairing code; sync the calendar and shared reminders; mutual TLS, end-to-end encrypted, off by default | planned |
+| M10 | **Home hub:** a family PC runs Pebble Home: a relay and mailbox for the peers, and a larger chat model and speech model for weak laptops. The command model stays on each device | planned |
 | — | **Claude Code / agent hand-off:** the pet shows working / needs input / done; tasks run in a git worktree; nothing is pushed without review | planned |
 | — | **Growth levels** earned by tasks (active days, reminders done, water goals, notes, chats) | ✅ done (0.1.2) |
 | — | **Wardrobe + custom SVG avatars + size slider** (below) | planned |

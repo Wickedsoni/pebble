@@ -86,7 +86,7 @@ python -m uv run python -m pebble_brain.prune_vocab models/intent-v2 models/inte
 python -m uv run python -m pebble_brain.export_onnx models/intent-v2-pruned
 ```
 
-See [brain/README.md](brain/README.md) for the speech models and the training details. Prebuilt model downloads will come with the first release.
+See [brain/README.md](brain/README.md) for the speech models and the training details. Prebuilt models are in the [models-2026.10](https://github.com/Wickedsoni/pebble/releases/tag/models-2026.10) release. Get them with `python brain/src/pebble_brain/download_models.py`.
 
 ## Repository layout
 
