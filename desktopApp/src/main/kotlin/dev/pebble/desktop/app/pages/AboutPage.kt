@@ -1,6 +1,8 @@
 package dev.pebble.desktop.app.pages
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,16 +14,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pebble.desktop.PebbleApp
@@ -85,32 +95,123 @@ fun AboutPage(app: PebbleApp) {
                     Chip("Pebble on GitHub", false) { open(REPO) }
                 }
             }
+            BackupCard(app, Modifier.fillMaxWidth())
             GlassCard(Modifier.fillMaxWidth().weight(1f)) {
                 CardLabel("Help make Pebble better", PebbleIcons.Companion, c.warm)
-                Text(
-                    "Found a bug, have an idea, or did Pebble misunderstand you? Every report helps — especially Hindi and Hinglish phrasings.",
-                    color = c.secondary,
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip("Pebble misunderstood me", false) { open("$REPO/issues/new?template=misunderstood.yml") }
-                    Chip("Suggest a feature", false) { open("$REPO/issues/new?template=feature_request.yml") }
-                    Chip("Report a bug", false) { open("$REPO/issues/new?template=bug_report.yml") }
-                    Chip("Contribute code", false) { open("$REPO/blob/main/CONTRIBUTING.md") }
-                    Chip("Discussions", false) { open("$REPO/discussions") }
+                // The Backup card above can grow (its messages), so this text scrolls instead of being cut.
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "Found a bug, have an idea, or did Pebble misunderstand you? Every report helps — especially Hindi and Hinglish phrasings.",
+                        color = c.secondary,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip("Pebble misunderstood me", false) { open("$REPO/issues/new?template=misunderstood.yml") }
+                        Chip("Suggest a feature", false) { open("$REPO/issues/new?template=feature_request.yml") }
+                        Chip("Report a bug", false) { open("$REPO/issues/new?template=bug_report.yml") }
+                        Chip("Contribute code", false) { open("$REPO/blob/main/CONTRIBUTING.md") }
+                        Chip("Discussions", false) { open("$REPO/discussions") }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Built on open models and data: multilingual-e5, Dolphin, Whisper, Silero VAD, sherpa-onnx, Amazon MASSIVE. Licences in NOTICE.",
+                        color = c.secondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                    )
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Built on open models and data: multilingual-e5, Dolphin, Whisper, Silero VAD, sherpa-onnx, Amazon MASSIVE. Licences in NOTICE.",
-                    color = c.secondary,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                )
             }
         }
     }
+}
+
+private const val BACKUP_HINT =
+    "An encrypted copy of everything (notes, reminders, calendar, memory). If you forget the passphrase, nobody can open it, not even Pebble."
+
+/** "Backup" (WP E4): makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
+@Composable
+private fun BackupCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { BackupStateHolder(app.backup, scope) }
+    val state by holder.state.collectAsState()
+    BackupContent(state, holder::onEvent, modifier)
+}
+
+/**
+ * Stateless: two passphrase fields, "Back up" and "Restore". The typed passphrase stays in this card only until a
+ * button is pressed; then the fields are cleared.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun BackupContent(state: BackupUiState, onEvent: (BackupEvent) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalGlass.current
+    var pass by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    GlassCard(modifier) {
+        CardLabel("Backup", PebbleIcons.Shield, c.calm)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PassphraseField(pass, { pass = it }, "Passphrase", Modifier.weight(1f))
+            PassphraseField(repeat, { repeat = it }, "Again (to back up)", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(if (state.busy) "Working…" else "Back up to a file…", false) {
+                if (!state.busy) {
+                    chooseBackup(save = true)?.let { onEvent(BackupEvent.Export(it, pass.toCharArray(), repeat.toCharArray())) }
+                    pass = ""
+                    repeat = ""
+                }
+            }
+            Chip("Restore from a file…", false) {
+                if (!state.busy) {
+                    chooseBackup(save = false)?.let { onEvent(BackupEvent.Restore(it, pass.toCharArray())) }
+                    pass = ""
+                    repeat = ""
+                }
+            }
+            if (state.restorePending) Chip("Cancel the restore", false) { onEvent(BackupEvent.CancelRestore) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            state.message ?: BACKUP_HINT,
+            color = if (state.error) c.warm else c.secondary,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+        )
+    }
+}
+
+/** A one-line field that shows dots instead of the text. */
+@Composable
+private fun PassphraseField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier) {
+    val c = LocalGlass.current
+    Box(modifier.clip(RoundedCornerShape(10.dp)).background(c.well).padding(horizontal = 10.dp, vertical = 8.dp)) {
+        if (value.isEmpty()) Text(placeholder, color = c.secondary, fontSize = 12.sp)
+        BasicTextField(
+            value,
+            onChange,
+            singleLine = true,
+            textStyle = TextStyle(color = c.content, fontSize = 12.sp),
+            cursorBrush = SolidColor(c.accent),
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** The Windows file dialog for backup files; null if you cancel. */
+private fun chooseBackup(save: Boolean): java.nio.file.Path? {
+    val d = java.awt.FileDialog(
+        null as java.awt.Frame?,
+        if (save) "Save a Pebble backup" else "Restore a Pebble backup",
+        if (save) java.awt.FileDialog.SAVE else java.awt.FileDialog.LOAD,
+    )
+    d.file = if (save) "pebble-backup-${java.time.LocalDate.now()}.pebblebackup" else "*.pebblebackup"
+    d.isVisible = true
+    val f = d.file ?: return null
+    return java.nio.file.Path.of(d.directory, if (save && !f.endsWith(".pebblebackup", ignoreCase = true)) "$f.pebblebackup" else f)
 }
 
 /** "Model packs": makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */

@@ -215,6 +215,36 @@ class PebbleApp(
     )
     val router = dev.pebble.core.brain.CommandRouter({ model }, today = { env.today().dayOfWeek.value }, personal = personal)
 
+    /**
+     * "Backup" on the About page (WP E4, ADR 0015): an encrypted copy of the whole database, and a restore that is
+     * applied at the next start ([create]). Tests point [dataDir] at a temp folder.
+     */
+    var dataDir: java.io.File = DatabaseFactory.defaultDataDir()
+    val backup = object : dev.pebble.desktop.app.pages.BackupPort {
+        override suspend fun export(file: java.nio.file.Path, passphrase: CharArray): String {
+            eventLog.flush() // queued events go into the copy too
+            return withContext(env.dispatchers.io) {
+                dev.pebble.core.backup.Backup.export(java.io.File(dataDir, dev.pebble.core.backup.Backup.DB), file, passphrase)
+                    .also { log.info(TAG, "backup exported ($it)") }.toString()
+            }
+        }
+
+        override suspend fun stageRestore(file: java.nio.file.Path, passphrase: CharArray): String = withContext(env.dispatchers.io) {
+            dev.pebble.core.backup.Backup.stageRestore(file, dataDir, passphrase).also {
+                log.info(TAG, "backup staged for restore ($it)")
+            }.toString()
+        }
+
+        override suspend fun cancelRestore() = withContext(env.dispatchers.io) {
+            dev.pebble.core.backup.Backup.cancelRestore(dataDir)
+            log.info(TAG, "staged restore cancelled")
+        }
+
+        override suspend fun restorePending(): Boolean = withContext(env.dispatchers.io) {
+            dev.pebble.core.backup.Backup.restorePending(dataDir)
+        }
+    }
+
     /** "Teach Pebble a command" on the Memory page. Each change refreshes the layer, so the next sentence uses it. */
     val teaching = object : dev.pebble.desktop.app.pages.TeachingPort {
         override suspend fun taught() = withContext(env.dispatchers.io) { commandFeedback.taught() }
@@ -567,7 +597,12 @@ class PebbleApp(
 
         fun create(): PebbleApp {
             val env = AppEnv.system()
-            val log = FileLogger(DatabaseFactory.defaultDataDir().toPath().resolve("pebble.log"), env::millis, env.zone)
+            val dir = DatabaseFactory.defaultDataDir()
+            val log = FileLogger(dir.toPath().resolve("pebble.log"), env::millis, env.zone)
+            // A restore staged on the About page replaces the database before it is opened (WP E4).
+            runCatching { dev.pebble.core.backup.Backup.applyStaged(dir) }
+                .onSuccess { it?.let { line -> log.info(TAG, line) } }
+                .onFailure { log.warn(TAG, "restoring the backup failed; the old database stays", it) }
             return PebbleApp(DatabaseFactory.create(), env, log)
         }
     }
