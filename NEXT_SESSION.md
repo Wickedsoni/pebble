@@ -8,7 +8,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### Start here (end of 5 Oct 2026, after WP E2)
-- **State:** A1 … E1 are on `main`. **WP E2 (calendar) is in a PR on `wp/e2-calendar`, waiting for your yes to merge.**
+- **State:** A1 … E2 are on `main` (E2 = PR #35, merged 5 Oct 2026). No open PRs.
 - **Next WP: E4 (encrypted backup/restore)**, then C4 (offline IPS evaluator). Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
@@ -21,7 +21,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: WP E2 done (calendar, PR on `wp/e2-calendar`)
+### 5 Oct: WP E2 done (calendar, PR #35, merged)
 - **Data (ADR 0014):** migration `12.sqm` adds `calendar_event` with the E1 sync columns (uid primary key, tombstones, `hlc`, `origin_device`) and `owner_device` / `visibility` (`private`) for milestone F. `one_off_reminder` gains `event_uid` + `occurrence_at`: reminders before events are linked one-off reminders, made 2 days ahead.
 - **Repeats:** the RRULE subset DAILY / WEEKLY (BYDAY) / MONTHLY (BYMONTHDAY), INTERVAL, UNTIL or COUNT. Other rules are kept and shown once with a warning. DST, the 31st and 29 Feb are tested.
 - **Difference from the plan:** the expander and ICS code are in `:shared` **jvmMain** (`java.time`), because commonMain has no date library and the WP names no dependency. An `exdates` column was added (EXDATE), so imported skipped days and the new **"Skip day"** button work.
@@ -201,7 +201,7 @@ Lessons from the merge (for the next stack):
   - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
-  - WP E2 (PR): calendar (`calendar_event`, migration `12.sqm`, RRULE subset, ICS import/export, Calendar page, Agenda card, `event:` syntax; ADR 0014).
+  - WP E2: calendar (`calendar_event`, migration `12.sqm`, RRULE subset, ICS import/export, Calendar page, Agenda card, `event:` syntax; ADR 0014).
   - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
