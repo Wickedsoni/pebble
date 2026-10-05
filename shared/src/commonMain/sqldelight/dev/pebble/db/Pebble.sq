@@ -39,6 +39,11 @@ CREATE TABLE setting (
     value TEXT NOT NULL
 );
 
+-- The first statement of writeTransaction: a write that changes nothing, so the transaction holds the write
+-- lock before it reads (a deferred read-then-write transaction fails with SQLITE_BUSY_SNAPSHOT in WAL).
+takeWriteLock:
+UPDATE setting SET value = value WHERE 0;
+
 selectSetting:
 SELECT value FROM setting WHERE key = ?;
 
