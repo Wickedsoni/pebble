@@ -224,6 +224,20 @@ object Replies {
         }
     }
 
+    /** What the pet says after a memory search: up to three things it found, or that it found nothing. */
+    fun memoryHits(text: String, hits: List<String>): String {
+        val found = hits.take(3).joinToString(" · ") { "“$it”" }
+        return when (Script.detect(text)) {
+            Script.EN -> if (hits.isEmpty()) NOTHING_EN else "Here's what I found: $found"
+            Script.HI_ROMAN -> if (hits.isEmpty()) NOTHING_ROMAN else "Yeh mila: $found"
+            Script.HI_DEVA -> if (hits.isEmpty()) NOTHING_DEVA else "यह मिला: $found"
+        }
+    }
+
+    private const val NOTHING_EN = "I couldn't find anything about that in your notes or what you told me."
+    private const val NOTHING_ROMAN = "Iske baare mein kuch nahi mila — na notes mein, na aapki baaton mein."
+    private const val NOTHING_DEVA = "इसके बारे में कुछ नहीं मिला — न नोट्स में, न आपकी बातों में।"
+
     private val cant = mapOf(
         Script.EN to "I can't do that yet — want it saved as a note?",
         Script.HI_ROMAN to "Yeh abhi mujhse nahi hoga — note mein save kar doon?",

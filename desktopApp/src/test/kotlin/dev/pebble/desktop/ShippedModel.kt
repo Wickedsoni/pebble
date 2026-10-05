@@ -31,7 +31,7 @@ internal fun actionOf(c: QuickCommand): String = when (c) {
     is QuickCommand.LogWater -> "log_water"
     is QuickCommand.SetInterval -> "set_interval"
     QuickCommand.ShowUpcoming -> A.REMINDERS_QUERY
-    QuickCommand.ShowNotes -> A.NOTES_QUERY
+    QuickCommand.ShowNotes, is QuickCommand.SearchMemory -> A.NOTES_QUERY
     QuickCommand.TellTime -> A.TIME_QUERY
     is QuickCommand.Chitchat -> if (c.intent == Replies.LOW_MOOD) "mood" else A.CHITCHAT
     is QuickCommand.Unsupported -> A.OTHER

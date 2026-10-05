@@ -25,6 +25,9 @@ interface CommandActions {
 
     fun remember(text: String)
 
+    /** Your notes, facts and chat that match [topic], best first (memory search, WP C2). */
+    fun searchMemory(topic: String): List<String>
+
     /** Logs [glasses] and returns how many glasses you drank today. */
     fun logWater(glasses: Int = 1): Int
 }
@@ -125,6 +128,11 @@ class CommandExecutor(
 
             is QuickCommand.Unsupported -> Executed(PetLine(Replies.unsupported(cmd.text), Mood.IDLE, 5_000), undo = null)
 
+            is QuickCommand.SearchMemory -> Executed(
+                PetLine(Replies.memoryHits(cmd.text, actions.searchMemory(cmd.topic)), Mood.IDLE, 8_000),
+                undo = null,
+            )
+
             is QuickCommand.OpenPage -> {
                 ui.openPage(cmd.page)
                 Executed(PetLine(Replies.openPage(cmd.page, cmd.text, cmd.forRemoval), Mood.HAPPY, 3_000), undo = null)
@@ -158,6 +166,8 @@ class CommandExecutor(
         is QuickCommand.Chitchat -> "Chat with Pebble"
 
         is QuickCommand.Unsupported -> "Can't do this yet"
+
+        is QuickCommand.SearchMemory -> "Search my notes for “${cmd.topic}”"
 
         is QuickCommand.OpenPage -> "Open ${cmd.page} in Pebble"
     }

@@ -1,0 +1,41 @@
+-- Sentence embeddings for memory search (MemorySearch). One row per indexed item: [kind] is "note", "fact"
+-- or "said" (what you said to Pebble), [ref_id] the row it came from. Search always reads the current text
+-- from the source table, so a deleted note or a forgotten fact never shows, even before its vector is removed.
+CREATE TABLE vector_item (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    ref_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    vec BLOB NOT NULL,
+    model_version TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX vector_item_ref ON vector_item(kind, ref_id);
+
+upsertVector:
+INSERT INTO vector_item(kind, ref_id, text, vec, model_version, created_at) VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(kind, ref_id) DO UPDATE SET text = excluded.text, vec = excluded.vec,
+    model_version = excluded.model_version, created_at = excluded.created_at;
+
+deleteVector:
+DELETE FROM vector_item WHERE kind = ? AND ref_id = ?;
+
+vectorKeys:
+SELECT kind, ref_id, text, model_version FROM vector_item;
+
+vectorsOfVersion:
+SELECT kind, ref_id, vec FROM vector_item WHERE model_version = ?;
+
+vectorCount:
+SELECT count(*) FROM vector_item;
+
+-- What can be indexed, with its current text.
+sourceNotes:
+SELECT id, text FROM note;
+
+sourceFacts:
+SELECT id, text FROM memory WHERE kind = 'FACT' AND hidden = 0;
+
+sourceSaid:
+SELECT id, said FROM conversation_turn;

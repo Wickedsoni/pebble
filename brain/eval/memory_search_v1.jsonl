@@ -1,0 +1,32 @@
+{"type": "item", "text": "ek note bana lo project ka topic finalize krna h"}
+{"type": "item", "text": "buy milk and eggs"}
+{"type": "item", "text": "call the plumber on monday"}
+{"type": "item", "text": "ask sir about internal marks"}
+{"type": "item", "text": "my sister's birthday is 12 June"}
+{"type": "item", "text": "DBMS assignment submit karna hai friday tak"}
+{"type": "item", "text": "gym membership renew karni hai"}
+{"type": "item", "text": "wifi password is pebble123"}
+{"type": "item", "text": "मम्मी की दवाई खत्म हो गई है"}
+{"type": "item", "text": "project presentation slides banane hain"}
+{"type": "item", "text": "doctor appointment on 20th for papa"}
+{"type": "item", "text": "car service due next month"}
+{"type": "item", "text": "bijli ka bill bharna hai"}
+{"type": "item", "text": "मेरा पासपोर्ट नंबर दराज़ में लिखा है"}
+{"type": "item", "text": "rahul ko 500 rupaye wapas karne hain"}
+{"type": "item", "text": "book flight tickets for diwali"}
+{"type": "query", "text": "the project", "expect": ["ek note bana lo project ka topic finalize krna h", "project presentation slides banane hain"]}
+{"type": "query", "text": "project", "expect": ["ek note bana lo project ka topic finalize krna h", "project presentation slides banane hain"]}
+{"type": "query", "text": "my sister", "expect": ["my sister's birthday is 12 June"]}
+{"type": "query", "text": "medicine", "expect": ["मम्मी की दवाई खत्म हो गई है"]}
+{"type": "query", "text": "दवाई", "expect": ["मम्मी की दवाई खत्म हो गई है"]}
+{"type": "query", "text": "assignment", "expect": ["DBMS assignment submit karna hai friday tak"]}
+{"type": "query", "text": "plumber", "expect": ["call the plumber on monday"]}
+{"type": "query", "text": "electricity bill", "expect": ["bijli ka bill bharna hai"]}
+{"type": "query", "text": "passport", "expect": ["मेरा पासपोर्ट नंबर दराज़ में लिखा है"]}
+{"type": "query", "text": "rahul", "expect": ["rahul ko 500 rupaye wapas karne hain"]}
+{"type": "query", "text": "flight", "expect": ["book flight tickets for diwali"]}
+{"type": "query", "text": "papa doctor", "expect": ["doctor appointment on 20th for papa"]}
+{"type": "query", "text": "wifi", "expect": ["wifi password is pebble123"]}
+{"type": "query", "text": "gym", "expect": ["gym membership renew karni hai"]}
+{"type": "query", "text": "car", "expect": ["car service due next month"]}
+{"type": "query", "text": "milk", "expect": ["buy milk and eggs"]}

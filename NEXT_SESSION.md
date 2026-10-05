@@ -3,6 +3,54 @@
 To resume: open this repo and say "continue from NEXT_SESSION.md".
 Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** (pre-release, 2 Oct 2026).
 
+## Session handoff (end of 4 Oct 2026) — read this first
+
+**This file is current only on branch `wp/c2-memory-search`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
+
+### The PR stack (nothing is merged yet)
+Each PR is based on the one before it. Merge in this order, squash-merge each, and let GitHub retarget the next PR to `main`:
+
+| Order | PR | Branch | What |
+|---|---|---|---|
+| 1 | #16 | `wp/a1-guardrails` | A1: `CLAUDE.md`, STE style, glossary, ADRs 0000-0009 |
+| 2 | #17 | `wp/a2-hygiene` | A2: stale docs, roadmap M8-M10 |
+| 3 | #19 | `model/intent-reduce-range` | Model fix: `reduce_range` (CPUs without VNNI). **Base is A3's branch:** merge #19 into `wp/a3-quality-gates` first |
+| 4 | #18 | `wp/a3-quality-gates` | A3: model tests in CI, schema parity, Kover, warnings as errors |
+| 5 | #20 | `wp/b1-time-dispatchers-scopes` | B1: `AppEnv`, one app scope |
+| 6 | #21 | `wp/b2-command-executor` | B2: `CommandExecutor`, undo as a value |
+| 7 | #22 | `wp/b3-ui-port-logger` | B3: `UiPort`, `Logger`; "open reminders" command |
+| 8 | #23 | `wp/b4-model-runtime` | B4: `LazyModel`, `ModelRuntime`, checksum cache |
+| 9 | #24 | `wp/b5-event-writes-sqlite` | B5: event writes off the UI thread, WAL |
+| 10 | #25 | `wp/b6-history-scaling` | B6: `daily_stat` roll-up, raw rows kept |
+| 11 | #26 | `wp/b7-ui-state-pilot` | B7 pilot: Reminders state holder, `docs/UI-PATTERN.md` |
+| 12 | #27 | `wp/c1-sentence-embedding` | C1: sentence embedding (model `intent-v3-pruned`) |
+| 13 | #28 | `wp/c2-memory-search` | C2: memory search |
+
+- Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
+- If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
+- Model releases published this session: `models-2026.10b` (v2r), `models-2026.11` (v3, current in the manifest). The installed v0.1.2 still has the old model, so cut a new app release after the merge.
+
+### Checks only you can do (the live app)
+1. Reminders page: click +/−, a toggle, a strictness chip and ✕ once (B7; the synthetic clicks hit the IDE).
+2. Memory page: try one search in "Search memory" (C2).
+3. A reminder toast appears (B3 binding).
+4. The older items below: battery run, "Start with Windows", Dependabot #6, noreply email, code signing.
+
+### Open decisions
+- **Search model (C2):** keep the shared encoder (14/16), ship e5-small for search (16/16, +~100 MB while loaded), or a contrastive fine-tune in C6.
+- My two test turns ("open reminders", "notes kholo") are in your real Chat history. Delete them if you like.
+
+### Next session
+1. Say "continue from NEXT_SESSION.md" and check out `wp/c2-memory-search` (or `main`, if you merged the stack).
+2. **C3** (personal layer + "teach a command"): the plan says Opus reviews the formula first. Start with that review, then implement.
+3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
+4. Then C4 (offline IPS evaluator), D2, C5, as in the delivery order of the plan.
+
+### Lessons from this session (for the implementer)
+- Bash `${var/#pattern/...}`: a leading `#` in the pattern means "at the start". The PR-description edits that used it did nothing. Use `--body-file`.
+- Heredocs that contain `'''` fail in this tool. Write the script to a file first.
+- `runTest`'s `backgroundScope` is not run by `advanceUntilIdle()`. See `docs/UI-PATTERN.md`.
+
 ## Where things stand (end of 2 Oct 2026)
 
 - **Released:** [v0.1.2](https://github.com/Wickedsoni/pebble/releases/tag/v0.1.2). The MSI has the models bundled; the user installed and tested it.
@@ -76,10 +124,12 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - WP B6: measured 200 000 log entries (`PEBBLE_BENCH=1 ./gradlew :shared:jvmTest --tests "*GrowthBenchmarkTest*"`): `stats()` 88 ms (158 ms with the decoded check) → 31 ms after the roll-up; `learn()` ~85 ms. Migration `9.sqm` (`daily_stat`); `HistoryCompactor` keeps raw rows (your choice, ADR 0004 revised).
   - WP B7 (pilot): `RemindersStateHolder` (`StateFlow<RemindersUiState>`, `onEvent`), stateless `RemindersContent`, `docs/UI-PATTERN.md` (the template for the other pages).
   - WP C1: command model `intent-v3-pruned` (release `models-2026.11`) adds the sentence embedding (384, unit length) as a 4th output; same weights, other outputs identical; `Understood.embedding`.
+  - WP C2: memory search (notes, facts, what you said) — `vector_item` (migration `10.sqm`), `MemorySearch`, "Search memory" on the Memory page, "what did I note about X" → search. 14/16 on the frozen search eval.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** C2 (vector store + memory search), and B7 page roll-outs one per PR (Today, Notes, Water, Chat, Memory, Companion; `docs/UI-PATTERN.md`).
+- **Next:** C3 (personal layer + teach a command; Opus reviews the formula first), and B7 page roll-outs one per PR (`docs/UI-PATTERN.md`).
+- **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)
 1. Merge Dependabot PR #6 (Gradle wrapper 9.4.1 → 9.8.0). The GitHub MCP server is disconnected: its token expired. Authorize it again, or use the `gh` CLI.

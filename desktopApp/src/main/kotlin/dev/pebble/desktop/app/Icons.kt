@@ -50,6 +50,7 @@ object PebbleIcons {
     val Close = icon("close", "M6.5 6.5 L17.5 17.5", "M17.5 6.5 L6.5 17.5")
     val Check = icon("check", "M5 12.5 L10 17 L19 7")
     val Minimize = icon("minimize", "M6 12 H18")
+    val Search = icon("search", "M10.5 4 A6.5 6.5 0 1 1 10.49 4 Z", "M15.3 15.3 L20 20")
     val Clock = icon("clock", "M12 3.5 A8.5 8.5 0 1 1 11.99 3.5 Z", "M12 7.5 V12 L15 14")
     val Flame =
         icon(

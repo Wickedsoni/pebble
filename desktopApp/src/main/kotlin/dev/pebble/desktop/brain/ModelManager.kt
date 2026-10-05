@@ -1,5 +1,6 @@
 package dev.pebble.desktop.brain
 
+import dev.pebble.core.brain.Embedding
 import dev.pebble.core.brain.Understanding
 import dev.pebble.core.brain.Understood
 import dev.pebble.core.db.DatabaseFactory
@@ -50,6 +51,17 @@ class ModelManager(
 
     /** Waits for a pending load (tests and diagnostics; the app never blocks on this). */
     suspend fun awaitLoaded(): Boolean = lazy.join()
+
+    /** The command model's version (see [ModelChecksums.version]); null when there is no model. */
+    val version: String? by lazy { modelDir?.let { runCatching { ModelChecksums.version(it, "intent", "intent.int8.onnx") }.getOrNull() } }
+
+    /** The sentence embedding of [text] if the model is loaded now; never loads it (background indexing). */
+    fun embedIfLoaded(text: String): Embedding? = lazy.getOrNull()?.let { m -> runCatching { m.understand(text)?.embedding }.getOrNull() }
+
+    /** The sentence embedding of [text], loading the model first if needed (a search you asked for). */
+    suspend fun embedLoading(
+        text: String,
+    ): Embedding? = lazy.await()?.let { m -> runCatching { m.understand(text)?.embedding }.getOrNull() }
 
     override fun understand(text: String): Understood? {
         val m = lazy.getOrNull() ?: run { lazy.warmUp(); return null }

@@ -24,10 +24,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pebble.core.memory.Memory
@@ -88,6 +90,7 @@ fun MemoryPage(app: PebbleApp) {
             }
         }
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            MemorySearchCard(app, Modifier.fillMaxWidth())
             GlassCard(Modifier.fillMaxWidth()) {
                 CardLabel("Privacy", PebbleIcons.Shield, c.water)
                 Text("Everything stays on this computer. Nothing is uploaded.", color = c.content, fontSize = 13.sp, lineHeight = 18.sp)
@@ -160,6 +163,63 @@ private fun MemoryRow(m: Memory, onForget: () -> Unit) {
         // Forget button is always there for keyboard/mouse; it just gets quieter when not hovered.
         Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
             IconButton(PebbleIcons.Close, size = if (hovered) 28.dp else 24.dp, onClick = onForget)
+        }
+    }
+}
+
+/** "Search memory": makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
+@Composable
+private fun MemorySearchCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { MemorySearchStateHolder(app::searchMemoryLoading, scope) }
+    val state by holder.state.collectAsState()
+    MemorySearchContent(state, holder::onEvent, modifier)
+}
+
+/** Stateless: the search field and what it found. */
+@Composable
+fun MemorySearchContent(state: MemorySearchUiState, onEvent: (MemorySearchEvent) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalGlass.current
+    GlassCard(modifier) {
+        CardLabel("Search memory", PebbleIcons.Search, c.calm)
+        GlassField("Search your notes and what you told me…", Modifier.fillMaxWidth(), icon = PebbleIcons.Search) {
+            onEvent(MemorySearchEvent.Search(it))
+        }
+        Spacer(Modifier.height(8.dp))
+        val results = state.results
+        when {
+            state.searching -> Text("Looking for “${state.query}”…", color = c.secondary, fontSize = 12.sp)
+
+            state.noModel -> Text("Search needs the command model, and it isn't installed.", color = c.secondary, fontSize = 12.sp)
+
+            results == null -> Text(
+                "Finds notes, facts and things you said by meaning, in English, Hinglish or Hindi.",
+                color = c.secondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+
+            results.isEmpty() -> Text("Nothing about “${state.query}” yet.", color = c.secondary, fontSize = 12.sp)
+
+            else -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("For “${state.query}”", color = c.secondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    IconButton(PebbleIcons.Close, size = 22.dp) { onEvent(MemorySearchEvent.Clear) }
+                }
+                results.forEach { r ->
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        Text(r.kindLabel, color = c.secondary, fontSize = 11.sp)
+                        Text(
+                            r.text,
+                            color = c.content,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
         }
     }
 }
