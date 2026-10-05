@@ -10,14 +10,21 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
 import dev.pebble.desktop.app.PebbleIcons
@@ -36,25 +43,28 @@ private fun open(url: String) {
 /** Privacy in plain words, who makes Pebble, and how to help — all links go to the public GitHub project. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AboutPage() {
+fun AboutPage(app: PebbleApp) {
     val c = LocalGlass.current
     val version = System.getProperty("jpackage.app-version") ?: "development build"
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        GlassCard(Modifier.weight(1.2f).fillMaxHeight(), padding = 20.dp) {
-            CardLabel("Your privacy", PebbleIcons.Shield, c.water)
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                listOf(
-                    "Everything stays on this computer. No account, no cloud, no ads, no analytics. Pebble makes no network connections.",
-                    "Your notes, reminders, conversation and habits live in %APPDATA%\\Pebble, and you can delete any of it (Chat, Memory pages).",
-                    "The microphone opens only while you hold Ctrl+Alt+Space or press 🎤, and can be switched off in Memory → Privacy. Speech is understood on this PC; audio is thrown away.",
-                    "Pebble glances at the title of the window in front to stay quiet during videos. It isn't stored unless you turn on \"Notice what I watch\".",
-                    "Voice clips and watch history are off by default, and only kept if you turn them on.",
-                ).forEach { line ->
-                    Text("•  $line", color = c.content, fontSize = 13.sp, lineHeight = 19.sp)
-                    Spacer(Modifier.height(8.dp))
+        Column(Modifier.weight(1.2f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            GlassCard(Modifier.fillMaxWidth().weight(1f), padding = 20.dp) {
+                CardLabel("Your privacy", PebbleIcons.Shield, c.water)
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    listOf(
+                        "Everything stays on this computer. No account, no cloud, no ads, no analytics. Pebble makes no network connections.",
+                        "Your notes, reminders, conversation and habits live in %APPDATA%\\Pebble, and you can delete any of it (Chat, Memory pages).",
+                        "The microphone opens only while you hold Ctrl+Alt+Space or press 🎤, and can be switched off in Memory → Privacy. Speech is understood on this PC; audio is thrown away.",
+                        "Pebble glances at the title of the window in front to stay quiet during videos. It isn't stored unless you turn on \"Notice what I watch\".",
+                        "Voice clips and watch history are off by default, and only kept if you turn them on.",
+                    ).forEach { line ->
+                        Text("•  $line", color = c.content, fontSize = 13.sp, lineHeight = 19.sp)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Chip("Read the full privacy policy", false) { open("$REPO/blob/main/PRIVACY.md") }
                 }
-                Chip("Read the full privacy policy", false) { open("$REPO/blob/main/PRIVACY.md") }
             }
+            ModelPacksCard(app, Modifier.fillMaxWidth())
         }
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             GlassCard(Modifier.fillMaxWidth()) {
@@ -100,4 +110,53 @@ fun AboutPage() {
             }
         }
     }
+}
+
+/** "Model packs": makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
+@Composable
+private fun ModelPacksCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { ModelPacksStateHolder(app.modelPacks, scope) }
+    val state by holder.state.collectAsState()
+    ModelPacksContent(state, holder::onEvent, modifier)
+}
+
+/** Stateless: each model with where it comes from, and install / remove. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ModelPacksContent(state: ModelPacksUiState, onEvent: (ModelPacksEvent) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalGlass.current
+    GlassCard(modifier) {
+        CardLabel("Model packs", PebbleIcons.Spark, c.calm)
+        state.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(r.label, color = c.content, fontSize = 13.sp)
+                    Text(r.status, color = c.secondary, fontSize = 11.sp)
+                }
+                if (r.canRemove) Chip("Remove", false) { onEvent(ModelPacksEvent.Remove(r.name)) }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Chip(if (state.busy) "Checking…" else "Install a pack from a file…", false) {
+                if (!state.busy) chooseZip()?.let { onEvent(ModelPacksEvent.Install(it)) }
+            }
+        }
+        Text(
+            state.message ?: "Only packs signed by the Pebble project are used. Installing works offline, from a .zip file.",
+            color = c.secondary,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+        )
+    }
+}
+
+/** The Windows file dialog, for .zip files; null if you cancel. */
+private fun chooseZip(): java.nio.file.Path? {
+    val d = java.awt.FileDialog(null as java.awt.Frame?, "Install a Pebble model pack", java.awt.FileDialog.LOAD)
+    d.file = "*.zip"
+    d.isVisible = true
+    val f = d.file ?: return null
+    return java.nio.file.Path.of(d.directory, f)
 }

@@ -12,7 +12,7 @@ Pebble is a small pet that lives on your taskbar. It nudges you to drink water, 
 
 **Requirements:** Windows 10 or 11 (64-bit), about 1 GB of disk space, 8 GB RAM recommended, and a microphone if you want to talk to it.
 
-1. **Download** `Pebble-<version>.msi` from the [Releases page](https://github.com/Wickedsoni/pebble/releases) (the newest one at the top). The models are inside, so there's nothing else to download.
+1. **Download** `Pebble-<version>.msi` from the [Releases page](https://github.com/Wickedsoni/pebble/releases) (the newest one at the top). The models are inside, so there's nothing else to download. From the next release there is also `Pebble-lite-<version>.msi`: it is smaller and has no voice. You can add voice later as a signed model pack (About → Model packs).
 2. **Optional: check the download.** In PowerShell, run `Get-FileHash .\Pebble-<version>.msi` and compare the hash with `SHA256SUMS` on the release page.
 3. **Run the installer.** It installs just for you, so no admin rights are needed. Windows may show **"Windows protected your PC"**. That's because the installer isn't code-signed yet (signing certificates are paid, and this is a free project). Click **More info → Run anyway**.
 4. **Start Pebble** from the Start menu. The pet appears on your taskbar.
@@ -66,7 +66,7 @@ git clone https://github.com/Wickedsoni/pebble.git
 cd pebble
 ./gradlew :desktopApp:run                  # start Pebble
 ./gradlew :shared:jvmTest :desktopApp:test # run the tests
-./gradlew :desktopApp:packageMsi           # build an installer
+./gradlew :desktopApp:packageMsi           # build an installer (-Pflavor=lite: without the speech models)
 ```
 
 **Models aren't stored in git** (they're tens to hundreds of MB). They're published as release downloads, listed with their checksums in `brain/models/manifest.json`. Fetch them before running (Python 3.10+, no extra packages):

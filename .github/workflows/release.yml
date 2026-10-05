@@ -1,7 +1,8 @@
 name: Release
 
-# Push a tag like v0.1.0 on main: builds the Windows installer with the models named in
-# brain/models/manifest.json (downloaded from GitHub Releases, SHA-256 verified) and publishes it.
+# Push a tag like v0.1.0 on main: builds the Windows installers with the models named in
+# brain/models/manifest.json (downloaded from GitHub Releases, SHA-256 verified) and publishes them:
+# Pebble-x.y.z.msi (all models) and Pebble-lite-x.y.z.msi (no speech models; voice as a signed pack).
 on:
   push:
     tags: ["v*"]
@@ -24,11 +25,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Fetch models (checksums verified)
         run: python brain/src/pebble_brain/download_models.py
-      - name: Build installer
-        run: ./gradlew :desktopApp:packageMsi --console=plain
+      - name: Build installers (full, then lite without the speech models)
+        run: |
+          ./gradlew :desktopApp:packageMsi --console=plain
+          mkdir -p dist && mv desktopApp/build/compose/binaries/main/msi/*.msi dist/
+          ./gradlew :desktopApp:packageMsi -Pflavor=lite --console=plain
+          for f in desktopApp/build/compose/binaries/main/msi/*.msi; do mv "$f" "dist/$(basename "$f" | sed 's/^Pebble-/Pebble-lite-/')"; done
+          ls -l dist
       - name: Checksums
         run: |
-          cd desktopApp/build/compose/binaries/main/msi
+          cd dist
           sha256sum *.msi > SHA256SUMS
           cat SHA256SUMS
       - name: Publish release
@@ -40,5 +46,5 @@ jobs:
           [ -f "$notes" ] || notes=/dev/null
           pre=""
           [[ "$tag" == v0.* || "$tag" == *-* ]] && pre="--prerelease"
-          gh release create "$tag" desktopApp/build/compose/binaries/main/msi/* \
+          gh release create "$tag" dist/* \
             --title "Pebble ${tag#v}" --notes-file "$notes" $pre

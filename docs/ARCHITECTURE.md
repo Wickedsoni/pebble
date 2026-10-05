@@ -42,6 +42,7 @@ LEARN
 | Mic, prep, VAD, Whisper | `desktopApp/.../voice/` (`MicCapture`, `AudioPrep`, `SpeechRecognizer`, `VoiceInput`) | `models/asr/` (Silero VAD, Whisper int8) |
 | Rules | `shared/.../quickadd/QuickAddParser.kt`, `shared/.../brain/HinglishTime.kt` | — |
 | Intent / slots / mood | `desktopApp/.../brain/OnnxIntentModel.kt`, `ModelManager.kt` | `models/intent/` (from `brain/models/manifest.json`) |
+| Model packs | `desktopApp/.../brain/ModelPack.kt`, About page; `./gradlew :desktopApp:modelPack` (maintainer) | signed packs in `%APPDATA%\Pebble\models\<name>` (ADR 0011) |
 | Personal layer | `shared/.../brain/PersonalLayer.kt`; "Teach Pebble a command" on the Memory page | `command_feedback` table |
 | Decisions | `shared/.../brain/DecisionPolicy.kt`, `CommandRouter.kt`, `Understanding.kt` | temperatures in `labels.json` |
 | Acting, undo | `desktopApp/.../PebbleApp.kt`, `quickadd/QuickAddWindow.kt` | SQLite (`%APPDATA%\Pebble\pebble.db`) |
@@ -77,7 +78,7 @@ The evaluator can still test a denoiser (`./gradlew :desktopApp:asrEval -Pdenois
    - `EvalSetRouterTest`: ≥ 67/68 right or right-first-choice, 0 acted wrongly.
    - Mood eval ≥ 80%.
    - `OnnxParityTest`: Kotlin reads every sentence exactly like Python.
-5. **Ship:** point `brain/models/manifest.json` at it. The installer bundles what the manifest names; `%APPDATA%\Pebble\models\` overrides it.
+5. **Ship:** point `brain/models/manifest.json` at it. The installer bundles what the manifest names. A signed model pack in `%APPDATA%\Pebble\models\` overrides it (ADR 0011).
 
 Eval sets are frozen and never trained on. Every generator drops sentences too close to them (`pebble_data` leak check).
 Only the nudge policy learns live on your laptop. Deep models change only through the gated retrain.

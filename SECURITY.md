@@ -13,8 +13,14 @@ Include what you found, how to reproduce it and the impact you see. You'll get a
 
 - Anything that sends user data off the machine, or lets another local user or app read it.
 - The microphone being active outside push-to-talk.
-- Loading a tampered model file (models are checked against SHA-256 in `brain/models/manifest.json`).
+- Loading a tampered model file. Bundled models are checked against SHA-256 in `brain/models/manifest.json`. Models in `%APPDATA%\Pebble\models` load only from a model pack signed by the Pebble project (Ed25519, see `docs/adr/0011-signed-model-packs.md`).
 - Code execution through model files, settings or crafted input to Quick Add.
+
+## Model signing key
+
+- Model packs are signed with an Ed25519 key. The app trusts the public keys in `ModelPack.TRUSTED_KEYS` (key id `pebble-2026a`).
+- The private key is kept offline by the maintainer. It is never in this repository or in CI.
+- If a signing key is lost or exposed, a new app release removes its key id and adds a new key. Report a suspected key exposure through private vulnerability reporting.
 
 ## Supported versions
 

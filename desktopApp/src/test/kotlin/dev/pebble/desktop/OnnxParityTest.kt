@@ -89,7 +89,7 @@ class OnnxParityTest {
             assertEquals(rows.size, intents, "intents differ")
             assertEquals(rows.size, tags, "slot tags differ: $realFlips")
             assertTrue(maxDp < MAX_CONFIDENCE_DRIFT, "confidences drift: $maxDp")
-            assertTrue(maxDe < 1e-3f, "embedding values drift: $maxDe")
+            assertTrue(maxDe < MAX_EMBEDDING_DRIFT, "embedding values drift: $maxDe")
         }
     }
 
@@ -103,5 +103,11 @@ class OnnxParityTest {
          * all with identical tokens, intents, tags and moods. A Kotlin reading bug shows up far above this.
          */
         const val MAX_CONFIDENCE_DRIFT = 5e-3f
+
+        /**
+         * Largest embedding value difference, for the same reason: 2.2e-3 on Intel Xeon 8370C (AVX-512 VNNI), with
+         * everything else identical. Embeddings are only compared by cosine (search 0.40, personal layer 0.90).
+         */
+        const val MAX_EMBEDDING_DRIFT = 5e-3f
     }
 }

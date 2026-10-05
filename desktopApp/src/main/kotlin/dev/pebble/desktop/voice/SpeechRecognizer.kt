@@ -166,7 +166,7 @@ class SpeechRecognizer(
         val cwd = Path.of(System.getProperty("user.dir"))
         val candidates = listOfNotNull(
             System.getenv("PEBBLE_ASR_DIR")?.let { Path.of(it) },
-            DatabaseFactory.defaultDataDir().toPath().resolve("models/asr"),
+            ModelChecksums.trustedUserDir(DatabaseFactory.defaultDataDir().toPath(), "asr", cache),
             System.getProperty("compose.application.resources.dir")?.let { Path.of(it).resolve("models/asr") },
             cwd.resolve("../brain/models/asr-voice").normalize(),
             cwd.resolve("brain/models/asr-voice").normalize(),
