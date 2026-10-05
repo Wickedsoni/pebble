@@ -37,7 +37,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
+import kotlinx.coroutines.runBlocking
 import java.time.ZoneId
+import kotlin.time.Duration.Companion.seconds
 
 /** Something the pet should say out loud (in its speech bubble), with the face to make. */
 data class PetLine(
@@ -165,9 +167,12 @@ class PebbleApp(
     /** Runs every quick-add command. */
     val executor = CommandExecutor(env, bus, notes, reminders, engine, actions = this, ui = ui)
 
+    /** Saves bus events to `event_log`; one writer thread, so the UI thread never waits for SQLite. */
+    val eventLog = EventLogger(db)
+
     init {
-        // Unconfined: events are written on the publisher's thread, so nothing is lost on exit.
-        EventLogger(db).attach(bus, CoroutineScope(appScope.coroutineContext + Dispatchers.Unconfined))
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        eventLog.attach(bus, appScope, writerDispatcher = env.dispatchers.io.limitedParallelism(1))
         bus.publish(PebbleEvent.AppStarted(now()))
         engine.start(appScope)
         // Learning is cheap (a few small queries); every 10 minutes keeps memories fresh.
@@ -291,8 +296,11 @@ class PebbleApp(
     /** One-line preview shown under the quick-add field before you press Enter. */
     fun describe(cmd: QuickCommand): String = executor.describe(cmd)
 
+    /** On exit: saves the events still queued (at most 2 s), then stops every coroutine. */
     fun shutdown() {
         bus.publish(PebbleEvent.AppStopping(now()))
+        val saved = runBlocking { eventLog.close(2.seconds) }
+        if (!saved) log.warn(TAG, "event log not flushed within 2 s on exit")
         appScope.cancel()
     }
 

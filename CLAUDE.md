@@ -84,7 +84,7 @@ Line numbers can move. If a line does not match, search for the name.
 | One `appScope` (`SupervisorJob` + `env.dispatchers.main`); `ModelManager`, `SpeechRecognizer`, `VoiceInput` get `appScope + env.dispatchers.default`, so `shutdown()` cancels all (WP B1) | `PebbleApp.kt` |
 | UI hooks: `UiPort` (`notify`, `openPage`); `app.ui` forwards to the port that `Main` binds once with `app.bindUi(...)` in a `LaunchedEffect` (a second bind is logged and ignored). Quiet failures go to `Logger` → `%APPDATA%\Pebble\pebble.log` (rotates at 1 MB to `pebble.log.1`); tests get `Logger.None` (WP B3) | `desktopApp/.../core/UiPort.kt`, `core/Logger.kt`, `Main.kt` |
 | Time comes from `AppEnv` (`clock`, `zone`, `dispatchers`): `PebbleApp(db, env = AppEnv.system())`, `app.now()`, `env.today()`, `env.localNow()`. The top-level `now()` / `minuteOfDay()` are `@Deprecated` (warnings are errors, so do not call them) (WP B1) | `desktopApp/.../core/AppEnv.kt`, `PebbleApp.kt` |
-| `EventLogger` attached with `Dispatchers.Unconfined`, so DB writes happen on the publisher thread (often Swing); comment: "nothing is lost on exit" | `PebbleApp.kt:143-144`, `shared/.../event/EventLogger.kt` |
+| `EventLogger.attach(bus, scope, writerDispatcher)`: the bus subscriber (unconfined) only queues each event (`Channel`, 4096); one writer (`env.dispatchers.io.limitedParallelism(1)`) saves batches of up to 256 in one transaction. A full or closed queue writes at once, so nothing is lost. `flush()` waits for what is queued; `PebbleApp.shutdown()` publishes `AppStopping`, then `close(2 s)`, then cancels (WP B5) | `shared/.../event/EventLogger.kt`, `PebbleApp.kt` |
 | `EventBus`: `MutableSharedFlow`, buffer 256, `DROP_OLDEST` | `shared/.../event/EventBus.kt` |
 | `Understanding` is a synchronous `fun interface understand(text): Understood?`; `CommandRouter(model: () -> Understanding?, ...)`; the router is called on `Dispatchers.Default` | `shared/.../brain/Understanding.kt:65`, `CommandRouter.kt:15`, `desktopApp/.../quickadd/QuickAddWindow.kt:156,165` |
 | `ModelManager` and `SpeechRecognizer` are thin wrappers over `LazyModel<T : AutoCloseable>` (locate → verify → load on `io` → idle unload; `status: StateFlow<ModelStatus>`; `getOrNull()` never blocks). Speech models are one `AsrEngines` holder. `ModelRuntime` owns both (WP B4) | `desktopApp/.../brain/LazyModel.kt`, `brain/ModelRuntime.kt` |
@@ -94,7 +94,7 @@ Line numbers can move. If a line does not match, search for the name.
 | Schema: `.sq` files + migrations `1.sqm`…`8.sqm`. The **current schema version is 9; the next migration file is `9.sqm`** (upgrades 9→10). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
 | `one_off_reminder.id INTEGER AUTOINCREMENT`; hard `DELETE`; no `updated_at` | `Reminders.sq:13-19,43-44` |
 | `ReminderEngine` keys one-off reminders by `Long` id: `oneOffKey(r.id)` | `shared/.../reminders/ReminderEngine.kt:61,91,195` |
-| `JdbcSqliteDriver(url, Properties(), Schema)`; no WAL, no busy timeout | `shared/src/jvmMain/.../db/DatabaseFactory.kt:16-17` |
+| `DatabaseFactory.create(file)`: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=true` (sqlite-jdbc 3.53.4.0 property names); `inMemory()` keeps the defaults (WP B5) | `shared/src/jvmMain/.../db/DatabaseFactory.kt` |
 | `GrowthEngine.stats()` loads the whole `event_log` per type and matches JSON by substring `"\"action\":\"DONE\""` | `shared/.../growth/Growth.kt:76-100` |
 | Migration test pattern: build the old schema with raw JDBC, set `PRAGMA user_version`, open with `DatabaseFactory.create(file)` | `shared/src/jvmTest/.../MigrationTest.kt` |
 | jlink modules: `modules("java.sql", "jdk.unsupported")`; JVM `-Xmx256m`, SerialGC | `desktopApp/build.gradle.kts:106-124` |
@@ -128,6 +128,7 @@ Line numbers can move. If a line does not match, search for the name.
     - Quantize with `reduce_range=True` (`export_onnx.py`). Do not remove it.
     - A model with 8-bit weights passed on a VNNI laptop but read 3 of 194 commands differently on the CI runner (AMD EPYC 7763).
     - The CI log step "Runner CPU" shows which CPU ran the tests.
+11. **The database runs in WAL mode.** Recent changes can be in `pebble.db-wal`, not in `pebble.db`. To copy the database (backup, export), use SQLite's backup (`VACUUM INTO` or the backup API), not a file copy. `event_log` rows appear a few milliseconds after `bus.publish`; call `eventLog.flush()` before you read your own event.
 
 ## Docs
 
