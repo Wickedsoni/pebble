@@ -8,7 +8,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### Start here (end of 5 Oct 2026, after WP C4)
-- **State:** A1 … E4 are on `main`. **WP C4 (offline IPS evaluator) is in a PR on `wp/c4-ips-evaluator`, waiting for your yes to merge.**
+- **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`). There are no open PRs.
 - **Next WP: E3** (ChangeJournal + HLC). It is `[Opus spec]`: do not start it without an approved spec. Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
@@ -21,9 +21,9 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: WP C4 done (offline IPS evaluator, PR on `wp/c4-ips-evaluator`)
+### 5 Oct: WP C4 done (offline IPS evaluator, PR #39, merged)
 - **What:** `NudgeIpsEvaluator` (`shared/.../brain/`) pairs each logged `nudge_decided` (with its propensity) with the reaction, as the engine scores it. It gives IPS, SNIPS and ESS for a fixed target policy (ADR 0016).
-- **Gate (CLAUDE.md rule 8):** a change to the `NudgePolicy` priors or rewards must show SNIPS ≥ the mean reward of what ran, and ESS ≥ 200. Run `./gradlew :desktopApp:nudgeIps` (it reads a `VACUUM INTO` copy of your database; the app's data is not touched).
+- **Gate (CLAUDE.md rule 8):** a change to the `NudgePolicy` priors or rewards must show SNIPS ≥ the mean reward of what ran, and ESS ≥ 200 (you decided on 5 Oct to keep the 200 bar, although no change can pass for some weeks). Run `./gradlew :desktopApp:nudgeIps` (it reads a `VACUUM INTO` copy of your database; the app's data is not touched).
 - **Your data (5 Oct):** 45 decisions, 9 with a known outcome; ESS 8 → "NOT ENOUGH DATA". Most decisions are skipped because the app stopped or started before the reaction (88 starts in 4 days of test builds). A normal week of use will give more.
 - **Event log:** read only, raw rows (a new query `eventsOfTypesSince`; no migration, schema stays 13). No row is deleted (ADR 0004).
 - **Tests:** `NudgeIpsEvaluatorTest` (10): reward pairing (done, late, snooze, skip, ignored, restarts, other keys, bad entries); a hand-computed example; on-policy SNIPS = observed; SNIPS finds the true value of a rarely-run policy (error < 0.03); the gate refuses low ESS; the real `ReminderEngine` + log give exactly the rewards that the policy learned. All 273 Kotlin tests pass, 0 skipped.
@@ -216,7 +216,7 @@ Lessons from the merge (for the next stack):
   - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
-  - WP C4 (PR): offline IPS evaluator and gate for nudge policy changes (`NudgeIpsEvaluator`, `nudgeIps`; ADR 0016).
+  - WP C4 (PR #39): offline IPS evaluator and gate for nudge policy changes (`NudgeIpsEvaluator`, `nudgeIps`; ADR 0016).
   - WP E4 (PR #37): encrypted backup/restore (`BackupFile`, `Backup`, About → Backup; ADR 0015).
   - WP E2: calendar (`calendar_event`, migration `12.sqm`, RRULE subset, ICS import/export, Calendar page, Agenda card, `event:` syntax; ADR 0014).
   - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
