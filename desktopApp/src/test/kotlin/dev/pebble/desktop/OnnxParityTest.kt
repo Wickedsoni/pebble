@@ -79,12 +79,19 @@ class OnnxParityTest {
             assertEquals(rows.size, tokens, "token ids differ")
             assertEquals(rows.size, intents, "intents differ")
             assertEquals(rows.size, tags, "slot tags differ: $realFlips")
-            assertTrue(maxDp < 1e-3f, "confidences drift: $maxDp")
+            assertTrue(maxDp < MAX_CONFIDENCE_DRIFT, "confidences drift: $maxDp")
         }
     }
 
     private companion object {
         /** Largest probability gap between two slot tags that still counts as a tie across CPUs. */
         const val NEAR_TIE = 0.01f
+
+        /**
+         * Largest confidence difference from the Python reference. int8 kernels differ per CPU: bit-exact on the
+         * reference laptop (Core Ultra, AVX-VNNI), 6e-7 on AMD EPYC 7763, 1.2e-3 on AMD EPYC 9V74 (AVX-512 VNNI),
+         * all with identical tokens, intents, tags and moods. A Kotlin reading bug shows up far above this.
+         */
+        const val MAX_CONFIDENCE_DRIFT = 5e-3f
     }
 }

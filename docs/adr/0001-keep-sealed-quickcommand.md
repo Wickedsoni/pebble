@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-04
-- **Work package:** Milestone B refactor (`CommandExecutor`)
+- **Work package:** B2 (`CommandExecutor`). Implemented in WP B2.
 
 ## Context
 

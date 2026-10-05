@@ -79,8 +79,8 @@ Line numbers can move. If a line does not match, search for the name.
 | Fact | Location |
 |---|---|
 | Modules: `:shared` (KMP, `jvm()` only), `:desktopApp` (JVM Compose). No build-logic. | `settings.gradle.kts`, `shared/build.gradle.kts` |
-| `PebbleApp` = object graph + executor; constructor `PebbleApp(db: PebbleDatabase)`; tests call `PebbleApp(DatabaseFactory.inMemory())` and use `app.executeFromModel`, `app.notes`, `app.commandFeedback` | `desktopApp/.../PebbleApp.kt:47`, `desktopApp/src/test/.../NotWhatIMeantTest.kt:21-40` |
-| Shared mutable undo: `private var lastUndo`, set in `execute`, captured in `executeFromModel` | `PebbleApp.kt:245-263, 266-336` |
+| `PebbleApp` = object graph + façades; constructor `PebbleApp(db, env = AppEnv.system())`; tests call `PebbleApp(DatabaseFactory.inMemory())` and use `app.executeFromModel`, `app.notes`, `app.commandFeedback` | `desktopApp/.../PebbleApp.kt:47`, `desktopApp/src/test/.../NotWhatIMeantTest.kt:21-40` |
+| Commands run in `CommandExecutor.execute(cmd): Executed(line, undo)` (exhaustive `when`, ADR 0001); `PebbleApp.execute` / `describe` are façades; `PebbleApp` implements `CommandActions` (`addNote`, `remember`, `logWater`). No shared undo field (WP B2). Voice clips: `VoiceCorrectionService` | `desktopApp/.../command/CommandExecutor.kt`, `voice/VoiceCorrectionService.kt` |
 | One `appScope` (`SupervisorJob` + `env.dispatchers.main`); `ModelManager`, `SpeechRecognizer`, `VoiceInput` get `appScope + env.dispatchers.default`, so `shutdown()` cancels all (WP B1) | `PebbleApp.kt` |
 | Public `var` UI hooks `notifier`, `openPage`, `voiceDir` | `PebbleApp.kt:99,102,117` |
 | Time comes from `AppEnv` (`clock`, `zone`, `dispatchers`): `PebbleApp(db, env = AppEnv.system())`, `app.now()`, `env.today()`, `env.localNow()`. The top-level `now()` / `minuteOfDay()` are `@Deprecated` (warnings are errors, so do not call them) (WP B1) | `desktopApp/.../core/AppEnv.kt`, `PebbleApp.kt` |
