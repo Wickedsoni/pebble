@@ -7,6 +7,7 @@ The app records every command the model handled in `command_feedback` (see share
   picked     your "Did you mean…?" choice              → strong label, seen 3× per epoch
   confirmed  Pebble acted and you didn't object         → weak label, seen 1×
   wrong      you tapped "Not what I meant"              → never a positive; listed for review
+  taught     a phrase you taught on the Memory page     → strong label, seen 3×
 Only the intent is known (not which words are the time / person), so slot loss is skipped for these
 examples (tag "" = ignored). Anything close to an eval sentence is dropped, so the gate stays honest.
 The database is opened read-only; nothing leaves the laptop.
@@ -35,7 +36,7 @@ ACTION_TO_INTENT = {
     "time_query": "datetime_query",
     "chitchat": "general_quirky",
 }
-WEIGHT = {"picked": 3, "confirmed": 1}
+WEIGHT = {"picked": 3, "taught": 3, "confirmed": 1}
 IGNORE = ""  # slot tag skipped by the loss (train_intent.make_targets)
 
 

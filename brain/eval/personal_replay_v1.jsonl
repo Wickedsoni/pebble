@@ -1,0 +1,42 @@
+{"step": "say", "text": "diary kholo", "action": "notes_query"}
+{"step": "say", "text": "kya kya pending hai", "action": "reminders_query"}
+{"step": "say", "text": "my todo", "action": "notes_query"}
+{"step": "say", "text": "abhi kitna", "action": "time_query"}
+{"step": "say", "text": "note kar lo", "action": "add_note"}
+{"step": "say", "text": "diary kholo", "action": "notes_query"}
+{"step": "say", "text": "doodh lana hai", "action": "add_note"}
+{"step": "say", "text": "time batao", "action": "time_query"}
+{"step": "say", "text": "diary kholo na", "action": "notes_query"}
+{"step": "teach", "text": "todo dikha", "action": "notes_query"}
+{"step": "teach", "text": "todo dikhao", "action": "notes_query"}
+{"step": "teach", "text": "mera todo dikha", "action": "notes_query"}
+{"step": "say", "text": "todo dikha", "action": "notes_query"}
+{"step": "say", "text": "abhi kitna", "action": "time_query"}
+{"step": "say", "text": "abhi kitna hua", "action": "time_query"}
+{"step": "say", "text": "my todo", "action": "notes_query"}
+{"step": "say", "text": "gym 6 baje", "action": "remind"}
+{"step": "say", "text": "kitna baja", "action": "time_query"}
+{"step": "say", "text": "grocery list", "action": "notes_query"}
+{"step": "say", "text": "kitna baja", "action": "time_query"}
+{"step": "say", "text": "doodh lana hai", "action": "add_note"}
+{"step": "say", "text": "anda lana hai", "action": "add_note"}
+{"step": "say", "text": "kal ka kya hai", "action": "reminders_query"}
+{"step": "say", "text": "kya chal raha", "action": "chitchat"}
+{"step": "say", "text": "kal ka kya hai", "action": "reminders_query"}
+{"step": "say", "text": "show todo", "action": "notes_query"}
+{"step": "say", "text": "aaj ka agenda", "action": "reminders_query"}
+{"step": "say", "text": "show todo", "action": "notes_query"}
+{"step": "say", "text": "diary dikhao", "action": "notes_query"}
+{"step": "say", "text": "todo list dikha do", "action": "notes_query"}
+{"step": "say", "text": "time kya", "action": "time_query"}
+{"step": "say", "text": "bhai sun", "action": "chitchat"}
+{"step": "say", "text": "chai break 4 baje", "action": "remind"}
+{"step": "say", "text": "diary kholo", "action": "notes_query"}
+{"step": "say", "text": "todo dikhao", "action": "notes_query"}
+{"step": "say", "text": "abhi kitna", "action": "time_query"}
+{"step": "say", "text": "my todo", "action": "notes_query"}
+{"step": "say", "text": "isko note kar lo", "action": "add_note"}
+{"step": "say", "text": "plans dikhao", "action": "reminders_query"}
+{"step": "say", "text": "diary dikhao", "action": "notes_query"}
+{"step": "say", "text": "kitne baje", "action": "time_query"}
+{"step": "say", "text": "kaam ki list", "action": "notes_query"}

@@ -8,7 +8,8 @@ import dev.pebble.core.brain.PebbleActions as A
 /**
  * The command cascade — cheapest path first, as in the brain plan:
  *   1. rules (QuickAddParser.parseStrict): exact syntax like "water every 45m", "note: …"
- *   2. the local model ([Understanding]): free-form Hindi / Hinglish / English
+ *   2. the local model ([Understanding]): free-form Hindi / Hinglish / English, then your own examples
+ *      ([PersonalLayer]) blended into its reading
  *   3. not sure → ask "Did you mean…?" with the top guesses; your pick becomes a training label
  * With no model available (missing file, low-spec mode), step 2 is skipped and anything
  * unrecognised is saved as a note, exactly like before.
@@ -18,6 +19,8 @@ class CommandRouter(
     private val policy: DecisionPolicy = DecisionPolicy(),
     /** Today's ISO weekday (1 = Monday … 7 = Sunday), so "friday wali meeting" gets a date. */
     private val today: () -> Int? = { null },
+    /** What you taught and picked; null: the model alone. */
+    private val personal: PersonalLayer? = null,
 ) {
     enum class Source { RULES, MODEL, FALLBACK }
 
@@ -41,7 +44,7 @@ class CommandRouter(
         if (text.isEmpty()) return null
         QuickAddParser.parseStrict(text, today())?.let { return Routed.Run(it, Source.RULES) }
         val lowByWords = Replies.isLowMood(text)
-        val understood = model()?.understand(text)
+        val understood = understand(text)
             ?: return if (lowByWords) {
                 Routed.Run(QuickCommand.Chitchat(text, Replies.LOW_MOOD), Source.RULES)
             } else {
@@ -77,7 +80,7 @@ class CommandRouter(
      */
     fun ask(input: String, exclude: String? = null): Routed.Ask {
         val text = input.trim()
-        val u = model()?.understand(text)
+        val u = understand(text)
         val guesses = if (u != null) didYouMean(text, u, limit = 4).options else emptyList()
         val options = guesses.filter { it.action != exclude }.toMutableList()
         if (exclude != A.ADD_NOTE && options.none { it.action == A.ADD_NOTE }) {
@@ -85,6 +88,8 @@ class CommandRouter(
         }
         return Routed.Ask("What did you mean?", options.take(3), u)
     }
+
+    private fun understand(text: String): Understood? = model()?.understand(text)?.let { personal?.adjust(text, it) ?: it }
 
     /** Model action → concrete command. [intent] is the finer label behind it (alarm_set, general_joke…). */
     private fun toCommand(action: String, u: Understood, text: String, intent: String): QuickCommand? = when (action) {
@@ -185,8 +190,9 @@ class CommandRouter(
     }
 
     private fun didYouMean(text: String, u: Understood, limit: Int = 3): Routed.Ask {
-        // Ranked by summed action probability; skip near-zero actions so options stay meaningful.
-        val options = u.actions.filter { it.action != A.OTHER && it.confidence >= 0.05f }.mapNotNull { g ->
+        // Ranked by summed action probability, nudged by what you usually pick at this hour; near-zero actions skipped.
+        val ranked = personal?.let { p -> u.actions.sortedByDescending { it.confidence * p.contextWeight(it.action) } } ?: u.actions
+        val options = ranked.filter { it.action != A.OTHER && it.confidence >= 0.05f }.mapNotNull { g ->
             val cmd = toCommand(g.action, u, text, g.bestIntent) ?: return@mapNotNull null
             Option(labelFor(g.action), g.action, cmd)
         }.toMutableList()

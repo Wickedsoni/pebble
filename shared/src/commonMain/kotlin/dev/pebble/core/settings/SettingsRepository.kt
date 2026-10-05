@@ -34,5 +34,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
 
         /** Log entries before this time (a local midnight) are counted in `daily_stat` (HistoryCompactor). */
         const val HISTORY_ROLLED_UP_UNTIL = "history.rolledUpUntil"
+
+        /** The personal layer ignores picks and "Not what I meant" rows before this time ("Forget what you taught me"). */
+        const val PERSONAL_SINCE = "brain.personalSince"
     }
 }

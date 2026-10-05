@@ -3,9 +3,31 @@
 To resume: open this repo and say "continue from NEXT_SESSION.md".
 Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** (pre-release, 2 Oct 2026).
 
-## Session handoff (end of 4 Oct 2026) — read this first
+## Session handoff (5 Oct 2026) — read this first
 
-**This file is current only on branch `wp/c2-memory-search`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
+**This file is current only on branch `wp/c3-personal-layer`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
+
+### 5 Oct: WP C3 done (PR #29, on top of #28)
+- **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
+  - cosine ≥ 0.90 alone let one example reach 3.5 sentences on average (up to 13);
+  - `confirmed` rows reinforced mistakes that you did not correct;
+  - k = 3 was too slow for a taught phrase.
+- **Fix:**
+  - neighbours also need shared words (Jaccard ≥ 0.2), so one example reaches 0.5 sentences on average;
+  - only taught, picked and wrong rows vote; the same sentence counts 4, k = 2;
+  - a veto removes probability and does not give it to other actions;
+  - the layer never lifts a removal above 0.85.
+- **Replay gate** (`PersonalReplayTest`): right 14 → 27, wrong actions 12 → 4. Eval v1 does not change (68/68, 0 wrong actions).
+- **UI:** a "Teach Pebble a command" card on the Memory page replaces the "AI assistants — coming later" placeholder (`TeachStateHolder`).
+- **Data:** taught phrases are `command_feedback` rows with outcome `taught` (no migration). "Forget what you taught me" deletes them and sets `brain.personalSince`.
+- **Not run locally:** the Python lint and test (`uv` is not on this machine's PATH). CI runs them.
+- **Live check (built distributable, 5 Oct):**
+  - "diary kholo" → "Can't do this yet";
+  - teach it as "Show my notes" on the Memory page → "diary kholo" shows your notes;
+  - "Forget what you taught me" → back to "Can't do this yet". Test data was removed afterwards.
+  - The check found that the Teach card was squeezed under the Privacy card. It now shares the left column.
+  - Your database is now at schema 11 (C2's `vector_item`). The installed v0.1.2 still starts on it.
+- **Follow-up (not C3):** `pebble.log` shows "history roll-up failed: [SQLITE_BUSY] database is locked" once at start-up (also on 4 Oct). It is probably a deferred transaction that reads, then writes while the event writer commits (WAL returns BUSY at once, so `busy_timeout` does not help). It tries again 10 minutes later. Fix: begin the roll-up transaction as IMMEDIATE.
 
 ### The PR stack (nothing is merged yet)
 Each PR is based on the one before it. Merge in this order, squash-merge each, and let GitHub retarget the next PR to `main`:
@@ -25,6 +47,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 | 11 | #26 | `wp/b7-ui-state-pilot` | B7 pilot: Reminders state holder, `docs/UI-PATTERN.md` |
 | 12 | #27 | `wp/c1-sentence-embedding` | C1: sentence embedding (model `intent-v3-pruned`) |
 | 13 | #28 | `wp/c2-memory-search` | C2: memory search |
+| 14 | #29 | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
 
 - Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
 - If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
@@ -33,7 +56,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 ### Checks only you can do (the live app)
 1. Reminders page: click +/−, a toggle, a strictness chip and ✕ once (B7; the synthetic clicks hit the IDE).
 2. Memory page: try one search in "Search memory" (C2).
-3. A reminder toast appears (B3 binding).
+3. ~~A reminder toast appears (B3 binding).~~ Seen in the 5 Oct live check ("Call mom").
 4. The older items below: battery run, "Start with Windows", Dependabot #6, noreply email, code signing.
 
 ### Open decisions
@@ -41,8 +64,8 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 - My two test turns ("open reminders", "notes kholo") are in your real Chat history. Delete them if you like.
 
 ### Next session
-1. Say "continue from NEXT_SESSION.md" and check out `wp/c2-memory-search` (or `main`, if you merged the stack).
-2. **C3** (personal layer + "teach a command"): the plan says Opus reviews the formula first. Start with that review, then implement.
+1. Say "continue from NEXT_SESSION.md" and check out `wp/c3-personal-layer` (or `main`, if you merged the stack).
+2. **D2** (signed model packs, lite/full installers; Opus reviews the signing) is next in the delivery order. Then C5 (local chat).
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 4. Then C4 (offline IPS evaluator), D2, C5, as in the delivery order of the plan.
 
@@ -125,10 +148,11 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
   - WP B7 (pilot): `RemindersStateHolder` (`StateFlow<RemindersUiState>`, `onEvent`), stateless `RemindersContent`, `docs/UI-PATTERN.md` (the template for the other pages).
   - WP C1: command model `intent-v3-pruned` (release `models-2026.11`) adds the sentence embedding (384, unit length) as a 4th output; same weights, other outputs identical; `Understood.embedding`.
   - WP C2: memory search (notes, facts, what you said) — `vector_item` (migration `10.sqm`), `MemorySearch`, "Search memory" on the Memory page, "what did I note about X" → search. 14/16 on the frozen search eval.
+  - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** C3 (personal layer + teach a command; Opus reviews the formula first), and B7 page roll-outs one per PR (`docs/UI-PATTERN.md`).
+- **Next:** D2 (signed model packs; Opus reviews signing), then C5; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`).
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)
