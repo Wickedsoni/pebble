@@ -8,7 +8,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### Start here (end of 5 Oct 2026, after WP C4)
-- **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the first SQLITE_BUSY fix (PR #41, `727a1f5`). **The global SQLITE_BUSY fix (ADR 0017) is in a PR on `wp/fix-sqlite-busy-global`, waiting for your yes to merge.**
+- **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
 - **Next WP: E3** (ChangeJournal + HLC). It is `[Opus spec]`: do not start it without an approved spec. Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
@@ -21,7 +21,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: SQLITE_BUSY fix, now global (PR #41 merged; follow-up PR on `wp/fix-sqlite-busy-global`)
+### 5 Oct: SQLITE_BUSY fix, now global (PR #41, then PR #43, both merged)
 - **Problem:** two transactions read and then write: the history roll-up ("history roll-up failed" in `pebble.log` on 4 and 5 Oct) and `ReminderRepository.addLinked` (it failed once in CI on PR #40). SQLDelight begins every transaction deferred. In WAL such a transaction fails at once with `SQLITE_BUSY_SNAPSHOT` when the event writer committed after its read. `busy_timeout` does not help.
 - **PR #41 (merged)** added an opt-in helper (`writeTransaction`) at the two call sites. You asked for a global fix, because new code could forget the helper.
 - **Global fix (ADR 0017):** `PebbleSqliteDriver` is a copy of SQLDelight 2.4.0's `JdbcSqliteDriver` (about 80 lines) with `BEGIN IMMEDIATE TRANSACTION`. `DatabaseFactory` uses it, so every transaction takes the write lock at its start. The helper is removed.
