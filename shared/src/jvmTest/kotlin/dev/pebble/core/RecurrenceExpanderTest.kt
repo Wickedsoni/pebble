@@ -288,6 +288,38 @@ class RecurrenceExpanderTest {
     }
 
     @Test
+    fun aStartMoreThan200000DaysAgoStillGivesTheRightDays() {
+        // 1300 is about 270 000 days before 2026: more than MAX_STEPS if every day were walked.
+        val start = LocalDateTime.of(1300, 1, 1, 9, 0)
+        val e = event(start, kolkata, "FREQ=DAILY")
+        val got = endsQuickly { starts(e, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 4), kolkata) }
+        assertEquals(listOf(1, 2, 3), got.map { it.dayOfMonth })
+        val weekly = event(LocalDateTime.of(1300, 1, 1, 9, 0), kolkata, "FREQ=WEEKLY;BYDAY=MO,TH")
+        assertEquals(
+            listOf(1, 5),
+            endsQuickly {
+                starts(weekly, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 7), kolkata)
+            }.map { it.dayOfMonth },
+        )
+    }
+
+    @Test
+    fun aHugeDurationDoesNotMakeTheSeriesVanish() {
+        val s = millis(LocalDateTime.of(2020, 1, 1, 9, 0), kolkata)
+        val e = CalendarEvent("big", "x", s, s + 6_048_000_000_000_000_000L, kolkata.id, rrule = "FREQ=DAILY") // P9999999999W
+        val got =
+            endsQuickly {
+                RecurrenceExpander.occurrences(
+                    e,
+                    millis(LocalDateTime.of(2026, 10, 1, 0, 0), kolkata),
+                    millis(LocalDateTime.of(2026, 10, 3, 0, 0), kolkata),
+                    kolkata,
+                )
+            }
+        assertTrue(got.isNotEmpty())
+    }
+
+    @Test
     fun yearlyRepeatsOnTheDayOfTheStartAndSkips29FebInOtherYears() {
         val leap = event(LocalDateTime.of(2024, 2, 29, 9, 0), kolkata, "FREQ=YEARLY;COUNT=3")
         assertEquals(

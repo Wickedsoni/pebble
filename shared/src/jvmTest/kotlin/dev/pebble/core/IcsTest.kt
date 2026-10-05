@@ -2,6 +2,7 @@ package dev.pebble.core
 
 import dev.pebble.core.calendar.CalendarEvent
 import dev.pebble.core.calendar.Ics
+import dev.pebble.core.calendar.RecurrenceExpander
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -239,7 +240,7 @@ class IcsTest {
             e.exdates,
             "a date becomes the start of that day's occurrence; a stored time stays",
         )
-        val days = dev.pebble.core.calendar.RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, berlin).map { it.date.dayOfMonth }
+        val days = RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, berlin).map { it.date.dayOfMonth }
         assertEquals(listOf(5, 7), days)
     }
 

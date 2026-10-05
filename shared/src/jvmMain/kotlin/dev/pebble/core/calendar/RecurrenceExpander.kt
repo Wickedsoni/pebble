@@ -16,7 +16,8 @@ import kotlin.math.roundToLong
 /**
  * One occurrence of [event]: its start and end (epoch milliseconds). [date]: the day it starts on in the zone of the
  * person who looks (the view zone), also for a timed event in another zone. [recurrenceShown]: false when the event
- * repeats in a way Pebble cannot expand, so it is shown only once.
+ * repeats in a way Pebble cannot expand, so it is shown only once. It must match `event.rrule`; the default computes it,
+ * and [RecurrenceExpander] passes the value it already has.
  */
 data class Occurrence(
     val event: CalendarEvent,
@@ -47,6 +48,9 @@ object RecurrenceExpander {
     /** The earliest `from` that [occurrences] looks back from; keeps the date arithmetic far from the limits. */
     private const val MIN_FROM = -1_000_000_000_000_000L
 
+    /** The longest event length that [occurrences] looks back over (about 100 years); a longer one cannot wrap the date. */
+    private const val MAX_SPAN = 3_200_000_000_000L
+
     fun occurrences(e: CalendarEvent, from: Long, to: Long, viewZone: ZoneId, limit: Int = 1_000): List<Occurrence> {
         val eventZone = zoneOf(e.tz, viewZone)
         val zone = if (e.allDay) viewZone else eventZone
@@ -75,7 +79,9 @@ object RecurrenceExpander {
         if (rule == null) return listOf(occurrence(start.toLocalDate())).filter(::overlaps)
 
         // Days before this one cannot overlap the window (two days of margin for zones and DST).
-        val notBefore = Instant.ofEpochMilli(from.coerceAtLeast(MIN_FROM) - duration - 2 * 86_400_000L).atZone(zone).toLocalDate()
+        val notBefore = Instant.ofEpochMilli(
+            from.coerceAtLeast(MIN_FROM) - duration.coerceAtMost(MAX_SPAN) - 2 * 86_400_000L,
+        ).atZone(zone).toLocalDate()
         val out = ArrayList<Occurrence>()
         var counted = 0
         var steps = 0
