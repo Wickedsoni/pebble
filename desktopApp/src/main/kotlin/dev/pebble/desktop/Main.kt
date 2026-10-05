@@ -37,7 +37,20 @@ private const val PET = "pet"
 /** `--background` (used by "Start with Windows") starts with just the pet; a normal launch opens the app. */
 fun main(args: Array<String>) {
     if (!SingleInstance.acquire(DatabaseFactory.defaultDataDir())) exitProcess(0)
-    val app = PebbleApp.create()
+    val app = try {
+        PebbleApp.create()
+    } catch (e: RestoreNotFinishedException) {
+        // The packaged app has no console: tell the user, then stop. Nothing is deleted; the next start tries again.
+        javax.swing.JOptionPane.showMessageDialog(
+            null,
+            "Pebble could not finish restoring a backup, so it did not start.\n\n" +
+                "Your old data is safe in this folder, in the files named pebble.db.restoring-*:\n${e.dataDir}\n\n" +
+                "Start Pebble again. If this message comes back, ask for help and keep these files.",
+            "Pebble",
+            javax.swing.JOptionPane.ERROR_MESSAGE,
+        )
+        exitProcess(1)
+    }
     val startInBackground = "--background" in args
 
     application {

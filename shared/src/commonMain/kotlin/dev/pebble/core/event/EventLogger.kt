@@ -78,7 +78,7 @@ class EventLogger(private val db: PebbleDatabase, private val onError: (Throwabl
             }
         }
         return scope.launch(Dispatchers.Unconfined) {
-            bus.events.collect { e -> if (q.trySend(Item.Event(e)).isFailure) writeBatch(listOf(e)) }
+            bus.events.collect { e -> if (q.trySend(Item.Event(e)).isFailure) writeNow(e) }
         }
     }
 
@@ -100,14 +100,31 @@ class EventLogger(private val db: PebbleDatabase, private val onError: (Throwabl
         } catch (_: Exception) {
             // Fall through to row by row.
         }
-        events.forEach { event ->
+        // A locked database would fail every row: after a few misses in a row, report the rest and give up on this batch.
+        var misses = 0
+        for ((i, event) in events.withIndex()) {
+            if (misses >= MAX_MISSES) {
+                onError(IllegalStateException("event log: ${events.size - i} more events of the batch were not saved"))
+                break
+            }
             try {
                 log(event)
+                misses = 0
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                misses++
                 onError(e)
             }
+        }
+    }
+
+    /** The direct path (queue full or closed, on the publisher's thread): one plain write, never inside a transaction. */
+    private fun writeNow(event: PebbleEvent) {
+        try {
+            log(event)
+        } catch (e: Exception) {
+            onError(e)
         }
     }
 
@@ -131,5 +148,6 @@ class EventLogger(private val db: PebbleDatabase, private val onError: (Throwabl
 
     private companion object {
         const val BATCH = 256
+        const val MAX_MISSES = 3
     }
 }

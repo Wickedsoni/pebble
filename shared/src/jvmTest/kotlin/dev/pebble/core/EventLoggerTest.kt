@@ -120,4 +120,24 @@ class EventLoggerTest {
         assertTrue(logger.flush(10.seconds))
         assertEquals(12, rows(db))
     }
+
+    @Test
+    fun aLockedDatabaseStopsTheRowByRowRetryAfterThreeMisses() = runBlocking {
+        val file = Files.createTempFile("pebble-locked", ".db").toFile().apply { delete(); deleteOnExit() }
+        val db = DatabaseFactory.create(file)
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use {
+                it.execute("CREATE TRIGGER poison BEFORE INSERT ON event_log BEGIN SELECT RAISE(ABORT, 'locked'); END")
+            }
+        }
+        val errors = mutableListOf<Throwable>()
+        val bus = EventBus()
+        val logger = EventLogger(db) { synchronized(errors) { errors += it } }
+        logger.attach(bus, scope, Dispatchers.IO.limitedParallelism(1))
+        repeat(10) { bus.publish(event(it)) }
+        assertTrue(logger.flush(10.seconds))
+        assertEquals(0, rows(db))
+        assertEquals(4, errors.size, "3 failed rows, then one report for the rest")
+        assertTrue(errors.last().message!!.contains("7 more"), errors.last().message)
+    }
 }

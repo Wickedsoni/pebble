@@ -101,6 +101,12 @@ object Backup {
         } else {
             null
         }
+        // The ids go into the staged file, which is closed and checked, so the swap itself is renames only.
+        try {
+            writeIds(staged, deviceId)
+        } catch (e: Exception) {
+            throw BackupException("The restore failed; the old database stays (${e.message}).")
+        }
         val aside = "$DB$RESTORING${System.currentTimeMillis()}"
         val moved = ArrayDeque<Pair<Path, Path>>() // (from, to), in the order done
         fun step(from: File, to: File) {
@@ -113,23 +119,27 @@ object Backup {
                 if (from.exists()) step(from, File(dataDir, aside + suffix))
             }
             step(staged, db)
-            writeIds(db, deviceId)
         } catch (e: Exception) {
-            // Side files that opening the restored file made belong to it, not to the old database that comes back.
-            if (moved.lastOrNull()?.second == db.toPath()) SIDE.drop(1).forEach { File(db.path + it).delete() }
+            val failure = BackupException("The restore failed; the old database stays (${e.message}).")
             while (moved.isNotEmpty()) {
                 val (from, to) = moved.removeLast()
-                runCatching { move(to, from) }
+                // Never write over a file that is there: that could destroy the one copy of the restore or of the old data.
+                if (Files.exists(from)) {
+                    failure.addSuppressed(IllegalStateException("cannot undo, $from exists"))
+                } else {
+                    runCatching { move(to, from) }.onFailure(failure::addSuppressed)
+                }
             }
-            throw BackupException("The restore failed; the old database stays (${e.message}).")
+            throw failure
         }
+        // Only now replace the older before-restore files: all three, so a stale -wal never meets a new database.
+        SIDE.forEach { File(dataDir, BEFORE + it).delete() }
         SIDE.forEach { suffix ->
             val old = File(dataDir, aside + suffix)
-            if (old.exists()) {
-                File(dataDir, BEFORE + suffix).delete()
-                runCatching { move(old.toPath(), File(dataDir, BEFORE + suffix).toPath()) }
-            }
+            if (old.exists()) runCatching { move(old.toPath(), File(dataDir, BEFORE + suffix).toPath()) }
         }
+        // Older leftovers of other swaps: a later manual reset of `pebble.db` must not be undone by recoverInterrupted.
+        dataDir.listFiles { f -> f.name.startsWith("$DB$RESTORING") && !f.name.startsWith(aside) }?.forEach { it.delete() }
         return "restored a backup; the old database is $BEFORE"
     }
 
