@@ -96,6 +96,20 @@ class CalendarTest {
         assertEquals(0, agenda.scheduleReminders(now))
     }
 
+    /**
+     * The 10-minute loop reads an event, then you delete it on another thread, then the loop adds its reminder. Seen
+     * in CI (PR #51, `CommandExecutorTest`): the reminder of the deleted event stayed. `addLinked` now refuses it.
+     */
+    @Test
+    fun aReminderIsNotMadeForAnEventDeletedAfterTheAgendaReadIt() {
+        val now = at(9, 8)
+        calendar.save(event("dentist", 9, 17, remind = 15), at = now)
+        val uid = calendar.live().single().uid
+        calendar.delete(uid, now) // after the agenda read the event, before it adds the reminder
+        assertFalse(reminders.addLinked("Event dentist at 5:00 PM", at(9, 16, 45), uid, at(9, 17), now))
+        assertTrue(reminders.pendingOneOffs().isEmpty())
+    }
+
     @Test
     fun aReminderWhoseTimeHasPassedIsDueNowAndAMovedEventGetsNewReminders() {
         val now = at(9, 16, 50)
