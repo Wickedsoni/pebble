@@ -7,11 +7,14 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (end of 5 Oct 2026, after WP C4)
-- **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
-- **State:** E3a and E3b are on `main` (PRs #46, #47). Next: **E3c** (history and restore, your decision on 5 Oct): its spec `docs/specs/E3C-HISTORY.md` is **approved** (5 Oct: "Recently deleted" on the Memory page, 90 days, a "Clear history" button, a restore brings back everything but a delete). Start with E3c-1 (data + API, migration `14.sqm`). Then milestone F (F0 needs an Opus spec and a security review).
-- **CI is faster (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR (about 20 s) and the full 300 on a push to `main` or with "Run workflow" in GitHub Actions.
-  - The next migration file is `14.sqm` (current schema version 14).
+### Start here (end of 5 Oct 2026, after WP E3b and the E3c spec)
+- **State:** A1 … E4, C4, E3a and E3b are on `main` (last: E3b PR #47, faster CI #48, E3c spec #49). There are no open PRs. Schema version 14; the next migration file is `14.sqm`.
+- **Next WP: E3c-1** (history and restore: data + API). The spec `docs/specs/E3C-HISTORY.md` is **approved** (5 Oct). Your answers: "Recently deleted" is one card on the Memory page; old versions are kept 90 days; a "Clear history" button; a restore brings back everything in the version (also "done" and "archived"), but a delete is never undone in place (a copy instead).
+  - First step: **VERIFY** that a `BEFORE INSERT` trigger on `change_journal` fires for `INSERT OR REPLACE` (sqlite-jdbc 3.53.4.0), and write `new.` in lower case (CLAUDE.md trap 12).
+  - Then E3c-2 (History on the Calendar and Reminders pages, "Recently deleted" on the Memory page) and E3c-3 (Notes page to the state-holder pattern, then History).
+  - After E3c: milestone F (F0 needs an Opus spec and a security review).
+- **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
+- **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
   2. Build the distributable and **open and check the app** (no need to ask).
@@ -19,14 +22,14 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Waiting for your yes:** cut release **0.3.0** (`gh release`). It ships the v3 command model and now the calendar. Publish the chat pack and a speech pack with it: sign them with `./gradlew :desktopApp:modelPack`; the key is in `%USERPROFILE%\.pebble\signing\` (back it up offline).
 - **Deferred by you:** C6 model training (Hindi/Hinglish chat distillation). Do not start it until you ask.
 - **Your housekeeping:**
-  - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
+  - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db` and `pebble-backup-e3a.db` (taken before the E2 and E3a migrations) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
 ### 5 Oct: WP E3b done (merge + convergence gate, PR #47, merged)
 - **What:** `ChangeJournal.changesSince(cursor, limit)` gives whole rows after a cursor; `ChangeJournal.apply(batch, wall)` merges a peer's batch: the larger HLC wins field by field, a delete always wins, all or nothing. Every name, type and HLC is checked first; a clock more than 60 minutes ahead is refused. A restore gives the journal a new epoch, so peers read again from the start.
 - **Gate:** `ConvergenceTest`: 3 devices with skewed clocks, 300 sequences of 50 random changes (also the same event made on two devices, edits against deletes), exchanged in random orders and batch sizes with duplicates and late batches. All three agree after every sequence. It runs for about 100 s.
 - **Speed (warm):** `changesSince` of 500 rows 17 ms (spec < 50); `apply` of 500 rows 110 to 130 ms (spec < 200).
-- **Your decision (5 Oct): E3c, history and restore.** Keep replaced values for 90 days on this device; a "History" view on events, notes and reminders restores an old version as a new edit (a deleted item comes back as a copy). It also keeps the edit that loses a sync conflict. Write the short spec first.
+- **Your decision (5 Oct): E3c, history and restore.** Keep replaced values for 90 days on this device; a "History" view on events, notes and reminders restores an old version as a new edit (a deleted item comes back as a copy). It also keeps the edit that loses a sync conflict. The spec is approved (PR #49).
 - **Found:** outside a transaction, each query opens a new SQLite connection (about 2 ms). It is SQLDelight's own behaviour (copied in ADR 0017). Worth a small performance WP: measure the app's queries, then keep connections open per thread (check the memory cost first).
 - **Live check:** E3b adds no UI and the app does not call the merge yet (F4 will). The built app started on your real database with no new log lines.
 
