@@ -93,12 +93,18 @@ object Backup {
             if (from.exists()) Files.move(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
         Files.move(staged.toPath(), db.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        if (deviceId != null) {
-            connect(db).use { c ->
+        connect(db).use { c ->
+            if (deviceId != null) {
                 c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('device.id', ?)").use {
                     it.setString(1, deviceId)
                     it.executeUpdate()
                 }
+            }
+            // A new journal epoch (WP E3b, spec 8): the restored journal's seq can be smaller than a peer's cursor,
+            // so peers read it again from the start (the merge is idempotent).
+            c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('sync.journalEpoch', ?)").use {
+                it.setString(1, dev.pebble.core.settings.DeviceIdentity.newId())
+                it.executeUpdate()
             }
         }
         return "restored a backup; the old database is $BEFORE"

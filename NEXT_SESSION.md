@@ -9,7 +9,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ### Start here (end of 5 Oct 2026, after WP C4)
 - **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
-- **WP E3a (change journal + HLC) is in a PR on `wp/e3a-change-journal`, waiting for your yes to merge.** Next: **E3b** (merge `changesSince`/`apply`, journal epoch, convergence test). Spec: `docs/specs/E3-CHANGE-JOURNAL.md` (approved; D6 added in E3a: older Pebble versions keep working).
+- **State:** E3a is on `main` (PR #46). **WP E3b (merge + convergence gate) is in a PR on `wp/e3b-merge`, waiting for your yes to merge.** Next: **E3c** (history and restore, your decision on 5 Oct): write its short spec first and get your approval. Then milestone F (F0 needs an Opus spec and a security review).
   - The next migration file is `14.sqm` (current schema version 14).
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
@@ -21,7 +21,15 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: WP E3a done (change journal + HLC, PR on `wp/e3a-change-journal`)
+### 5 Oct: WP E3b done (merge + convergence gate, PR on `wp/e3b-merge`)
+- **What:** `ChangeJournal.changesSince(cursor, limit)` gives whole rows after a cursor; `ChangeJournal.apply(batch, wall)` merges a peer's batch: the larger HLC wins field by field, a delete always wins, all or nothing. Every name, type and HLC is checked first; a clock more than 60 minutes ahead is refused. A restore gives the journal a new epoch, so peers read again from the start.
+- **Gate:** `ConvergenceTest`: 3 devices with skewed clocks, 300 sequences of 50 random changes (also the same event made on two devices, edits against deletes), exchanged in random orders and batch sizes with duplicates and late batches. All three agree after every sequence. It runs for about 100 s.
+- **Speed (warm):** `changesSince` of 500 rows 17 ms (spec < 50); `apply` of 500 rows 110 to 130 ms (spec < 200).
+- **Your decision (5 Oct): E3c, history and restore.** Keep replaced values for 90 days on this device; a "History" view on events, notes and reminders restores an old version as a new edit (a deleted item comes back as a copy). It also keeps the edit that loses a sync conflict. Write the short spec first.
+- **Found:** outside a transaction, each query opens a new SQLite connection (about 2 ms). It is SQLDelight's own behaviour (copied in ADR 0017). Worth a small performance WP: measure the app's queries, then keep connections open per thread (check the memory cost first).
+- **Live check:** E3b adds no UI and the app does not call the merge yet (F4 will). The built app started on your real database with no new log lines.
+
+### 5 Oct: WP E3a done (change journal + HLC, PR #46, merged)
 - **What:** every write to a synced field of a note, a one-off reminder or a calendar event goes into `change_journal` with a hybrid logical clock time (HLC), in the same transaction (ADR 0018, spec `docs/specs/E3-CHANGE-JOURNAL.md`). No socket; nothing leaves the PC.
 - **Your decisions in it:**
   - **a delete always wins** (a trigger stops any un-delete; an ICS re-import skips deleted events and says so);
@@ -160,7 +168,7 @@ Lessons from the merge (for the next stack):
 
 ### Next session
 1. Say "continue from NEXT_SESSION.md" on `main`.
-2. **E3b** is next (merge, epoch, convergence test; spec approved: `docs/specs/E3-CHANGE-JOURNAL.md`). Release 0.3.0 waits for your yes: publish the chat pack and a speech pack with it.
+2. **E3c** (history and restore) is next: write its short spec and get approval first. Release 0.3.0 waits for your yes: publish the chat pack and a speech pack with it.
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 
 ### Lessons from this session (for the implementer)
@@ -244,7 +252,8 @@ Lessons from the merge (for the next stack):
   - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
-  - WP E3a (PR): change journal + HLC, guard triggers, reconcile for older Pebble versions; a delete always wins (ADR 0018).
+  - WP E3b (PR): merge (`changesSince`, `apply`), journal epoch on restore, `ConvergenceTest` gate.
+  - WP E3a (PR #46): change journal + HLC, guard triggers, reconcile for older Pebble versions; a delete always wins (ADR 0018).
   - WP C4 (PR #39): offline IPS evaluator and gate for nudge policy changes (`NudgeIpsEvaluator`, `nudgeIps`; ADR 0016).
   - WP E4 (PR #37): encrypted backup/restore (`BackupFile`, `Backup`, About → Backup; ADR 0015).
   - WP E2: calendar (`calendar_event`, migration `12.sqm`, RRULE subset, ICS import/export, Calendar page, Agenda card, `event:` syntax; ADR 0014).
@@ -252,7 +261,7 @@ Lessons from the merge (for the next stack):
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** E3b (spec approved); B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
+- **Next:** E3c spec (history and restore); B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)

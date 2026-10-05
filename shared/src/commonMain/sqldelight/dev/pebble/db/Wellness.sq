@@ -77,3 +77,17 @@ SELECT * FROM note WHERE archived = 0 AND deleted_at IS NULL ORDER BY updated_at
 
 waterLogSince:
 SELECT at_millis, ml FROM water_log WHERE at_millis >= ? ORDER BY at_millis;
+
+-- The merge (WP E3b, ChangeJournal.apply). A new row starts with no hlc; the merge sets it after the journal entries.
+-- An update writes all synced fields, with the hlc of the fields that changed in this step.
+syncNoteByUid:
+SELECT uid, text, created_at, archived, deleted_at, hlc, updated_at FROM note WHERE uid = ?;
+
+mergeInsertNote:
+INSERT INTO note(uid, text, created_at, archived, deleted_at, updated_at, origin_device, hlc)
+VALUES (:uid, :text, :createdAt, :archived, :deletedAt, :updatedAt, :originDevice, NULL);
+
+mergeUpdateNote:
+UPDATE note SET text = :text, created_at = :createdAt, archived = :archived, deleted_at = :deletedAt,
+    updated_at = max(updated_at, :updatedAt), hlc = :hlc
+WHERE uid = :uid;

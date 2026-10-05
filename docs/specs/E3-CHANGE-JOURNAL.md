@@ -1,6 +1,6 @@
 # Spec E3: Change journal and hybrid logical clock
 
-- **Status:** Approved by the maintainer on 2026-10-05, with the answers in section 12. Changed during E3a with the maintainer's approval: D6 (older Pebble versions keep working). E3a is done (ADR 0018).
+- **Status:** Approved by the maintainer on 2026-10-05, with the answers in section 12. Changed during E3a with the maintainer's approval: D6 (older Pebble versions keep working). E3a and E3b are done (ADR 0018). E3c (history and restore) is planned, see 7.5.
 - **Date:** 2026-10-05
 - **Work package:** E3 (master plan, milestone E). It depends on E1 (ADR 0013), E2 (ADR 0014) and ADR 0017.
 - **Author:** Opus. **Implementer:** Sonnet, in two PRs (E3a and E3b, see section 11).
@@ -186,7 +186,7 @@ The daily job deletes tombstones older than 90 days (ADR 0013). In E3 it also de
 
 `ChangeJournal.changesSince(cursor: Cursor?, limit: Int = 500): ChangeBatch`
 - A null cursor, or a cursor with another epoch, means "from the start".
-- It selects the journal entries with `seq > cursor.seq`, in `seq` order, up to `limit`.
+- It selects the journal entries with `seq > cursor.seq`, in `seq` order, up to `limit` (`limit` counts journal entries, not rows).
 - **Whole rows:** for each (`tbl`, `uid`) in that selection, the batch has **all** journal entries of that row, also older ones. Thus the receiver can insert a row that it does not have. The merge is idempotent, so extra entries do no harm.
 - `ChangeBatch(epoch, rows: List<RowChange>, next: Cursor)`, where `next.seq` is the largest selected `seq`. `RowChange(table, uid, fields: Map<String, Stamped(value, hlc)>)`.
 
@@ -233,6 +233,8 @@ The merge builds SQL only from the names in `SyncSchema`. It binds all values as
 - `exdates` is one text field. If two devices skip different days at the same time, one skip is lost. A set merge is possible later.
 - LWW loses the older of two concurrent edits to the same field. A note edited on two devices keeps one text.
 - Clocks that are wrong by less than 60 minutes can change which concurrent edit wins.
+
+**E3c (planned, the maintainer's decision on 2026-10-05):** keep each value that a newer value replaced (your own edits and a value that lost a merge) for 90 days, on this device only. Each event, note and reminder gets a "History" view. You pick an old version, and Pebble restores it as a new edit, which then syncs. A deleted item can come back only as a copy with a new uid, because a delete is final (D5). E3c needs a short spec and the maintainer's approval first.
 
 ## 8. Journal epoch and restore (E3b)
 

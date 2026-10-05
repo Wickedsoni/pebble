@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-05
-- **Work package:** E3a. The design is in `docs/specs/E3-CHANGE-JOURNAL.md` (approved on 2026-10-05).
+- **Work package:** E3a and E3b. The design is in `docs/specs/E3-CHANGE-JOURNAL.md` (approved on 2026-10-05).
 
 ## Context
 
@@ -32,6 +32,11 @@ Facts that we found during the work:
 7. **`ChangeJournal.verify`** lists each field where the journal and the table do not agree. The tests call it after writes.
 8. **Calendar:** `CalendarRepository.save` returns false for a deleted uid. The ICS import counts these events and tells you (ADR 0014 is revised).
 9. **No `:sync` module** (spec D1, ADR 0008 is revised).
+10. **Merge (E3b):** `changesSince(cursor, limit)` gives whole rows; `limit` counts journal entries. `apply(batch, wall)` checks every name, HLC and value against `SyncTable` (each field has a type), and the drift limit, before it writes. Then it merges in one transaction: the larger HLC wins, and for `deleted_at` (deleted, HLC) wins.
+    - The winning fields are written one HLC group at a time, oldest first. Each update then changes only fields that have entries with its own HLC, so the guard triggers also check the merge.
+    - A new row is inserted with no `hlc`, then its entries are written and its `hlc` is set.
+    - A row that this device removed (no row, but journal entries: a grave) drops the change.
+11. **Epoch (E3b):** the setting `sync.journalEpoch` names this copy of the journal. `Backup.applyStaged` writes a new one, so a peer's old cursor reads from the start.
 
 ## Consequences
 
@@ -40,6 +45,9 @@ Facts that we found during the work:
 - A deleted event does not come back from an ICS file. Before E3 it did.
 - Each write adds one query for `max(hlc)` and one journal entry for each field. `record` takes 82 µs for 3 fields on the developer laptop (`ChangeJournalTest`, no disk sync). A whole note write takes about 10 ms; most of that is the disk sync of the commit.
 - The journal keeps a second copy of the text of notes, reminders and events. After the 90-day purge, only the grave of a deleted row stays.
+
+- **Measured (E3b, developer laptop, warm):** `changesSince` of 500 rows takes 17 ms (spec: < 50 ms); `apply` of 500 rows takes 110 to 130 ms (spec: < 200 ms). The convergence test (300 sequences of 50 operations, 3 devices) passes; it runs for about 100 s.
+- **Found (E3b):** outside a transaction, each query opens and closes a SQLite connection (about 2 ms; the behaviour of SQLDelight's `ThreadedConnectionManager`, copied in ADR 0017). This is a follow-up, not part of E3.
 
 ## Alternatives
 

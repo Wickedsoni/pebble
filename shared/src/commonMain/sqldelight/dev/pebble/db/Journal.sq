@@ -151,3 +151,11 @@ DELETE FROM change_journal WHERE tbl = 'calendar_event' AND field <> 'deleted_at
 -- SQLite's clock, for writes that got no time (the same "now" as the queries that coalesce a null time).
 nowMillis:
 SELECT CAST(strftime('%s', 'now') AS INTEGER) * 1000;
+
+-- The entries after [seq], in seq order (ChangeJournal.changesSince, WP E3b).
+entriesAfter:
+SELECT seq, tbl, uid FROM change_journal WHERE seq > ? ORDER BY seq LIMIT ?;
+
+-- All entries of one row, for a whole-row batch.
+rowEntries:
+SELECT seq, field, value, hlc FROM change_journal WHERE tbl = ? AND uid = ?;
