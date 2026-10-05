@@ -5,7 +5,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ## Session handoff (5 Oct 2026) — read this first
 
-**This file is current only on branch `wp/e1-sync-ready-rows`** (the top of the PR stack). `main` still has the 2 Oct version until the stack is merged.
+**This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### 5 Oct: WP C3 done (PR #29, on top of #28)
 - **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
@@ -71,32 +71,14 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - the lite build has no speech models ("Not installed") and runs.
 - **Release:** `release.yml` now builds `Pebble-x.y.z.msi` and `Pebble-lite-x.y.z.msi`. Packs are signed on your laptop: `./gradlew :desktopApp:modelPack --args="sign …"` (see CLAUDE.md). No pack is published yet. Publish a speech pack with the next release, for lite users.
 
-### The PR stack (nothing is merged yet)
-Each PR is based on the one before it. Merge in this order, squash-merge each, and let GitHub retarget the next PR to `main`:
+### The PR stack is merged (5 Oct 2026)
+All 17 work-package PRs (#16–#32) are squash-merged into `main` in order, one commit each (A1 … E1); #19 (the `reduce_range` model fix) is inside #18's commit. Only Dependabot #6 is open (your call).
 
-| Order | PR | Branch | What |
-|---|---|---|---|
-| 1 | #16 | `wp/a1-guardrails` | A1: `CLAUDE.md`, STE style, glossary, ADRs 0000-0009 |
-| 2 | #17 | `wp/a2-hygiene` | A2: stale docs, roadmap M8-M10 |
-| 3 | #19 | `model/intent-reduce-range` | Model fix: `reduce_range` (CPUs without VNNI). **Base is A3's branch:** merge #19 into `wp/a3-quality-gates` first |
-| 4 | #18 | `wp/a3-quality-gates` | A3: model tests in CI, schema parity, Kover, warnings as errors |
-| 5 | #20 | `wp/b1-time-dispatchers-scopes` | B1: `AppEnv`, one app scope |
-| 6 | #21 | `wp/b2-command-executor` | B2: `CommandExecutor`, undo as a value |
-| 7 | #22 | `wp/b3-ui-port-logger` | B3: `UiPort`, `Logger`; "open reminders" command |
-| 8 | #23 | `wp/b4-model-runtime` | B4: `LazyModel`, `ModelRuntime`, checksum cache |
-| 9 | #24 | `wp/b5-event-writes-sqlite` | B5: event writes off the UI thread, WAL |
-| 10 | #25 | `wp/b6-history-scaling` | B6: `daily_stat` roll-up, raw rows kept |
-| 11 | #26 | `wp/b7-ui-state-pilot` | B7 pilot: Reminders state holder, `docs/UI-PATTERN.md` |
-| 12 | #27 | `wp/c1-sentence-embedding` | C1: sentence embedding (model `intent-v3-pruned`) |
-| 13 | #28 | `wp/c2-memory-search` | C2: memory search |
-| 14 | #29 | `wp/c3-personal-layer` | C3: personal layer + "Teach Pebble a command" (ADR 0010) |
-| 15 | #30 | `wp/d2-model-packs` | D2: signed model packs, lite installer (ADR 0011) |
-| 16 | #31 | `wp/c5-local-chat` | C5: local chat, Smart replies, English only (ADR 0012) |
-| 17 | (new) | `wp/e1-sync-ready-rows` | E1: sync-ready rows, tombstones, device id (ADR 0013) |
-
-- Merge #25 and #26 close together: #26 has the fix for a slow-disk test timeout that #25's CI can hit.
-- If a later PR shows conflicts after a squash-merge, rebase it on `main`. The content is the same.
-- Model releases published this session: `models-2026.10b` (v2r), `models-2026.11` (v3, current in the manifest). The installed v0.1.2 still has the old model, so cut a new app release after the merge.
+Lessons from the merge (for the next stack):
+- **Deleting a PR's base branch closes the PR** (this repo deletes merged branches). Point the next PR at `main` *before* you merge the one under it.
+- `main` requires up-to-date branches: after each squash-merge, `git rebase --onto main <old base commit> <branch>`, push, wait for CI.
+- CI runners change CPU (AMD EPYC, Intel Xeon 8370C / 6973P-C). Old commits with a 1e-3 ONNX tolerance can fail on a new CPU; the tolerance fix (5e-3, `MAX_CONFIDENCE_DRIFT`, `MAX_EMBEDDING_DRIFT`) is now on `main`. One Spotless "could not read path" failure was a flake (re-run).
+- Model releases: `models-2026.11` (v3) is the current manifest. The installed v0.1.2 still has the old model, so **cut a new app release** (0.3.0: needs your yes for `gh release`; publish the chat pack and a speech pack with it).
 
 ### Checks only you can do (the live app)
 1. Reminders page: click +/−, a toggle, a strictness chip and ✕ once (B7; the synthetic clicks hit the IDE).
@@ -109,7 +91,7 @@ Each PR is based on the one before it. Merge in this order, squash-merge each, a
 - My two test turns ("open reminders", "notes kholo") are in your real Chat history. Delete them if you like.
 
 ### Next session
-1. Say "continue from NEXT_SESSION.md" and check out `wp/c5-local-chat` (or `main`, if you merged the stack).
+1. Say "continue from NEXT_SESSION.md" on `main`.
 2. **E2** (calendar) is next in the delivery order (then E4, C4). Cut release 0.3.0 after C5 + D2: publish the chat pack and a speech pack with it.
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 4. Then C4 (offline IPS evaluator), D2, C5, as in the delivery order of the plan.
