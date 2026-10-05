@@ -99,6 +99,11 @@ SELECT count(*) FROM one_off_reminder WHERE event_uid = ? AND occurrence_at = ? 
 linkedEventDeleted:
 SELECT count(*) FROM calendar_event WHERE uid = ? AND deleted_at IS NOT NULL;
 
+-- The event was deleted, or changed (a new hlc: moved, edited) after the agenda read it at :hlc. The agenda then
+-- makes the reminders of the new version; a reminder for the version it read would fire at the old time.
+linkedEventChanged:
+SELECT count(*) FROM calendar_event WHERE uid = :uid AND (deleted_at IS NOT NULL OR hlc IS NOT :hlc);
+
 -- The event changed or was deleted: its reminders that did not fire yet go (tombstones).
 deletePendingLinked:
 UPDATE one_off_reminder SET deleted_at = :at, updated_at = :at WHERE event_uid = :eventUid AND done_at IS NULL AND deleted_at IS NULL;

@@ -110,6 +110,25 @@ class CalendarTest {
         assertTrue(reminders.pendingOneOffs().isEmpty())
     }
 
+    /**
+     * The same race for a move: the loop reads the event at 5 pm, you move it to 6 pm (a new HLC, and its own
+     * eventChanged makes the 5:45 reminder), then the loop adds the 4:45 reminder of the version it read. Refused.
+     */
+    @Test
+    fun aReminderIsNotMadeForAnEventMovedAfterTheAgendaReadIt() {
+        val now = at(9, 8)
+        calendar.save(event("dentist", 9, 17, remind = 15), at = now)
+        val (read, hlc) = calendar.betweenWithHlc(now, at(10, 0)).single()
+        calendar.save(read.copy(startAt = at(9, 18), endAt = at(9, 19)), at = now + 1)
+        agenda.eventChanged(read.uid, now + 1)
+        assertFalse(reminders.addLinked("Event dentist at 5:00 PM", at(9, 16, 45), read.uid, at(9, 17), now, eventHlc = hlc))
+        assertEquals(listOf(at(9, 17, 45)), reminders.pendingOneOffs().map { it.dueAt }, "only the reminder of the moved event")
+        // The version it read is still current: the reminder is made as before.
+        val (_, current) = calendar.betweenWithHlc(now, at(10, 0)).single()
+        reminders.deletePendingLinked(read.uid, now + 2)
+        assertTrue(reminders.addLinked("Event dentist at 6:00 PM", at(9, 17, 45), read.uid, at(9, 18), now + 2, eventHlc = current))
+    }
+
     @Test
     fun aReminderWhoseTimeHasPassedIsDueNowAndAMovedEventGetsNewReminders() {
         val now = at(9, 16, 50)

@@ -7,11 +7,10 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (end of 5 Oct 2026, after WP E3c-2)
-- **State:** A1 … E4, C4, E3a, E3b and **E3c-1** (PR #51) are on `main`. **E3c-2** is on branch `wp/e3c2-history-ui` (PR open, waiting for CI and your yes to merge). Schema version 15; the next migration file is `15.sqm`.
+### Start here (6 Oct 2026, after WP E3c-2 and the agenda race fix)
+- **State:** A1 … E4, C4, E3a, E3b, E3c-1 (PR #51) and E3c-2 (PR #52) are on `main`. The agenda race fix (moved events) is on branch `wp/agenda-moved-event-race` (PR open, waiting for your yes to merge). Schema version 15; the next migration file is `15.sqm`.
 - **Next WP: E3c-3** (spec `docs/specs/E3C-HISTORY.md` section 6): move the Notes page to the state-holder pattern (B7 roll-out, `docs/UI-PATTERN.md`), then add its "History" button with the shared `HistoryStateHolder` / `WithHistory` (as the Calendar and Reminders pages do).
   - After E3c: milestone F (F0 needs an Opus spec and a security review).
-- **Known gap (from PR #51):** an event *moved* while the 10-minute agenda loop runs can keep one reminder for its old time (the delete case is fixed). A small follow-up: make `addLinked` check the occurrence against the live event in its transaction.
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
 - **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.
 - **How each WP lands:**
@@ -24,7 +23,11 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db`, `pebble-backup-e3a.db` and `pebble-backup-e3c.db` (taken before the E2, E3a and E3c-1 migrations) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: WP E3c-2 done (History dialog + "Recently deleted", branch `wp/e3c2-history-ui`)
+### 6 Oct: agenda race fix for moved events (branch `wp/agenda-moved-event-race`)
+- **What:** the 10-minute loop reads each event with its HLC (`CalendarRepository.betweenWithHlc`) and passes it to `addLinked(..., eventHlc)`. In its IMMEDIATE transaction, `addLinked` refuses when the event changed since (a new HLC: moved, edited) or was deleted. The event's own `eventChanged` makes the reminders of the new version. This closes the gap left by PR #51.
+- **Test:** `CalendarTest.aReminderIsNotMadeForAnEventMovedAfterTheAgendaReadIt`. 331 Kotlin tests, 0 skipped. The built app started on a copy of your data; the loop made the event reminders; no new log lines.
+
+### 5 Oct: WP E3c-2 done (History dialog + "Recently deleted", PR #52, merged)
 - **What:** a "History" chip on each event (Calendar page) and each synced one-off reminder (Reminders page) opens a dialog: versions newest first, "this device" or "another device", "Lost in a sync conflict", the changed fields (old → now), and "Restore" (hidden when a version is the same as now). One shared `HistoryStateHolder` + `HistoryOverlay`. Memory page: a "Recently deleted" card (`RecentlyDeletedStateHolder`) with "Restore as a copy" and "Clear history" (asks first).
 - **Small changes:** `OneOffReminder.uid` (null for calendar-made reminders: they have no history); `NoteRepository.activeFlow(context)` (the card needs the test dispatcher).
 - **Tests:** `HistoryStateHolderTest` (7). 329 Kotlin tests, 0 skipped.
