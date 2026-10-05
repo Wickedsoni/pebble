@@ -2,6 +2,7 @@ package dev.pebble.core.reminders
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
+import dev.pebble.core.db.writeTransaction
 import dev.pebble.db.PebbleDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -77,8 +78,8 @@ class ReminderRepository(private val db: PebbleDatabase) {
      * A reminder for one occurrence of a calendar event (WP E2), linked by [eventUid] and [occurrenceAt]. Returns false
      * when that occurrence already has a live reminder (pending, done or snoozed), so a second call adds nothing.
      */
-    fun addLinked(title: String, dueAt: Long, eventUid: String, occurrenceAt: Long, at: Long): Boolean = db.transactionWithResult {
-        if (q.linkedOneOffExists(eventUid, occurrenceAt).executeAsOne() > 0L) return@transactionWithResult false
+    fun addLinked(title: String, dueAt: Long, eventUid: String, occurrenceAt: Long, at: Long): Boolean = db.writeTransaction {
+        if (q.linkedOneOffExists(eventUid, occurrenceAt).executeAsOne() > 0L) return@writeTransaction false
         q.insertLinkedOneOff(title, dueAt, Strictness.NORMAL.name, at, eventUid, occurrenceAt)
         true
     }
