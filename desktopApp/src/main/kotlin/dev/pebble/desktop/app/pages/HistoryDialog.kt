@@ -60,7 +60,7 @@ fun BoxScope.HistoryOverlay(state: HistoryUiState, onEvent: (HistoryEvent) -> Un
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                state.message ?: "Older versions, newest first. “Restore” makes a version the current one, as a new edit.",
+                state.message ?: HINT,
                 color = c.secondary,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -86,9 +86,31 @@ fun BoxScope.HistoryOverlay(state: HistoryUiState, onEvent: (HistoryEvent) -> Un
                     }
                 }
             }
+            if (state.versions.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                if (state.confirmDelete) {
+                    Text(
+                        "Delete all old versions of this item on this computer? You cannot undo this. Backups you made before keep them.",
+                        color = c.warm,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip("Delete them", false) { onEvent(HistoryEvent.ConfirmDelete) }
+                        Chip("Cancel", false) { onEvent(HistoryEvent.CancelDelete) }
+                    }
+                } else {
+                    Chip("Delete old versions", false) { onEvent(HistoryEvent.AskDelete) }
+                }
+            }
         }
     }
 }
+
+private const val HINT =
+    "Older versions, newest first. “Restore” makes a version the current one, as a new edit. " +
+        "Pebble keeps old versions on this computer for 90 days."
 
 /** A plain "History" chip with padding, for a row on a page. */
 @Composable

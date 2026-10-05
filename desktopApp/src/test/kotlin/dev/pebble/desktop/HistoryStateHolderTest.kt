@@ -171,6 +171,37 @@ class HistoryStateHolderTest {
         assertTrue(h.state.value.versions.single().changes.single().lowercase().startsWith("time: sun 4 oct, 12:00 pm"))
     }
 
+    @Test
+    fun deleteOldVersionsAsksFirstThenRemovesOnlyThisItemsHistory() = runTest {
+        val id = notes.add("pin 4821", at(4, 9))
+        notes.update(id, "pin: ask me", at(4, 9, 1))
+        val other = notes.add("a", at(4, 9))
+        notes.update(other, "b", at(4, 9, 1))
+        val uid = db.wellnessQueries.noteUid(id).executeAsOne().uid!!
+        val h = dialog()
+        h.onEvent(HistoryEvent.Open(SyncTable.NOTE, uid, "pin: ask me"))
+        advanceUntilIdle()
+        assertEquals(1, h.state.value.versions.size)
+
+        h.onEvent(HistoryEvent.AskDelete)
+        assertTrue(h.state.value.confirmDelete)
+        h.onEvent(HistoryEvent.CancelDelete)
+        assertFalse(h.state.value.confirmDelete)
+        assertEquals(1, history.versions(SyncTable.NOTE, uid).size, "Cancel keeps them")
+
+        h.onEvent(HistoryEvent.AskDelete)
+        h.onEvent(HistoryEvent.ConfirmDelete)
+        advanceUntilIdle()
+        val s = h.state.value
+        assertTrue(s.open)
+        assertFalse(s.confirmDelete)
+        assertEquals(emptyList(), s.versions)
+        assertEquals("Deleted 1 old version (1 history entry).", s.message)
+        val otherUid = db.wellnessQueries.noteUid(other).executeAsOne().uid!!
+        assertEquals(1, history.versions(SyncTable.NOTE, otherUid).size, "other items keep their history")
+        assertEquals("pin: ask me", notes.recent().first { it.id == id }.text, "the note itself does not change")
+    }
+
     // ------------------------------------------------------------------ the "Recently deleted" card
 
     @Test
