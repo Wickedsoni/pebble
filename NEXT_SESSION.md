@@ -7,6 +7,22 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
+### Start here (end of 5 Oct 2026)
+- **State:** everything is on `main` (A1 … E1, 17 WPs). No open PRs, no other branches. CI on `main` is green.
+- **Next WP: E2 (calendar):** master plan `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`, section E2. Read its "Read first" files.
+  - The next migration file is `12.sqm` (current schema version 12; see CLAUDE.md "Verified facts").
+  - New calendar rows must follow E1: `uid`, `updated_at`, `deleted_at`, `hlc`, `origin_device`, and tombstones (ADR 0013).
+- **How each WP lands:**
+  1. Branch `wp/<id>-<slug>` from `main`, then the tests.
+  2. Build the distributable and **open and check the app** (no need to ask).
+  3. PR → CI. Merging into `main`: on 5 Oct you asked to merge the finished stack; ask before merging new PRs, unless you say otherwise.
+- **Waiting for your yes:** cut release **0.3.0** (`gh release`). It ships the v3 command model. Publish the chat pack and a speech pack with it: sign them with `./gradlew :desktopApp:modelPack`; the key is in `%USERPROFILE%\.pebble\signing\` (back it up offline).
+- **Deferred by you:** C6 model training (Hindi/Hinglish chat distillation). Hardware: RTX 4050 6 GB, no budget for now. The plan is in ADR 0012. Do not start it until you ask.
+- **Your housekeeping:**
+  - delete `%APPDATA%\Pebble\pebble-backup-e1.db` when you are happy;
+  - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
+- **Dependabot PR #6** (Gradle wrapper 9.8.0) was closed by you on 5 Oct. A wrapper update can come back as its own WP.
+
 ### 5 Oct: WP C3 done (PR #29, on top of #28)
 - **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
   - cosine ≥ 0.90 alone let one example reach 3.5 sentences on average (up to 13);
@@ -72,7 +88,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Release:** `release.yml` now builds `Pebble-x.y.z.msi` and `Pebble-lite-x.y.z.msi`. Packs are signed on your laptop: `./gradlew :desktopApp:modelPack --args="sign …"` (see CLAUDE.md). No pack is published yet. Publish a speech pack with the next release, for lite users.
 
 ### The PR stack is merged (5 Oct 2026)
-All 17 work-package PRs (#16–#32) are squash-merged into `main` in order, one commit each (A1 … E1); #19 (the `reduce_range` model fix) is inside #18's commit. Only Dependabot #6 is open (your call).
+All 17 work-package PRs (#16–#32) are squash-merged into `main` in order, one commit each (A1 … E1); #19 (the `reduce_range` model fix) is inside #18's commit. Dependabot #6 was closed on 5 Oct.
 
 Lessons from the merge (for the next stack):
 - **Deleting a PR's base branch closes the PR** (this repo deletes merged branches). Point the next PR at `main` *before* you merge the one under it.
@@ -84,7 +100,7 @@ Lessons from the merge (for the next stack):
 1. Reminders page: click +/−, a toggle, a strictness chip and ✕ once (B7; the synthetic clicks hit the IDE).
 2. Memory page: try one search in "Search memory" (C2).
 3. ~~A reminder toast appears (B3 binding).~~ Seen in the 5 Oct live check ("Call mom").
-4. The older items below: battery run, "Start with Windows", Dependabot #6, noreply email, code signing.
+4. The older items below: battery run, "Start with Windows", noreply email, code signing.
 
 ### Open decisions
 - **Search model (C2):** keep the shared encoder (14/16), ship e5-small for search (16/16, +~100 MB while loaded), or a contrastive fine-tune in C6.
@@ -150,7 +166,6 @@ Lessons from the merge (for the next stack):
 - **Battery:** not measured yet; the laptop was plugged in.
 
 ## Open items
-- **Dependabot PR #6** (Gradle wrapper 9.4.1 → 9.8.0) is waiting for review.
 - **Untested on real hardware:**
   - "Start with Windows"
   - a battery drain run (`measure.ps1` unplugged, with and without Pebble)
@@ -186,7 +201,7 @@ Lessons from the merge (for the next stack):
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)
-1. Merge Dependabot PR #6 (Gradle wrapper 9.4.1 → 9.8.0). The GitHub MCP server is disconnected: its token expired. Authorize it again, or use the `gh` CLI.
+1. The GitHub MCP server is disconnected (its token expired); Claude uses the `gh` CLI. Authorize it again if you want it.
 2. Set a noreply commit email: `git config user.email <id>+Wickedsoni@users.noreply.github.com`.
 3. Do a battery run with `tools/perf/measure.ps1`, unplugged, with and without Pebble.
 4. Check "Start with Windows" on the installed app.
