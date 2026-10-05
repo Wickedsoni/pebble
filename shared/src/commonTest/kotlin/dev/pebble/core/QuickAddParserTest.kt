@@ -133,4 +133,15 @@ class QuickAddParserTest {
         assertEquals(SetInterval(ReminderKind.STRETCH, 30, null), p("stretch every 30 min microsoft"))
         assertEquals(SetInterval(ReminderKind.EYES, 20, Strictness.STRICT), p("eyes every 20 min strict"))
     }
+
+    @Test fun politePrefixesAreNotPartOfTheTitle() {
+        assertEquals(RemindAt("Call mom", 5, 0, null, flexibleHalfDay = true), p("can you remind me to call mom at 5"))
+        assertEquals(RemindAt("Call mom", 17, 0, null), p("hey pebble remind me to call mom at 5pm"))
+        assertEquals(RemindIn("Stretch", 20), p("please remind me to stretch in 20 min"))
+    }
+
+    @Test fun strictnessWordsMayHaveEndings() {
+        assertEquals(SetInterval(ReminderKind.STRETCH, 30, Strictness.GENTLE), p("stretch every 30 min gently"))
+        assertEquals(SetInterval(ReminderKind.WATER, 30, Strictness.STRICT), p("water every 30 min strictly"))
+    }
 }

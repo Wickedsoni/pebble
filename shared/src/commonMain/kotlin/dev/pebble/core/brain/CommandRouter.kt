@@ -150,17 +150,31 @@ class CommandRouter(
      */
     private fun reminderTitle(u: Understood, text: String, intent: String = u.top.intent): String {
         val words = u.words.zip(u.tags).map { (w, t) ->
-            Triple(w, w.lowercase().trim(',', '.', '?', '!'), t.removePrefix("B-").removePrefix("I-"))
+            TitleWord(w, w.lowercase().trim(',', '.', '?', '!'), t.removePrefix("B-").removePrefix("I-"))
         }
-        fun isTimeWord(i: Int) = words[i].third in timeTags || words[i].second in timeWords
+        fun isTimeWord(i: Int) = words[i].tag in timeTags || words[i].low in timeWords
         val kept = words.indices.filter { i ->
-            val low = words[i].second
-            val nextToTime = (i > 0 && (isTimeWord(i - 1) || words[i - 1].second in timeCues)) ||
-                (i < words.lastIndex && (isTimeWord(i + 1) || words[i + 1].second in timeCues))
-            !isTimeWord(i) && low !in particles && !(HinglishTime.numberOf(low) != null && nextToTime)
+            val nextToTime = (i > 0 && (isTimeWord(i - 1) || words[i - 1].low in HinglishTime.clockBeforeCues)) ||
+                (i < words.lastIndex && (isTimeWord(i + 1) || words[i + 1].low in HinglishTime.clockBeforeCues))
+            !isTimeWord(i) && words[i].low !in particles && !(HinglishTime.numberOf(words[i].low) != null && nextToTime)
         }.map { words[it] }
-        val title = kept.dropWhile { it.second in filler }.dropLastWhile { it.second in filler }.joinToString(" ") { it.first }.trim()
+        val trimmed = withoutFramingPhrases(kept).dropWhile { it.low in filler }.dropLastWhile { it.low in filler }
+        val title = trimmed.joinToString(" ") { it.text }.trim()
         return title.ifBlank { if (intent == "alarm_set") "Wake up" else "Reminder" }.replaceFirstChar(Char::uppercase)
+    }
+
+    /** One word of a reminder sentence: as written, lower case without end punctuation, and its slot kind. */
+    private class TitleWord(val text: String, val low: String, val tag: String)
+
+    /** [words] without any "remind me (to)" / "yaad dila do" / "reminder laga do" run, wherever it stands. */
+    private fun withoutFramingPhrases(words: List<TitleWord>): List<TitleWord> {
+        val out = ArrayList<TitleWord>()
+        var i = 0
+        while (i < words.size) {
+            val phrase = framingPhrases.firstOrNull { p -> p.indices.all { words.getOrNull(i + it)?.low == p[it] } }
+            if (phrase != null) i += phrase.size else out += words[i++]
+        }
+        return out
     }
 
     private fun askWhen(text: String, u: Understood): Routed.Ask {
@@ -235,10 +249,20 @@ class CommandRouter(
         /** Hindi particles: never part of a title, wherever they stand. */
         private val particles = setOf("ki", "ka", "ke", "ko", "की", "का", "के", "को")
 
+        /** Phrases that frame a reminder, removed wherever they stand. Longest first. */
+        private val framingPhrases = listOf(
+            listOf("remind", "me", "to"), listOf("remind", "me"), listOf("remind", "to"),
+            listOf("yaad", "dila", "do"), listOf("yaad", "dila", "dena"), listOf("yaad", "dilana"), listOf("yaad", "dilaana"),
+            listOf("yaad", "dila"), listOf("reminder", "laga", "do"), listOf("reminder", "lagao"), listOf("reminder", "laga"),
+            listOf("याद", "दिला", "दो"), listOf("याद", "दिला", "देना"), listOf("याद", "दिलाना"), listOf("याद", "दिला"),
+            listOf("रिमाइंडर", "लगा", "दो"), listOf("रिमाइंडर", "लगाओ"), listOf("रिमाइंडर", "लगा"),
+        )
+
         /** Words that frame a reminder rather than describe it, in all three scripts. Removed only at the start or end. */
         private val filler = setOf(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
             "around", "approximately", "by", "pls", "plz", "dont", "lagbhag", "लगभग",
+            "can", "could", "would", "will", "you", "hey", "pebble", "ping", "kindly",
             "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "do", "karo", "kar", "laga", "lagao", "utha", "in",
             "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",
         )
@@ -249,8 +273,5 @@ class CommandRouter(
             "today", "tomorrow", "tonight", "morning", "evening", "night", "afternoon", "min", "mins", "minute", "minutes", "baad",
             "बजे", "सुबह", "शाम", "रात", "दोपहर", "कल", "आज", "परसों", "मिनट", "बाद", "घंटे",
         )
-
-        /** Words that mark a number next to them as part of the time ("at 5", "saade paanch"). */
-        private val timeCues = setOf("at", "by", "around", "@", "saade", "sade", "sava", "paune", "past", "साढ़े", "सवा", "पौने")
     }
 }

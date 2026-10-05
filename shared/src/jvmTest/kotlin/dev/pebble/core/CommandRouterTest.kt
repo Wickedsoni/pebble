@@ -296,4 +296,25 @@ class CommandRouterTest {
         assertIs<QuickCommand.RemindAt>(r.command)
         assertEquals(4, r.command.hour)
     }
+
+    @Test
+    fun framingWordsGoFromAnyPositionButInnerWordsStay() {
+        val ping = "ping me in 15 mins to take the clothes off the line"
+        val pingTags = listOf("O", "O", "O", "B-time", "I-time", "O", "O", "O", "O", "O", "O", "O")
+        val r = CommandRouter({ model(ping to u(ping, pingTags, "calendar_set" to 0.9f)) }).route(ping) as Routed.Run
+        assertEquals(QuickCommand.RemindIn("Take the clothes off the line", 15), r.command)
+
+        val hey = "hey pebble remind me to call mom tomorrow evening at five"
+        val heyTags = List(6) { "O" } + listOf("O", "B-date", "B-timeofday", "O", "B-time")
+        val h = CommandRouter({ model(hey to u(hey, heyTags, "calendar_set" to 0.9f)) }).route(hey) as Routed.Run
+        assertEquals(QuickCommand.RemindAt("Call mom", 17, 0, 1, false), h.command)
+    }
+
+    @Test
+    fun keBaadSetsARelativeReminder() {
+        val text = "10 minute ke baad chai banane ki yaad dilana"
+        val tags = listOf("B-time", "I-time", "I-time", "I-time", "O", "O", "O", "O", "O")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        assertEquals(10, (r.command as QuickCommand.RemindIn).minutes)
+    }
 }

@@ -127,17 +127,41 @@ object HinglishTime {
     private val beforeMarkers = setOf("in", "after")
     private val afterMarkers = setOf("baad", "bad", "mein", "me", "बाद", "में")
 
+    /** "ke baad" / "के बाद": the genitive sits between the duration and the marker. */
+    private val genitives = setOf("ke", "के")
+
+    /** Words that may stand between "in" and the duration: "in about 10 minutes", "in the next 10 min". */
+    private val durationFillers = setOf("about", "around", "approximately", "roughly", "just", "the", "next", "another")
+
     /** Longest relative reminder: one week, in minutes. */
     private const val MAX_RELATIVE_MINUTES = 7 * 24 * 60
 
+    /** True when an after-marker ("baad", "ke baad", "mein"…) stands at [index]. */
+    private fun afterMarkerAt(w: List<String>, index: Int): Boolean {
+        val word = w.getOrNull(index) ?: return false
+        return word in afterMarkers || (word in genitives && w.getOrNull(index + 1) in afterMarkers)
+    }
+
+    /** True when "in" / "after" stands before [start], with at most two filler words between. */
+    private fun beforeMarkerAt(w: List<String>, start: Int): Boolean {
+        var k = start - 1
+        var skipped = 0
+        while (k >= 0 && w[k] in durationFillers && skipped < 2) {
+            k--
+            skipped++
+        }
+        return w.getOrNull(k) in beforeMarkers
+    }
+
     /**
-     * "in 20 minutes", "20 min baad", "बीस मिनट बाद", "ek ghante mein", "aadhe ghante baad", "thodi der mein".
+     * "in 20 minutes", "20 min baad", "10 minute ke baad", "बीस मिनट बाद", "ek ghante mein", "aadhe ghante baad",
+     * "thodi der mein", "in about 10 minutes".
      * The marker ("in", "baad", "mein"…) must stand right next to the duration, so "the 30 minute standup at 4" is
      * no duration. A duration with no marker ("2 hours") counts only when it ends the text and no clock was found.
      */
     private fun relative(w: List<String>, hasClock: Boolean): When? {
         val der = w.indexOfFirst { it == "der" || it == "देर" }
-        if (der > 0 && w[der - 1] in setOf("thodi", "thori", "थोड़ी", "थोडी") && w.getOrNull(der + 1) in afterMarkers) return When.In(15)
+        if (der > 0 && w[der - 1] in setOf("thodi", "thori", "थोड़ी", "थोडी") && afterMarkerAt(w, der + 1)) return When.In(15)
         val i = w.indexOfFirst { it in units }
         if (i <= 0) return null
         val prev = w[i - 1]
@@ -147,15 +171,24 @@ object HinglishTime {
             prev in setOf("a", "an") && w.getOrNull(i - 2) == "half" -> 0.5.also { start = i - 2 }
             else -> (number(prev) ?: if (prev in setOf("a", "an", "one")) 1 else return null).toDouble()
         }
-        val marked = w.getOrNull(start - 1) in beforeMarkers || w.getOrNull(i + 1) in afterMarkers
+        val marked = beforeMarkerAt(w, start) || afterMarkerAt(w, i + 1)
         if (!marked && (i != w.lastIndex || hasClock)) return null
         return When.In((n * units.getValue(w[i])).coerceIn(1.0, MAX_RELATIVE_MINUTES.toDouble()).toInt())
     }
 
     private val clockRx = Regex("""^(\d{1,2})[:.](\d{2})$""")
-    private val clockAfterCues = setOf("baje", "bje", "बजे", "o'clock", "oclock", "am", "pm")
-    private val clockBeforeCues =
-        setOf("at", "@", "saade", "sade", "साढ़े", "साढे", "sava", "savaa", "sawa", "सवा", "paune", "pone", "पौने", "past")
+    private val clockAfterCues = setOf("baje", "bje", "बजे", "oclock", "am", "pm")
+
+    /** Words right before an hour that mark it as a clock time. Shared with the reminder title in `CommandRouter`. */
+    internal val clockBeforeCues = setOf(
+        "at", "by", "around", "before", "till", "until", "approx", "approximately", "lagbhag", "लगभग", "@",
+        "saade", "sade", "साढ़े", "साढे", "sava", "savaa", "sawa", "सवा", "paune", "pone", "पौने", "past",
+    )
+
+    /** Number words that are also common words ("do" = give, "ek" = a, "one", "sat"…): never a time on their own. */
+    private val ambiguousNumbers = setOf(
+        "do", "ek", "one", "sat", "tin", "che", "bara", "bis", "teen", "char", "das", "एक", "दो",
+    )
     private val dayWords = setOf("today", "aaj", "aj", "आज", "tomorrow", "tmrw", "kal", "कल", "parso", "parson", "परसों", "tonight")
     private val dayFiller = dayWords + weekdayWords.keys + nextWords + partWords.values.flatten()
 
@@ -174,15 +207,25 @@ object HinglishTime {
         w.firstOrNull { it in setOf("dhai", "ढाई") }?.let { return 2 to 30 }
         if (w.any { it in setOf("noon", "midday") }) return 12 to 0
         if (w.any { it == "midnight" }) return 0 to 0
+        quarterClock(w)?.let { return it }
         for ((i, raw) in w.withIndex()) {
             val word = raw.removePrefix("@")
             val h = hourNumber(word) ?: continue
             if (w.getOrNull(i + 1) in dateWords) continue
             val prev = w.getOrNull(i - 1)
             val next = w.getOrNull(i + 1)
+            // "five thirty pm": an hour word, a minute word, then am / pm.
+            val minuteWord = next?.let { number(it) }?.takeIf { it in 10..59 }
+            if (minuteWord != null && w.getOrNull(i + 2) in setOf("am", "pm")) return h to minuteWord
             val cued = raw != word || prev in clockBeforeCues || next in clockAfterCues || prev in partFiller || next in partFiller
-            val onlyDigitsAmongDays = word.all { it.isDigit() } && w.withIndex().all { (j, x) -> j == i || x in dayFiller }
-            if (!cued && !onlyDigitsAmongDays) continue
+            val isDigits = word.all { it.isDigit() }
+            // "kal 5", "kal saat", "friday five": a number among day words only; the ambiguous words never.
+            val amongDays = if (isDigits) {
+                w.withIndex().all { (j, x) -> j == i || x in dayFiller }
+            } else {
+                word !in ambiguousNumbers && (prev in dayFiller || next in dayFiller)
+            }
+            if (!cued && !amongDays) continue
             return when (prev) {
                 "saade", "sade", "साढ़े", "साढे" -> h to 30
                 "sava", "savaa", "sawa", "सवा" -> h to 15
@@ -192,6 +235,18 @@ object HinglishTime {
             }
         }
         return null
+    }
+
+    /** "quarter to six" → 5:45, "quarter past six" → 6:15. */
+    private fun quarterClock(w: List<String>): Pair<Int, Int>? {
+        val q = w.indexOf("quarter")
+        if (q < 0) return null
+        val h = w.getOrNull(q + 2)?.let { hourNumber(it) } ?: return null
+        return when (w.getOrNull(q + 1)) {
+            "to" -> (if (h == 1) 12 else h - 1) to 45
+            "past" -> h to 15
+            else -> null
+        }
     }
 
     private val dateWords = setOf("tareekh", "tarikh", "tareek", "तारीख", "date", "th", "st", "nd", "rd")
@@ -232,6 +287,7 @@ object HinglishTime {
     private val meridiemRx = Regex("""(\d)(am|pm|a\.m\.|p\.m\.)""")
     private val punctuationRx = Regex("""[,!?;"'()]|\.+(?=\s|$)""")
     private val whitespaceRx = Regex("""\s+""")
+    private val oClockRx = Regex("""\bo clock\b""")
     private val devanagariDigits = "०१२३४५६७८९"
 
     private fun normalise(s: String): String {
@@ -247,6 +303,7 @@ object HinglishTime {
             .replace("o'clock", "oclock").replace("o’clock", "oclock")
             .replace(punctuationRx, " ")
             .replace(whitespaceRx, " ")
+            .replace(oClockRx, "oclock")
             .trim()
     }
 }

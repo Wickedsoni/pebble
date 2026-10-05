@@ -127,12 +127,13 @@ object QuickAddParser {
             """^(?:\+|drank|had|log)?\s*(\d+)?\s*(?:x\s*)?(?:glass(?:es)?(?: of water)?|water|💧)\s*(?:\+\s*(\d+))?$""",
             RegexOption.IGNORE_CASE,
         )
+    private const val ASK = """(?:(?:hey\s+pebble|pebble|hey|please|kindly|can\s+you|could\s+you|would\s+you|will\s+you)\s+)*"""
     private val inRx =
-        Regex("""^(?:remind me\s+(?:to\s+)?)?(.+?)\s+in\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$""", RegexOption.IGNORE_CASE)
+        Regex("""^$ASK(?:remind me\s+(?:to\s+)?)?(.+?)\s+in\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$""", RegexOption.IGNORE_CASE)
     private const val DAY = """(today|tomorrow|tmrw|(?:next\s+)?(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*day)"""
     private val atRx = Regex(
-        """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$DAY?$|""" +
-            """^(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)\s*(\d{1,2})(?::(\d{2}))?\s*$DAY?$""",
+        """^$ASK(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$DAY?$|""" +
+            """^$ASK(?:remind me\s+(?:to\s+)?|set\s+a\s+reminder\s+(?:for|to)\s+(?:my\s+)?)?(.+?)\s+(?:$DAY\s+)?(?:at|by|@)\s*(\d{1,2})(?::(\d{2}))?\s*$DAY?$""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -347,8 +348,8 @@ object QuickAddParser {
         }
     }
 
-    private val strictRx = Regex("""\b(?:strict|coach)\b""")
-    private val gentleRx = Regex("""\b(?:gentle|soft)\b""")
+    private val strictRx = Regex("""\b(?:strict\w*|coach\w*)\b""")
+    private val gentleRx = Regex("""\b(?:gentl\w*|soft\w*)\b""")
     private val normalRx = Regex("""\bnormal\b""")
 
     private fun strictnessOf(text: String): Strictness? {
