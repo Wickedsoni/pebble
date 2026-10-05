@@ -141,7 +141,7 @@ class ChangeJournal(private val db: PebbleDatabase) {
             return ApplyResult.Refused(e.reason)
         }
         return try {
-            db.transactionWithResult { merge(checked) }
+            db.transactionWithResult { merge(checked, wall) }
         } catch (e: Refusal) {
             ApplyResult.Refused(e.reason)
         } catch (e: Exception) {
@@ -180,7 +180,7 @@ class ChangeJournal(private val db: PebbleDatabase) {
         return rows
     }
 
-    private fun merge(rows: List<CheckedRow>): ApplyResult.Applied {
+    private fun merge(rows: List<CheckedRow>, wall: Long): ApplyResult.Applied {
         var rowsChanged = 0
         var fieldsChanged = 0
         var dropped = 0
@@ -210,6 +210,7 @@ class ChangeJournal(private val db: PebbleDatabase) {
                 changed = incoming
             } else {
                 changed = incoming.filter { (f, c) -> wins(f, c, local[f]) }
+                keepLost(table, uid, incoming - changed.keys, current, wall)
                 if (changed.isEmpty()) continue
                 changed.forEach { (f, c) -> q.recordEntry(table.sqlName, uid, f, c.value.toString(), c.hlc.toString()) }
                 // One update for each HLC, oldest first: each one changes only fields journaled with its HLC (guard triggers).
@@ -224,6 +225,40 @@ class ChangeJournal(private val db: PebbleDatabase) {
             if (table == SyncTable.CALENDAR_EVENT) events += uid
         }
         return ApplyResult.Applied(rowsChanged, fieldsChanged, events.toList(), dropped)
+    }
+
+    /**
+     * Keeps the peer's [losers] in `change_history` as lost edits (WP E3c, spec 4.2): not `deleted_at`, not a value
+     * equal to this row's value, and not an edit of this device (a peer that sends back an old value of ours).
+     * An old value that the history keeps already as replaced stays one row (the unique key).
+     */
+    private fun keepLost(table: SyncTable, uid: String, losers: Map<String, Change>, current: Map<String, JsonElement>, wall: Long) {
+        val me = deviceId()
+        losers.forEach { (f, c) ->
+            if (f == "deleted_at" || c.value == current[f] || c.hlc.device == me) return@forEach
+            db.changeHistoryQueries.keepLost(table.sqlName, uid, f, c.value.toString(), c.hlc.toString(), wall)
+        }
+    }
+
+    /**
+     * The synced fields of row [uid] now, also a tombstone; null if this device has no such synced row (WP E3c).
+     */
+    fun fields(table: SyncTable, uid: String): Map<String, JsonElement>? = currentRow(table, uid)
+
+    /**
+     * A local edit of [values] of the live row [uid] at [wall], through the merge's update path (WP E3c, a restore):
+     * one new HLC for the journal entries, then the row. Only values that differ are written. Returns false, and
+     * changes nothing, if the row is gone or deleted. `deleted_at` cannot be written here.
+     */
+    fun edit(table: SyncTable, uid: String, values: Map<String, JsonElement>, wall: Long): Boolean = db.transactionWithResult {
+        require("deleted_at" !in values) { "a delete is not an edit" }
+        val current = currentRow(table, uid)?.takeIf { it["deleted_at"] == JsonNull } ?: return@transactionWithResult false
+        val changed = values.filter { (f, value) -> current[f] != value }
+        if (changed.isEmpty()) return@transactionWithResult true
+        changed.forEach { (f, value) -> require(table.column(f)?.accepts(value) == true) { "${table.sqlName}.$f: bad value $value" } }
+        val hlc = record(table, uid, changed, wall)
+        update(table, uid, current + changed, hlc)
+        true
     }
 
     /** Spec 7.2: the larger HLC wins; for `deleted_at`, order by (deleted, HLC), so a delete always wins (D5). */
