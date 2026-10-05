@@ -1,5 +1,6 @@
 package dev.pebble.desktop.brain
 
+import ai.djl.huggingface.tokenizers.Encoding
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -62,40 +63,69 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
     /** Token ids exactly as fed to the model — exposed for the parity test. */
     fun tokenIds(text: String): LongArray = encode(words(text)).ids
 
+    /**
+     * Slot tag probabilities for each word (tag name to probability) — exposed for the parity test, so it can
+     * tell a real decoding bug from a near-tie that flips on another CPU's int8 kernels.
+     */
+    fun slotProbabilities(text: String): List<Map<String, Float>> {
+        val words = words(text)
+        if (words.isEmpty()) return emptyList()
+        val enc = encode(words)
+        val slotLogits = infer(enc).slots
+        return firstPieces(words, enc).map { pos ->
+            if (pos < 0) mapOf("O" to 1f) else softmax(slotLogits[pos]).withIndex().associate { (i, p) -> tags[i] to p }
+        }
+    }
+
     override fun understand(text: String): Understood? {
         val words = words(text)
         if (words.isEmpty()) return null
         val enc = encode(words)
+        val raw = infer(enc)
+        val probs = softmax(FloatArray(raw.intent.size) { raw.intent[it] / temperature })
+        // All intents, so probabilities can be summed per Pebble action (Understood.actions).
+        val guesses = probs.indices.sortedByDescending { probs[it] }.map { IntentGuess(intents[it], probs[it]) }
+        val wordTags = firstPieces(words, enc).map { pos -> if (pos < 0) "O" else tags[argmax(raw.slots[pos])] }
+        val mood = moods?.let { names ->
+            raw.mood?.let { z ->
+                val p = softmax(FloatArray(z.size) { z[it] / moodTemperature })
+                val k = argmax(p)
+                MoodGuess(names[k], p[k])
+            }
+        }
+        return Understood(words, guesses, wordTags, mood)
+    }
+
+    /** Raw head outputs for one sentence; [mood] is null for models exported before the mood head. */
+    private class Logits(val intent: FloatArray, val slots: Array<FloatArray>, val mood: FloatArray?)
+
+    private fun infer(enc: Encoding): Logits {
         val ids = enc.ids
         val shape = longArrayOf(1, ids.size.toLong())
         OnnxTensor.createTensor(env, LongBuffer.wrap(ids), shape).use { idT ->
             OnnxTensor.createTensor(env, LongBuffer.wrap(enc.attentionMask), shape).use { maskT ->
                 session.run(mapOf("input_ids" to idT, "attention_mask" to maskT)).use { out ->
                     @Suppress("UNCHECKED_CAST")
-                    val intentLogits = (out[0].value as Array<FloatArray>)[0]
+                    val intent = (out[0].value as Array<FloatArray>)[0]
 
                     @Suppress("UNCHECKED_CAST")
-                    val slotLogits = (out[1].value as Array<Array<FloatArray>>)[0]
-                    val probs = softmax(FloatArray(intentLogits.size) { intentLogits[it] / temperature })
-                    // All intents, so probabilities can be summed per Pebble action (Understood.actions).
-                    val guesses = probs.indices.sortedByDescending { probs[it] }.map { IntentGuess(intents[it], probs[it]) }
-                    // First sub-token of each real word (word id 0 is the "query:" prefix).
-                    val firstPiece = IntArray(words.size) { -1 }
-                    enc.wordIds.forEachIndexed { pos, wid ->
-                        if (wid >= 1 && wid <= words.size && firstPiece[(wid - 1).toInt()] == -1) firstPiece[(wid - 1).toInt()] = pos
-                    }
-                    val wordTags = firstPiece.map { pos -> if (pos < 0) "O" else tags[argmax(slotLogits[pos])] }
-                    val mood = moods?.takeIf { out.size() >= 3 }?.let { names ->
-                        @Suppress("UNCHECKED_CAST")
-                        val z = (out[2].value as Array<FloatArray>)[0]
-                        val p = softmax(FloatArray(z.size) { z[it] / moodTemperature })
-                        val k = argmax(p)
-                        MoodGuess(names[k], p[k])
-                    }
-                    return Understood(words, guesses, wordTags, mood)
+                    val slots = (out[1].value as Array<Array<FloatArray>>)[0]
+
+                    @Suppress("UNCHECKED_CAST")
+                    val mood = if (out.size() >= 3) (out[2].value as Array<FloatArray>)[0] else null
+                    return Logits(intent, slots, mood)
                 }
             }
         }
+    }
+
+    /** Position of the first sub-token of each real word (word id 0 is the "query:" prefix); -1 if truncated away. */
+    private fun firstPieces(words: List<String>, enc: Encoding): IntArray {
+        val firstPiece = IntArray(words.size) { -1 }
+        enc.wordIds.forEachIndexed { pos, wid ->
+            if (wid >= 1 && wid <= words.size && firstPiece[(wid - 1).toInt()] == -1) firstPiece[(wid - 1).toInt()] = pos
+        }
+        return firstPiece
     }
 
     private fun words(text: String) = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }

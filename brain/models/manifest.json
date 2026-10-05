@@ -2,31 +2,31 @@
   "models": [
     {
       "name": "intent",
-      "version": "v2-pruned",
+      "version": "v2r-pruned",
       "task": "command intent + slots + mood (en / hi_deva / hi_roman)",
       "base": "intfloat/multilingual-e5-small (MIT), vocab pruned 250002 -> 26649",
       "trained_on": "Amazon MASSIVE 1.1 en-US + hi-IN (CC BY 4.0) + rule-based Roman transliteration with chat spelling + Pebble template data (pebble_data.py, ~1.7k sentences x3) + mood templates (low/neutral/good, incl. compliments) + in-app feedback when present",
       "files": {
         "model": {
-          "path": "intent-v2-pruned/intent.int8.onnx",
+          "path": "intent-v2r-pruned/intent.int8.onnx",
           "bytes": 32654499,
-          "sha256": "8139782cfd76aa58f1eebfb3701872098aed9cd6a87150f6d1d84246c2fd2c36"
+          "sha256": "052566aff5dbc3c1f662c2cebfa477f3b41974406601bc311f791e31f667f018"
         },
         "tokenizer": {
-          "path": "intent-v2-pruned/tokenizer/tokenizer.json",
+          "path": "intent-v2r-pruned/tokenizer/tokenizer.json",
           "bytes": 2031133,
           "sha256": "21404126790c79c4cdf98671b277b8de0103d42cbbf742106a5e35714272ee3d"
         },
         "labels": {
-          "path": "intent-v2-pruned/labels.json",
-          "bytes": 3601,
-          "sha256": "e2ea6f79d0e8c58f7aeea03c27859b3eec05e1967d8c3b22dc5b6ba312b48256"
+          "path": "intent-v2r-pruned/labels.json",
+          "bytes": 3602,
+          "sha256": "1a98f8675de3e5cff32853be3fbe6be8cb4f36b06a9c342a848eb81c78b15b62"
         }
       },
       "calibration": {
-        "temperature": 1.095,
-        "mood_temperature": 1.0394,
-        "ece_after": 0.0116
+        "temperature": 1.0932,
+        "mood_temperature": 0.9505,
+        "ece_after": 0.0105
       },
       "metrics": {
         "massive_test_intent_acc_pytorch": {
@@ -42,26 +42,29 @@
         "mood_v1_acc_pytorch": 0.8667,
         "pebble_v1_router_int8": {
           "right": 65,
+          "right_or_first_choice": 68,
+          "acted_wrongly": 0,
+          "of": 68
+        },
+        "cpu_latency_ms_int8_4_threads_median": 4.3,
+        "mood_v1_acc_int8": 0.8667
+      },
+      "previous": {
+        "version": "v2-pruned",
+        "pebble_v1_router_int8": {
+          "right": 65,
           "right_or_first_choice": 67,
           "acted_wrongly": 0,
           "of": 68
         },
-        "cpu_latency_ms_int8_4_threads_median": 3.8
-      },
-      "previous": {
-        "version": "v1-pruned",
-        "pebble_v1_router_int8": {
-          "right": 64,
-          "right_or_first_choice": 65,
-          "acted_wrongly": 2,
-          "of": 68
-        }
+        "note": "full 8-bit weights; on AMD EPYC 7763 (no VNNI) 3 of 194 parity intents differed, |dp| up to 0.44"
       },
       "download": {
-        "url": "https://github.com/Wickedsoni/pebble/releases/download/models-2026.10/intent-v2-pruned.zip",
-        "sha256": "1417c04a96a377f85606e80088285f616721f0a38e9c3fe8519744bc81ce42b2",
-        "bytes": 27130073
-      }
+        "url": "https://github.com/Wickedsoni/pebble/releases/download/models-2026.10b/intent-v2r-pruned.zip",
+        "sha256": "c92f6714d4b1be6943d505a78d4259898c38d306c86c060370141d12d82a0550",
+        "bytes": 24257052
+      },
+      "quantization": "dynamic int8, QInt8 weights, per-channel, reduce_range (7-bit weights: no U8S8 saturation on x86 CPUs without VNNI)"
     },
     {
       "name": "asr",

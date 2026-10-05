@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.compose) apply false
     alias(libs.plugins.sqldelight) apply false
     alias(libs.plugins.spotless)
+    alias(libs.plugins.kover) apply false
 }
 
 // Code format, enforced in CI: `./gradlew spotlessCheck` (verify) / `./gradlew spotlessApply` (fix).

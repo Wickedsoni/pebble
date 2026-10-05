@@ -67,10 +67,10 @@ class EvalSetRouterTest {
     }
 
     companion object {
-        // Gates for intent-v2-pruned (2026-10-02). Raise them when a better model ships.
+        // Gates for intent-v2r-pruned (2026-10-04). Raise them when a better model ships.
 
         /** Doing the wrong thing without asking; may never go up. */
         const val MAX_ACTED_WRONGLY = 0
-        const val BASELINE_RIGHT_OR_ASKED = 67 // intent-v2-pruned: 65 right + 2 asked, of 68
+        const val BASELINE_RIGHT_OR_ASKED = 68 // intent-v2r-pruned: 65 right + 3 asked, of 68 (v2-pruned: 67)
     }
 }

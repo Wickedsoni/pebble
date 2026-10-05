@@ -4,14 +4,27 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose)
+    alias(libs.plugins.kover)
 }
 
 kotlin {
     jvmToolchain(21)
+    // The build has zero warnings; keep it that way.
+    compilerOptions { allWarningsAsErrors.set(true) }
+}
+
+// On CI, print what the tests print (parity, router eval, SKIPPED lines), so the log proves the model tests ran.
+tasks.test {
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = System.getenv("CI") != null
+    }
 }
 
 dependencies {
     implementation(project(":shared"))
+    // Coverage: `:desktopApp:koverHtmlReport` merges both modules. Report only; no threshold yet.
+    kover(project(":shared"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing)

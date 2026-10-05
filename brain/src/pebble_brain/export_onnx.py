@@ -58,7 +58,10 @@ def export(ckpt: pathlib.Path) -> None:
     )
     int8 = ckpt / "intent.int8.onnx"
     # Per-channel scales keep accuracy (per-tensor int8 lost ~3 points on the Pebble eval set).
-    quantize_dynamic(str(fp32), str(int8), weight_type=QuantType.QInt8, per_channel=True)
+    # reduce_range (7-bit weights): x86 CPUs without VNNI (AVX2, e.g. AMD Zen 3, older Intel laptops) compute
+    # U8S8 with VPMADDUBSW, which saturates with full 8-bit weights; the model then reads commands differently
+    # than on a VNNI CPU (OnnxParityTest on CI: 3 of 194 intents wrong, |dp| up to 0.44).
+    quantize_dynamic(str(fp32), str(int8), weight_type=QuantType.QInt8, per_channel=True, reduce_range=True)
     print(f"fp32 {fp32.stat().st_size / 2**20:.0f} MB  →  int8 {int8.stat().st_size / 2**20:.0f} MB")
 
     opts = ort.SessionOptions()
