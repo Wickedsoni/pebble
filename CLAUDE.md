@@ -36,7 +36,8 @@ The plan splits the work into work packages (WPs), for example "A1" or "B3".
    - If the WP makes a design decision, add an ADR in `docs/adr/`.
    - `NEXT_SESSION.md` is up to date.
 7. **Windows shell:** use `.\gradlew.bat` in PowerShell, or `./gradlew` in Git Bash.
-8. **WPs marked `[Opus]` are design or security work.** Do not start them without an approved spec document.
+8. **A change to `NudgePolicy` priors or rewards needs the offline gate** (ADR 0016). Run `./gradlew :desktopApp:nudgeIps` and put its output in the PR. It must show SNIPS ≥ the mean reward of what ran, and ESS ≥ 200. "NOT ENOUGH DATA" means: do not make the change yet.
+9. **WPs marked `[Opus]` are design or security work.** Do not start them without an approved spec document.
 
 ## Build and test commands
 
@@ -51,6 +52,7 @@ The plan splits the work into work packages (WPs), for example "A1" or "B3".
 | Build the installer | `./gradlew :desktopApp:packageMsi` |
 | Python format and lint | `cd brain; uvx ruff format . ; uvx ruff check .` |
 | Python tests | `cd brain; uv run python -m unittest tests/test_feedback.py` |
+| Offline gate for a nudge policy change (copy of your database) | `./gradlew :desktopApp:nudgeIps` |
 | Router eval with a new model | `$env:PEBBLE_EVAL_MODEL="models/<new>-pruned"; ./gradlew :desktopApp:test --tests "*EvalSetRouterTest*" --rerun` |
 
 ## Module map
@@ -107,6 +109,7 @@ Line numbers can move. If a line does not match, search for the name.
 | Local chat (WP C5, ADR 0012): `LocalChat` runs `llama-server` (llama.cpp **b11146** = stable v0.5.0, flags checked with `--help`) from the signed "chat" pack (or `PEBBLE_CHAT_DIR`): `--host 127.0.0.1`, free port, key in env `LLAMA_API_KEY`, `--offline --no-webui --reasoning off`; 6 s reply timeout, 10 min idle stop, leftover servers killed at start. Model Qwen2.5-1.5B-Instruct Q4_K_M, **English only** (`PebbleApp.CHAT_SCRIPTS`). Every reply passes `ChatSafety.clean`; low mood / self-harm / health / law / money lines never reach the model. Setting `chat.smartReplies` off by default. Eval: `ChatEvalTest` (`brain/models/chat`) | `shared/.../brain/ReplyGenerator.kt`, `desktopApp/.../brain/LocalChat.kt` |
 | Calendar (WP E2, ADR 0014): `calendar_event` (uid PK, E1 sync columns, `rrule`, `exdates`, `remind_minutes`, `visibility`). Expansion and ICS are in `:shared` **jvmMain** (`java.time`; commonMain has no date library): `RecurrenceRule` (subset: DAILY/WEEKLY BYDAY/MONTHLY BYMONTHDAY, INTERVAL, UNTIL or COUNT), `RecurrenceExpander`, `Ics`, `CalendarAgenda`. Reminders before events are one-off reminders linked by `event_uid` + `occurrence_at`, made 2 days ahead by the 10-minute loop and by `agenda.eventChanged`. Quick Add: `event: <title> [day] [time] [for N min]` only; the model has no calendar action | `shared/.../calendar/`, `Calendar.sq`, `12.sqm`, `desktopApp/.../app/pages/CalendarStateHolder.kt` |
 | Backup (WP E4, ADR 0015): `BackupFile` = 36-byte header (`PEBBLEBK`, version 1, iterations, salt, nonce prefix) + AES-256-GCM chunks of 1 MiB (nonce = prefix, index, last flag; header as AAD); key PBKDF2-HMAC-SHA256 600 000 (369 ms). `Backup.export` = `VACUUM INTO` temp + encrypt (temp always deleted); `stageRestore` checks and writes `pebble.db.restore`; `PebbleApp.create()` calls `Backup.applyStaged` **before** opening the DB (old files → `pebble.db.before-restore`; this device keeps its `device.id`). JDK crypto only, no new jlink module | `shared/src/jvmMain/.../backup/`, `app/pages/BackupStateHolder.kt` |
+| Nudge offline eval (WP C4, ADR 0016): `NudgeIpsEvaluator` pairs raw `nudge_decided` rows (logged propensity) with the first `reminder_due` and the first `reminder_acted` of the key within 30 min (reward = `NudgePolicy.rewardFor`; no reaction = 0 only if a later entry shows the app ran 30 min). An app start/stop before the reaction skips the decision (the engine forgets it). Target = `NudgePolicy.asTarget()` (today's beliefs, fixed). Reference = mean reward of what ran. Maintainer data 5 Oct: 9 episodes, ESS 8 | `shared/.../brain/NudgeIpsEvaluator.kt`, `desktopApp/.../tools/NudgeIpsTool.kt` |
 | Settings keys live in `SettingsRepository.Keys` (string key-value) | `shared/.../settings/SettingsRepository.kt` |
 
 ## Known traps

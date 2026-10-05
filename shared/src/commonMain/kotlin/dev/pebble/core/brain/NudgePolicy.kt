@@ -19,6 +19,20 @@ data class NudgeContext(val kind: ReminderKind, val hourBucket: Int, val busy: B
 
     companion object {
         fun of(kind: ReminderKind, hour: Int, busy: Boolean) = NudgeContext(kind, hour / 4, busy)
+
+        /** The context back from its [key] (as logged in `nudge_decided`); null if it is not one. */
+        fun parse(key: String): NudgeContext? {
+            val parts = key.split(':')
+            if (parts.size != 3) return null
+            val kind = ReminderKind.entries.firstOrNull { it.name == parts[0] } ?: return null
+            val bucket = parts[1].toIntOrNull()?.takeIf { it in 0..5 } ?: return null
+            val busy = when (parts[2]) {
+                "0" -> false
+                "1" -> true
+                else -> return null
+            }
+            return NudgeContext(kind, bucket, busy)
+        }
     }
 }
 
@@ -42,6 +56,8 @@ class InMemoryNudgeStore : NudgeStore {
  * Reward (from how you react, [rewardFor]): done soon = 1, done late = 0.6, snoozed = 0.3,
  * skipped or ignored = 0. Priors start every context on NOW (today's behaviour), and hours Pebble
  * already learned you skip ([quietHours]) start leaning towards waiting.
+ *
+ * A change to the priors or to [rewardFor] must pass the offline gate first ([NudgeIpsEvaluator], ADR 0016).
  */
 class NudgePolicy(
     private val store: NudgeStore,
@@ -101,6 +117,20 @@ class NudgePolicy(
 
             else -> 1.0 to 1.5
         }
+    }
+
+    /**
+     * How often [choose] picks each arm in [ctx] with today's beliefs (Monte-Carlo, sums to 1): the policy
+     * as a fixed target for the offline evaluator ([NudgeIpsEvaluator]).
+     */
+    fun probabilities(ctx: NudgeContext, draws: Int = 2_000): Map<NudgeArm, Double> {
+        val b = NudgeArm.entries.associateWith { belief(ctx, it) }
+        val wins = NudgeArm.entries.associateWith { 0 }.toMutableMap()
+        repeat(draws) {
+            val pick = b.maxBy { (_, ab) -> sampleBeta(ab.first, ab.second) }.key
+            wins[pick] = wins.getValue(pick) + 1
+        }
+        return wins.mapValues { (_, n) -> n.toDouble() / draws }
     }
 
     /** Probability Thompson sampling picks [arm] here (Monte-Carlo), logged for offline evaluation (IPS). */

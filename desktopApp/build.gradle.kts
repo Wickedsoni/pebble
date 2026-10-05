@@ -72,6 +72,15 @@ tasks.register<JavaExec>("modelPack") {
     workingDir = rootProject.projectDir // relative paths in --args are from the repo root
 }
 
+tasks.register<JavaExec>("nudgeIps") {
+    group = "pebble"
+    description = "Offline IPS gate for nudge policy changes, on a copy of your database: --args=\"[pebble.db]\" (see NudgeIpsTool.kt)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.pebble.desktop.tools.NudgeIpsToolKt"
+    workingDir = rootProject.projectDir
+    isIgnoreExitValue = true // exit 1 = the gate does not pass; the report says why
+}
+
 tasks.register<JavaExec>("petGallery") {
     group = "pebble"
     description = "Renders every character and mood to build/pet-gallery.png"

@@ -32,7 +32,7 @@ BEHAVE  (its own loop)
 LEARN
   command_feedback    picked · confirmed · wrong · taught           → PersonalLayer (at once), train_intent --feedback
   nudge_stats         Beta beliefs per context × arm                → learns live, on device
-  event_log           everything, incl. NudgeDecided propensities   → MemoryEngine, offline eval
+  event_log           everything, incl. NudgeDecided propensities   → MemoryEngine, NudgeIpsEvaluator (offline eval gate)
   voice corrections   (opt-in) audio + corrected text               → Whisper fine-tune (planned)
 ```
 
@@ -85,6 +85,7 @@ The evaluator can still test a denoiser (`./gradlew :desktopApp:asrEval -Pdenois
 
 Eval sets are frozen and never trained on. Every generator drops sentences too close to them (`pebble_data` leak check).
 Only the nudge policy learns live on your laptop. Deep models change only through the gated retrain.
+A change to the priors or the rewards of the nudge policy must pass the offline evaluation gate (ADR 0016): SNIPS ≥ the mean reward of what ran, and ESS ≥ 200. Run `./gradlew :desktopApp:nudgeIps`.
 
 ## Privacy
 
