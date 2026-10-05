@@ -37,8 +37,9 @@ data class RemindersUiState(
         val enabled: Boolean,
     )
 
+    /** [uid]: for its History dialog; null for a reminder that an event made (it has no history). */
     @Immutable
-    data class OneOffRow(val id: Long, val title: String, val dueLabel: String)
+    data class OneOffRow(val id: Long, val title: String, val dueLabel: String, val uid: String? = null)
 
     @Immutable
     data class UpcomingRow(val key: String, val title: String, val dueLabel: String, val overdue: Boolean)
@@ -111,7 +112,7 @@ class RemindersStateHolder(
             rules = reminders.rules().map {
                 RemindersUiState.RuleRow(it.id, it.title, "every ${formatMinutes(it.intervalMinutes)}", it.strictness, it.enabled)
             },
-            oneOffs = reminders.pendingOneOffs().map { RemindersUiState.OneOffRow(it.id, it.title, due(it.dueAt)) },
+            oneOffs = reminders.pendingOneOffs().map { RemindersUiState.OneOffRow(it.id, it.title, due(it.dueAt), it.uid) },
             upcoming = engine.upcoming(8).filter { it.key.startsWith("rule:") }.map {
                 val overdue = it.dueAt <= now
                 RemindersUiState.UpcomingRow(it.key, it.title, if (overdue) "Due now" else due(it.dueAt), overdue)

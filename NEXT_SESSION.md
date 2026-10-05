@@ -7,11 +7,11 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (end of 5 Oct 2026, after WP E3c-1)
-- **State:** A1 … E4, C4, E3a and E3b are on `main`. **E3c-1** is on branch `wp/e3c1-history-data` (PR open, waiting for CI and your yes to merge). Schema version 15; the next migration file is `15.sqm`.
-- **Next WP: E3c-2** (spec `docs/specs/E3C-HISTORY.md` section 6): a "History" button and dialog on the Calendar and Reminders pages; a "Recently deleted" card on the Memory page with "Restore as a copy" and "Clear history" (asks first). Follow `docs/UI-PATTERN.md`. The data and API are ready: `app.history` (`ChangeHistory`). After a restore or a copy of a calendar event, call `agenda.eventChanged(uid, now)`. When "Clear history" exists, add it to the `PRIVACY.md` history row.
-  - Then E3c-3 (Notes page to the state-holder pattern, then History).
+### Start here (end of 5 Oct 2026, after WP E3c-2)
+- **State:** A1 … E4, C4, E3a, E3b and **E3c-1** (PR #51) are on `main`. **E3c-2** is on branch `wp/e3c2-history-ui` (PR open, waiting for CI and your yes to merge). Schema version 15; the next migration file is `15.sqm`.
+- **Next WP: E3c-3** (spec `docs/specs/E3C-HISTORY.md` section 6): move the Notes page to the state-holder pattern (B7 roll-out, `docs/UI-PATTERN.md`), then add its "History" button with the shared `HistoryStateHolder` / `WithHistory` (as the Calendar and Reminders pages do).
   - After E3c: milestone F (F0 needs an Opus spec and a security review).
+- **Known gap (from PR #51):** an event *moved* while the 10-minute agenda loop runs can keep one reminder for its old time (the delete case is fixed). A small follow-up: make `addLinked` check the occurrence against the live event in its transaction.
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
 - **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.
 - **How each WP lands:**
@@ -24,7 +24,16 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db`, `pebble-backup-e2.db`, `pebble-backup-e3a.db` and `pebble-backup-e3c.db` (taken before the E2, E3a and E3c-1 migrations) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: WP E3c-1 done (history data + API, branch `wp/e3c1-history-data`)
+### 5 Oct: WP E3c-2 done (History dialog + "Recently deleted", branch `wp/e3c2-history-ui`)
+- **What:** a "History" chip on each event (Calendar page) and each synced one-off reminder (Reminders page) opens a dialog: versions newest first, "this device" or "another device", "Lost in a sync conflict", the changed fields (old → now), and "Restore" (hidden when a version is the same as now). One shared `HistoryStateHolder` + `HistoryOverlay`. Memory page: a "Recently deleted" card (`RecentlyDeletedStateHolder`) with "Restore as a copy" and "Clear history" (asks first).
+- **Small changes:** `OneOffReminder.uid` (null for calendar-made reminders: they have no history); `NoteRepository.activeFlow(context)` (the card needs the test dispatcher).
+- **Tests:** `HistoryStateHolderTest` (7). 329 Kotlin tests, 0 skipped.
+- **Live check (5 Oct, on a copy of your data, `APPDATA` = a temp folder):** daily event, two "Skip day" edits, History showed two versions, "Restore" of the first brought the skipped days back; deleted it; "Recently deleted" → "Restore as a copy" brought it back on the calendar; "Clear history" asked, then deleted 3 entries. Found and fixed in the check: "1 skipped days", and a clipped line on the card.
+
+### 5 Oct: E3c-1 merged (PR #51)
+- CI found a race from WP E2: the 10-minute agenda loop could add a reminder for an event deleted at the same moment. `addLinked` now refuses an event that is a tombstone (in its IMMEDIATE transaction). Test: `CalendarTest.aReminderIsNotMadeForAnEventDeletedAfterTheAgendaReadIt`.
+
+### 5 Oct: WP E3c-1 done (history data + API, PR #51, merged)
 - **What:** table `change_history` (`14.sqm`, schema 14 → 15) keeps old values of synced fields of events, notes and one-off reminders for 90 days, only on this device (ADR 0019).
   - A trigger on `change_journal` keeps each replaced value on every write path (local edit, merge, reconcile). `deleted_at` is never kept.
   - The merge keeps a peer's losing edit as a **lost edit** (not if the value is the same, not if the edit was this device's).

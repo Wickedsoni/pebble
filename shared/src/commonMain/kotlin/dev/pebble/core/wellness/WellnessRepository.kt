@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlin.coroutines.CoroutineContext
 
 const val GLASS_ML = 250
 
@@ -85,6 +86,6 @@ class NoteRepository(private val db: PebbleDatabase, private val journal: Change
     fun recent(limit: Long = 5): List<Note> =
         q.activeNotes(limit).executeAsList().map { Note(it.id, it.text, it.updated_at) }
 
-    fun activeFlow(limit: Long = 20): Flow<List<Note>> =
-        q.activeNotes(limit).asFlow().mapToList(Dispatchers.Default).map { rows -> rows.map { Note(it.id, it.text, it.updated_at) } }
+    fun activeFlow(limit: Long = 20, context: CoroutineContext = Dispatchers.Default): Flow<List<Note>> =
+        q.activeNotes(limit).asFlow().mapToList(context).map { rows -> rows.map { Note(it.id, it.text, it.updated_at) } }
 }

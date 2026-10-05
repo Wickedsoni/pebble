@@ -5,6 +5,7 @@ import app.cash.sqldelight.coroutines.mapToList
 import dev.pebble.core.sync.ChangeJournal
 import dev.pebble.core.sync.ChangeJournal.Companion.v
 import dev.pebble.core.sync.SyncTable
+import dev.pebble.db.One_off_reminder
 import dev.pebble.db.PebbleDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -13,7 +14,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlin.coroutines.CoroutineContext
 
-data class OneOffReminder(val id: Long, val title: String, val dueAt: Long, val strictness: Strictness)
+/** [uid]: its sync uid, for its history (WP E3c); null for a reminder that an event made (not synced, no history). */
+data class OneOffReminder(val id: Long, val title: String, val dueAt: Long, val strictness: Strictness, val uid: String? = null)
 
 /**
  * Repeating rules and one-off reminders. Each write to a synced field of a one-off reminder goes into the change
@@ -47,9 +49,7 @@ class ReminderRepository(private val db: PebbleDatabase, private val journal: Ch
 
     fun markRuleDone(id: String, at: Long) = q.markRuleDone(at, id)
 
-    fun pendingOneOffs(): List<OneOffReminder> = q.pendingOneOffs().executeAsList().map {
-        OneOffReminder(it.id, it.title, it.due_at, Strictness.parse(it.strictness))
-    }
+    fun pendingOneOffs(): List<OneOffReminder> = q.pendingOneOffs().executeAsList().map(::toOneOff)
 
     /** Returns the new reminder's id. [at]: when it was made (null: now). */
     fun addOneOff(
@@ -99,7 +99,10 @@ class ReminderRepository(private val db: PebbleDatabase, private val journal: Ch
     /** Live list of one-off reminders still to come, for the Reminders page. */
     fun pendingOneOffsFlow(context: CoroutineContext = Dispatchers.Default): Flow<List<OneOffReminder>> =
         q.pendingOneOffs().asFlow().mapToList(context)
-            .map { rows -> rows.map { OneOffReminder(it.id, it.title, it.due_at, Strictness.parse(it.strictness)) } }
+            .map { rows -> rows.map(::toOneOff) }
+
+    private fun toOneOff(r: One_off_reminder) =
+        OneOffReminder(r.id, r.title, r.due_at, Strictness.parse(r.strictness), r.uid.takeIf { r.event_uid == null })
 
     /**
      * A reminder for one occurrence of a calendar event (WP E2), linked by [eventUid] and [occurrenceAt]. Returns false
