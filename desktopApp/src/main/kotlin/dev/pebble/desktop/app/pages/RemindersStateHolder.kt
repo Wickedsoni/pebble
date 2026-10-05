@@ -89,7 +89,7 @@ class RemindersStateHolder(
 
                     is RemindersEvent.SetStrictness -> updateRule(e.ruleId) { it.copy(strictness = e.strictness) }
 
-                    is RemindersEvent.DeleteOneOff -> reminders.deleteOneOff(e.id)
+                    is RemindersEvent.DeleteOneOff -> reminders.deleteOneOff(e.id, env.millis())
                 }
             }
             engine.tick()

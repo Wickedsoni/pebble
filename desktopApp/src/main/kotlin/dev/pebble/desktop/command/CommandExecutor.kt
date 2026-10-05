@@ -51,7 +51,7 @@ class CommandExecutor(
         return when (cmd) {
             is QuickCommand.AddNote -> {
                 val id = actions.addNote(cmd.text)
-                Executed(PetLine("Saved to your notes."), undo = { notes.delete(id) })
+                Executed(PetLine("Saved to your notes."), undo = { notes.delete(id, env.millis()) })
             }
 
             is QuickCommand.RememberFact -> {
@@ -74,14 +74,18 @@ class CommandExecutor(
 
             is QuickCommand.RemindIn -> {
                 val at = env.millis() + cmd.minutes * 60_000L
-                val id = reminders.addOneOff(cmd.title, at)
-                Executed(PetLine("I'll remind you in ${formatMinutes(cmd.minutes)}."), undo = { reminders.deleteOneOff(id); engine.tick() })
+                val id = reminders.addOneOff(cmd.title, dueAt = at, at = env.millis())
+                Executed(PetLine("I'll remind you in ${formatMinutes(cmd.minutes)}."), undo = {
+                    reminders.deleteOneOff(id, env.millis()); engine.tick()
+                })
             }
 
             is QuickCommand.RemindAt -> {
                 val at = resolve(cmd)
-                val id = reminders.addOneOff(cmd.title, env.toMillis(at))
-                Executed(PetLine("I'll remind you ${describeWhen(at)}."), undo = { reminders.deleteOneOff(id); engine.tick() })
+                val id = reminders.addOneOff(cmd.title, dueAt = env.toMillis(at), at = env.millis())
+                Executed(PetLine("I'll remind you ${describeWhen(at)}."), undo = {
+                    reminders.deleteOneOff(id, env.millis()); engine.tick()
+                })
             }
 
             QuickCommand.ShowUpcoming -> {

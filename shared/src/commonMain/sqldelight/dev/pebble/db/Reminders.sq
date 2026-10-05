@@ -15,8 +15,16 @@ CREATE TABLE one_off_reminder (
     title TEXT NOT NULL,
     due_at INTEGER NOT NULL,
     strictness TEXT NOT NULL,
-    done_at INTEGER
+    done_at INTEGER,
+    -- Sync-ready (WP E1, 11.sqm): see 11.sqm for each column.
+    uid TEXT,
+    updated_at INTEGER,
+    deleted_at INTEGER,
+    hlc TEXT,
+    origin_device TEXT
 );
+
+CREATE UNIQUE INDEX one_off_reminder_uid ON one_off_reminder(uid);
 
 allRules:
 SELECT * FROM reminder_rule ORDER BY id;
@@ -32,19 +40,30 @@ markRuleDone:
 UPDATE reminder_rule SET last_done_at = ? WHERE id = ?;
 
 pendingOneOffs:
-SELECT * FROM one_off_reminder WHERE done_at IS NULL ORDER BY due_at;
+SELECT * FROM one_off_reminder WHERE done_at IS NULL AND deleted_at IS NULL ORDER BY due_at;
 
 insertOneOff:
-INSERT INTO one_off_reminder(title, due_at, strictness) VALUES (?, ?, ?);
+INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at, origin_device)
+VALUES (?, ?, ?, lower(hex(randomblob(16))), coalesce(?, CAST(strftime('%s', 'now') AS INTEGER) * 1000), (SELECT value FROM setting WHERE key = 'device.id'));
 
 lastOneOffId:
 SELECT last_insert_rowid();
 
+-- A tombstone, not a DELETE (WP E1). Null time: now.
 deleteOneOff:
-DELETE FROM one_off_reminder WHERE id = ?;
+UPDATE one_off_reminder SET deleted_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000), updated_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000) WHERE id = :id;
+
+purgeOneOffTombstones:
+DELETE FROM one_off_reminder WHERE deleted_at IS NOT NULL AND deleted_at < ?;
+
+claimOneOffs:
+UPDATE one_off_reminder SET origin_device = ? WHERE origin_device IS NULL;
+
+fillOneOffUids:
+UPDATE one_off_reminder SET uid = lower(hex(randomblob(16))), updated_at = coalesce(updated_at, done_at, due_at) WHERE uid IS NULL;
 
 markOneOffDone:
-UPDATE one_off_reminder SET done_at = ? WHERE id = ?;
+UPDATE one_off_reminder SET done_at = :at, updated_at = :at WHERE id = :id;
 
 rescheduleOneOff:
-UPDATE one_off_reminder SET due_at = ? WHERE id = ?;
+UPDATE one_off_reminder SET due_at = :dueAt, updated_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000) WHERE id = :id;

@@ -42,14 +42,31 @@ class ReminderRepository(private val db: PebbleDatabase) {
         OneOffReminder(it.id, it.title, it.due_at, Strictness.parse(it.strictness))
     }
 
-    /** Returns the new reminder's id. */
-    fun addOneOff(title: String, dueAt: Long, strictness: Strictness = Strictness.NORMAL): Long = db.transactionWithResult {
-        q.insertOneOff(title, dueAt, strictness.name)
+    /** Returns the new reminder's id. [at]: when it was made (null: now). */
+    fun addOneOff(
+        title: String,
+        dueAt: Long,
+        strictness: Strictness = Strictness.NORMAL,
+        at: Long? = null,
+    ): Long = db.transactionWithResult {
+        q.insertOneOff(title, dueAt, strictness.name, at)
         q.lastOneOffId().executeAsOne()
     }
 
-    /** Removes a reminder outright (used to undo one Pebble created by mistake). */
-    fun deleteOneOff(id: Long) = q.deleteOneOff(id)
+    /**
+     * Removes a reminder from view (used to undo one Pebble created by mistake). The row stays as a tombstone
+     * (`deleted_at`) so that sync can tell other devices (WP E1); [purgeTombstones] removes it later.
+     */
+    fun deleteOneOff(id: Long, at: Long? = null) = q.deleteOneOff(at, id)
+
+    /** Removes tombstones older than [before]. Returns how many. */
+    fun purgeTombstones(before: Long): Long = q.purgeOneOffTombstones(before).value
+
+    /** Gives reminders made before this device had an id, or by an older Pebble without uids, a uid and [deviceId]. */
+    fun claim(deviceId: String) = db.transaction {
+        q.fillOneOffUids()
+        q.claimOneOffs(deviceId)
+    }
 
     /** Live list of one-off reminders still to come, for the Reminders page. */
     fun pendingOneOffsFlow(context: CoroutineContext = Dispatchers.Default): Flow<List<OneOffReminder>> =
@@ -58,5 +75,5 @@ class ReminderRepository(private val db: PebbleDatabase) {
 
     fun markOneOffDone(id: Long, at: Long) = q.markOneOffDone(at, id)
 
-    fun rescheduleOneOff(id: Long, dueAt: Long) = q.rescheduleOneOff(dueAt, id)
+    fun rescheduleOneOff(id: Long, dueAt: Long, at: Long? = null) = q.rescheduleOneOff(dueAt, at, id)
 }

@@ -71,6 +71,12 @@ class PebbleApp(
     val notes = NoteRepository(db)
     val memory = MemoryRepository(db)
 
+    /** This device's id (WP E1), made at the first start; rows from before it existed are claimed for it. */
+    val deviceId: String = dev.pebble.core.settings.DeviceIdentity.ensure(settings).also { id ->
+        notes.claim(id)
+        reminders.claim(id)
+    }
+
     /** The pet's growth: levels earned by what you do (reminders done, water goals, active days, chats). */
     val growth = dev.pebble.core.growth.GrowthEngine(
         db,
@@ -340,6 +346,10 @@ class PebbleApp(
             .atStartOfDay(env.zone()).toInstant().toEpochMilli()
         val n = compactor.rollUpBefore(until)
         if (n > 0) log.info(TAG, "rolled up $n log entries before $until")
+        // Tombstones (WP E1): kept 90 days, so a device that syncs later still learns about the delete.
+        val purgeBefore = env.millis() - TOMBSTONE_DAYS * 24 * 60 * 60_000L
+        val purged = notes.purgeTombstones(purgeBefore) + reminders.purgeTombstones(purgeBefore)
+        if (purged > 0) log.info(TAG, "purged $purged deleted notes and reminders older than $TOMBSTONE_DAYS days")
     }
 
     fun completeNote(id: Long) {
@@ -525,6 +535,9 @@ class PebbleApp(
 
     companion object {
         private const val TAG = "app"
+
+        /** Deleted notes and reminders stay as tombstones this long (until sync can confirm that peers saw them). */
+        const val TOMBSTONE_DAYS = 90L
 
         /** Scripts the shipped chat model writes well enough (brain/eval/chat_v1.jsonl, ADR 0012); others get canned lines. */
         val CHAT_SCRIPTS = setOf(dev.pebble.core.brain.Script.EN)

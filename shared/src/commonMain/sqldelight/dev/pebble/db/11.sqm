@@ -1,0 +1,20 @@
+-- WP E1: sync-ready rows for notes and one-off reminders (ADR 0003, ADR 0013).
+-- uid: the id between devices (the INTEGER id stays the id on this device). updated_at: the last change.
+-- deleted_at: a tombstone; reads skip it, and it is purged later. hlc: the hybrid logical clock of the last
+-- change (filled by sync, WP E3). origin_device: the device that made the row (setting device.id).
+
+ALTER TABLE note ADD COLUMN uid TEXT;
+ALTER TABLE note ADD COLUMN deleted_at INTEGER;
+ALTER TABLE note ADD COLUMN hlc TEXT;
+ALTER TABLE note ADD COLUMN origin_device TEXT;
+UPDATE note SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+CREATE UNIQUE INDEX note_uid ON note(uid);
+
+ALTER TABLE one_off_reminder ADD COLUMN uid TEXT;
+ALTER TABLE one_off_reminder ADD COLUMN updated_at INTEGER;
+ALTER TABLE one_off_reminder ADD COLUMN deleted_at INTEGER;
+ALTER TABLE one_off_reminder ADD COLUMN hlc TEXT;
+ALTER TABLE one_off_reminder ADD COLUMN origin_device TEXT;
+UPDATE one_off_reminder SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+UPDATE one_off_reminder SET updated_at = coalesce(done_at, due_at) WHERE updated_at IS NULL;
+CREATE UNIQUE INDEX one_off_reminder_uid ON one_off_reminder(uid);
