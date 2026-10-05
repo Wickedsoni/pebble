@@ -15,10 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.pebble.core.sync.SyncTable
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
@@ -26,32 +28,40 @@ import dev.pebble.desktop.app.GlassField
 import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
 import dev.pebble.desktop.ui.LocalGlass
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
-private val noteDate = DateTimeFormatter.ofPattern("d MMM, h:mm a")
-
+/** The Notes page: makes its [NotesStateHolder] once, then only draws its state (docs/UI-PATTERN.md). */
 @Composable
 fun NotesPage(app: PebbleApp) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { NotesStateHolder(app.notes, app::addNote, app::completeNote, app.env, scope) }
+    val history = remember { HistoryStateHolder(app.history, app.journal, app.agenda, app.engine, app.env, scope) }
+    val state by holder.state.collectAsState()
+    val historyState by history.state.collectAsState()
+    WithHistory(historyState, history::onEvent) {
+        NotesContent(state, holder::onEvent) { n ->
+            n.uid?.let { history.onEvent(HistoryEvent.Open(SyncTable.NOTE, it, n.text)) }
+        }
+    }
+}
+
+/** Stateless: draws [state], sends what you do to [onEvent]; [onHistory] opens the History dialog of a note. */
+@Composable
+fun NotesContent(state: NotesUiState, onEvent: (NotesEvent) -> Unit, onHistory: (NotesUiState.NoteRow) -> Unit = {}) {
     val c = LocalGlass.current
-    val notes by remember { app.notes.activeFlow(200) }.collectAsState(initial = emptyList())
     GlassCard(Modifier.fillMaxSize(), padding = 20.dp) {
-        CardLabel("${notes.size} open", PebbleIcons.Notes, c.warm)
-        GlassField("Write a note and press Enter", Modifier.fillMaxWidth()) { app.addNote(it) }
+        CardLabel(state.countLabel, PebbleIcons.Notes, c.warm)
+        GlassField("Write a note and press Enter", Modifier.fillMaxWidth()) { onEvent(NotesEvent.Add(it)) }
         Spacer(Modifier.height(12.dp))
-        if (notes.isEmpty()) Text("Nothing here yet.", color = c.secondary, fontSize = 13.sp)
+        if (state.notes.isEmpty()) Text("Nothing here yet.", color = c.secondary, fontSize = 13.sp)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(notes, key = { it.id }) { n ->
+            items(state.notes, key = { it.id }) { n ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(PebbleIcons.Check, size = 28.dp) { app.completeNote(n.id) }
+                    IconButton(PebbleIcons.Check, size = 28.dp) { onEvent(NotesEvent.Complete(n.id)) }
                     Spacer(Modifier.width(12.dp))
                     Text(n.text, color = c.content, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
-                    Text(
-                        Instant.ofEpochMilli(n.updatedAt).atZone(ZoneId.systemDefault()).format(noteDate),
-                        color = c.secondary,
-                        fontSize = 11.sp,
-                    )
+                    Spacer(Modifier.width(8.dp))
+                    if (n.uid != null) HistoryChip { onHistory(n) }
+                    Text(n.timeLabel, color = c.secondary, fontSize = 11.sp)
                 }
             }
         }
