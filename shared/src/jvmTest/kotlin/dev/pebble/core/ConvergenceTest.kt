@@ -14,12 +14,18 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * The gate of WP E3 (spec section 9): three devices make random changes with skewed clocks, then exchange their
+ * The gate of WP E3 (spec section 9; 300 sequences on `main`, 60 on each PR): three devices make random changes with skewed clocks, then exchange their
  * journals in a random order, in random batch sizes, with duplicates and stale batches sent again. After each
  * exchange all three hold the same synced fields for every row (live and tombstones) and the same journal.
  */
 class ConvergenceTest {
     private val minute = 60_000L
+
+    /**
+     * 60 sequences on each PR (fast CI); the full gate of the spec (300) on each push to `main`, from "Run workflow" in
+     * GitHub Actions, or locally: `PEBBLE_CONVERGENCE_SEQUENCES=300 ./gradlew :shared:jvmTest --tests "*ConvergenceTest*"`.
+     */
+    private val sequences = System.getenv("PEBBLE_CONVERGENCE_SEQUENCES")?.toIntOrNull()?.takeIf { it > 0 } ?: 60
 
     /** Event uids from a small pool, so that two devices often make or change "the same" event (an ICS import). */
     private val eventUids = List(12) { "ev$it" }
@@ -131,7 +137,7 @@ class ConvergenceTest {
         var time = 1_790_000_000_000L
         var checks = 0
         var largest = 0
-        repeat(300) { sequence ->
+        repeat(sequences) { sequence ->
             // New devices every 10 sequences: each check reads all data, so the test would grow with the square of it.
             if (sequence > 0 && sequence % 10 == 0) {
                 largest = maxOf(largest, replicas[0].state().first.size)
@@ -156,7 +162,7 @@ class ConvergenceTest {
         }
         val (rows, journal) = replicas[0].state()
         println("converged after each of $checks sequences; the last devices hold ${rows.size} rows and ${journal.size} journal entries")
-        assertEquals(300, checks)
-        assertTrue(rows.keys.count { it.startsWith("ev ") } > 0 && maxOf(largest, rows.size) > 100)
+        assertEquals(sequences, checks)
+        assertTrue(rows.keys.count { it.startsWith("ev ") } > 0 && maxOf(largest, rows.size) > 20, "the test made real data")
     }
 }
