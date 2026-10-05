@@ -16,7 +16,7 @@ Include what you found, how to reproduce it and the impact you see. You'll get a
 - Loading a tampered model file. Bundled models are checked against SHA-256 in `brain/models/manifest.json`. Models in `%APPDATA%\Pebble\models` load only from a model pack signed by the Pebble project (Ed25519, see `docs/adr/0011-signed-model-packs.md`).
 - Code execution through model files, settings or crafted input to Quick Add.
 - Backup files (About → Backup): AES-256-GCM in 1 MiB chunks, key from PBKDF2-HMAC-SHA256 (600 000 iterations, random salt). A changed, cut or reordered file must be refused, and a wrong passphrase must never give data (`docs/adr/0015-encrypted-backup.md`). The plain copy made during an export must never stay on disk.
-- The local chat server (Smart replies, off by default): it must listen only on 127.0.0.1, refuse requests without the per-start key, and never reach the internet. Its program comes only from a signed chat pack.
+- The local chat server (Smart replies, off by default): it must listen only on 127.0.0.1, refuse requests without the per-start key, and never reach the internet. Pebble sends the key and your text only after it has checked (with `netstat -ano`) that the child process is the only listener on the port; if it cannot check, it does not use the server. The port is chosen before the server binds it, so a start that loses the port to another program is stopped and tried again (3 times). Its program comes only from a signed chat pack.
 
 ## Model signing key
 

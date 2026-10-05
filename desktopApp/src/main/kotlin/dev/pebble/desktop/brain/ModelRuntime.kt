@@ -2,6 +2,7 @@ package dev.pebble.desktop.brain
 
 import ai.onnxruntime.OrtEnvironment
 import com.k2fsa.sherpa.onnx.LibraryUtils
+import dev.pebble.desktop.core.Logger
 import dev.pebble.desktop.voice.SpeechRecognizer
 import kotlinx.coroutines.CoroutineScope
 import java.nio.file.Path
@@ -13,6 +14,11 @@ import java.nio.file.Path
 class ModelRuntime(scope: CoroutineScope, dataDir: Path, idleMillis: Long = 10 * 60_000L) {
     /** Where signed packs are installed (WP D2). */
     val packsDir: Path = dataDir.resolve("models")
+
+    // A chat server left by a Pebble that did not exit cleanly would lock the files of a pack install.
+    init {
+        runCatching { LocalChat.killLeftovers(packsDir.resolve("chat").resolve("llama-server.exe"), Logger.None) }
+    }
 
     /** Pack installs and removals staged in the last run, done now: no model is loaded yet. */
     val packChangesAtStart: List<String> = runCatching { ModelPack.applyStaged(packsDir) }.getOrElse { listOf("failed: ${it.message}") }

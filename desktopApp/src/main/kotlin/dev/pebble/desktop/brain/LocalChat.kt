@@ -4,14 +4,21 @@ import dev.pebble.core.brain.ChatSafety
 import dev.pebble.core.brain.ReplyContext
 import dev.pebble.core.brain.ReplyGenerator
 import dev.pebble.desktop.core.Logger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -27,16 +34,20 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.Files
 import java.nio.file.Path
 import java.security.SecureRandom
 import java.time.Duration
 import java.util.HexFormat
+import java.util.concurrent.TimeUnit
 
 /**
  * Smart replies with a local chat model (WP C5, ADR 0012): `llama-server` from llama.cpp as a separate process.
  *  - It starts on the first reply that you ask for, and stops after [idleMillis] without use, and on exit.
  *  - It listens only on 127.0.0.1, on a free port, and it needs a random key for each start. The key goes in
  *    its environment (`LLAMA_API_KEY`), not on the command line, which other programs can read.
+ *  - Pebble sends the key only after it has checked that the child process itself listens on the port
+ *    ([portOwners]); a start that lost the port to another program is tried again on a new port.
  *  - `--offline` and `--no-webui`: it never downloads anything and serves no web page.
  *  - A reply waits at most [replyMillis]. Then Pebble answers with a canned line, and the model keeps loading
  *    for the next reply. [ChatSafety.clean] must accept a reply before it is shown.
@@ -53,17 +64,47 @@ class LocalChat(
     private val replyMillis: Long = 6_000L,
     private val startMillis: Long = 60_000L,
     private val threads: Int = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4),
+    /** Starts the server process. Replaced in tests. */
+    private val launcher: ServerLauncher = ServerLauncher { command, key, dir, out -> launchProcess(command, key, dir, out) },
+    /** The process ids that listen on a local TCP port, or null if this cannot be found. Replaced in tests. */
+    private val portOwners: (port: Int) -> Set<Long>? = ::netstatOwners,
+    /** Runs the request work (JSON, waiting), so the caller's thread (for example the UI thread) never blocks. */
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ReplyGenerator,
     AutoCloseable {
     data class ChatFiles(val server: Path, val model: Path)
 
+    /** Starts one server process: [command] with [key] as `LLAMA_API_KEY`, in [dir], output to [out] (null: dropped). */
+    fun interface ServerLauncher {
+        fun launch(command: List<String>, key: String, dir: Path, out: Path?): Process
+    }
+
     private class Running(val process: Process, val port: Int, val key: String)
+
+    private sealed interface Attempt {
+        class Ready(val server: Running) : Attempt
+
+        /** The port was taken or is not ours: try again with a new port. */
+        data object PortLost : Attempt
+
+        data object Failed : Attempt
+    }
 
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()
     private val lock = Mutex()
-    private var starting: Deferred<Running?>? = null
+
+    @Volatile private var starting: Deferred<Running?>? = null
+
+    /** Guards [running] (writes), [pending] and [generation]. [close] is not a suspend function, so no Mutex. */
+    private val state = Any()
 
     @Volatile private var running: Running? = null
+
+    /** The process that still loads its model. [close] stops it, so a quit never leaves a server behind. */
+    private var pending: Process? = null
+
+    /** Changes at each [close]. A start from an earlier generation must not publish its server. */
+    private var generation = 0
 
     @Volatile private var lastUse = 0L
 
@@ -75,26 +116,66 @@ class LocalChat(
     /** The server's process id while it runs (memory checks). */
     val pid: Long? get() = running?.process?.takeIf { it.isAlive }?.pid()
 
-    override suspend fun reply(ctx: ReplyContext): String? {
-        lastUse = System.currentTimeMillis()
-        val start = lock.withLock {
-            running?.takeIf { it.process.isAlive }?.let { return@withLock null }
-            starting?.takeIf { it.isActive } ?: scope.async { start() }.also { starting = it }
+    /**
+     * A reply from the chat model, or null (not installed, too slow, not safe to show, or any failure).
+     * The work runs on [dispatcher]. It never throws, except for the cancellation of the caller.
+     */
+    override suspend fun reply(ctx: ReplyContext): String? = withContext(dispatcher) {
+        try {
+            lastUse = System.currentTimeMillis()
+            val deadline = lastUse + replyMillis
+            val start = lock.withLock {
+                running?.takeIf { it.process.isAlive }?.let { return@withLock null }
+                starting?.takeIf { it.isActive } ?: scope.async { start() }.also { starting = it }
+            }
+            withTimeoutOrNull(replyMillis) {
+                val r = running?.takeIf { it.process.isAlive } ?: awaitStart(start) ?: return@withTimeoutOrNull null
+                val raw = complete(r, ctx, deadline) ?: return@withTimeoutOrNull null
+                ChatSafety.clean(raw, ctx).also { if (it == null) log.info(TAG, "reply not shown (failed the safety check)") }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn(TAG, "smart reply failed", e)
+            null
+        } finally {
+            lastUse = System.currentTimeMillis()
         }
-        return withTimeoutOrNull(replyMillis) {
-            val r = running?.takeIf { it.process.isAlive } ?: start?.await() ?: return@withTimeoutOrNull null
-            val raw = complete(r, ctx) ?: return@withTimeoutOrNull null
-            ChatSafety.clean(raw, ctx).also { if (it == null) log.info(TAG, "reply not shown (failed the safety check)") }
-        }.also { lastUse = System.currentTimeMillis() }
+    }
+
+    /** The result of [start]. If only the start was cancelled (by [close]) and the caller was not, this is null. */
+    private suspend fun awaitStart(start: Deferred<Running?>?): Running? = try {
+        start?.await()
+    } catch (e: CancellationException) {
+        currentCoroutineContext().ensureActive()
+        null
     }
 
     /** Starts the server and waits until the model is loaded; null if it cannot. */
     private suspend fun start(): Running? {
         val files = locate() ?: return null
-        killLeftovers(files.server)
+        val myGeneration = synchronized(state) { generation }
+        killLeftovers(files.server, log)
+        val deadline = System.currentTimeMillis() + startMillis
+        repeat(MAX_ATTEMPTS) { n ->
+            when (val a = attempt(files, deadline, myGeneration)) {
+                is Attempt.Ready -> return a.server
+                Attempt.Failed -> return null
+                Attempt.PortLost -> log.info(TAG, "chat server lost its port (try ${n + 1} of $MAX_ATTEMPTS)")
+            }
+        }
+        return null
+    }
+
+    /**
+     * One start on a new port. The port comes from a socket that is closed before the server binds it, so another
+     * program could take it first. Therefore Pebble sends the key only after the listener on the port is the child
+     * process itself ([portOwners]). Before that it asks `/health`, which needs no key and holds no secret.
+     */
+    private suspend fun attempt(files: ChatFiles, deadline: Long, myGeneration: Int): Attempt {
         val port = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
         val key = HexFormat.of().formatHex(ByteArray(24).also { SecureRandom().nextBytes(it) })
-        val pb = ProcessBuilder(
+        val command = listOf(
             files.server.toString(),
             "-m", files.model.toString(),
             "--host", "127.0.0.1",
@@ -106,67 +187,121 @@ class LocalChat(
             "--reasoning", "off",
             "--no-webui",
             "--offline",
-        ).directory(files.server.parent.toFile())
-        pb.environment()["LLAMA_API_KEY"] = key
-        pb.redirectErrorStream(true)
-        if (logFile != null) pb.redirectOutput(logFile.toFile()) else pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
-        val process = runCatching { pb.start() }.getOrElse {
-            log.warn(TAG, "chat server did not start", it)
-            return null
-        }
-        val r = Running(process, port, key)
+        )
         val t0 = System.currentTimeMillis()
-        while (process.isAlive && System.currentTimeMillis() - t0 < startMillis) {
-            if (healthy(r)) {
-                running = r
-                log.info(TAG, "chat server ready in ${System.currentTimeMillis() - t0} ms (pid ${process.pid()}, ${files.model.fileName})")
-                watchIdle()
-                return r
-            }
-            delay(150)
+        // The generation check and the "pending" mark are one step, so close() cannot miss this process.
+        val process = synchronized(state) {
+            if (generation != myGeneration) return Attempt.Failed
+            runCatching { launcher.launch(command, key, files.server.parent, logFile) }.getOrElse {
+                log.warn(TAG, "chat server did not start", it)
+                return Attempt.Failed
+            }.also { pending = it }
         }
-        log.warn(TAG, "chat server not ready (alive=${process.isAlive}, exit=${if (process.isAlive) "-" else process.exitValue()})")
-        stop(process)
-        return null
+        try {
+            while (true) {
+                if (synchronized(state) { generation != myGeneration }) return stopped(process, Attempt.Failed)
+                if (!process.isAlive) {
+                    log.warn(TAG, "chat server not ready (exit=${process.exitValue()})")
+                    // An early exit most likely means that the port was taken.
+                    return if (System.currentTimeMillis() - t0 < BIND_WINDOW_MILLIS) Attempt.PortLost else Attempt.Failed
+                }
+                if (System.currentTimeMillis() >= deadline) {
+                    log.warn(TAG, "chat server not ready (timeout)")
+                    return stopped(process, Attempt.Failed)
+                }
+                if (healthy(port)) {
+                    val owners = portOwners(port)
+                    if (owners == null) {
+                        log.warn(TAG, "cannot check who listens on the chat port; not using the chat server")
+                        return stopped(process, Attempt.Failed)
+                    }
+                    if (owners != setOf(process.pid())) {
+                        log.warn(TAG, "the chat port is used by another program; the key was not sent")
+                        return stopped(process, Attempt.PortLost)
+                    }
+                    val r = Running(process, port, key)
+                    val published = synchronized(state) {
+                        (generation == myGeneration).also {
+                            if (it) {
+                                running = r
+                                pending = null
+                            }
+                        }
+                    }
+                    if (!published) return stopped(process, Attempt.Failed)
+                    log.info(
+                        TAG,
+                        "chat server ready in ${System.currentTimeMillis() - t0} ms (pid ${process.pid()}, ${files.model.fileName})",
+                    )
+                    watchIdle()
+                    return Attempt.Ready(r)
+                }
+                delay(150)
+            }
+        } catch (e: CancellationException) {
+            stop(process)
+            throw e
+        } finally {
+            synchronized(state) { if (pending === process) pending = null }
+        }
     }
 
-    private fun healthy(r: Running): Boolean = runCatching {
-        val req = HttpRequest.newBuilder(URI("http://127.0.0.1:${r.port}/health")).timeout(Duration.ofSeconds(1))
-            .header("Authorization", "Bearer ${r.key}").GET().build()
-        http.send(req, HttpResponse.BodyHandlers.discarding()).statusCode() == 200
-    }.getOrDefault(false)
+    private fun stopped(p: Process, result: Attempt): Attempt {
+        stop(p)
+        return result
+    }
 
-    private fun complete(r: Running, ctx: ReplyContext): String? = runCatching {
-        val body = buildJsonObject {
-            put(
-                "messages",
-                buildJsonArray {
-                    ChatSafety.messages(ctx).forEach { (role, text) ->
-                        add(
-                            buildJsonObject {
-                                put("role", role)
-                                put("content", text)
-                            },
-                        )
-                    }
-                },
-            )
-            put("max_tokens", 80)
-            put("temperature", 0.7)
-            put("top_p", 0.9)
-            put("stream", false)
+    /** True when `/health` answers 200. It needs no key, so none is sent. */
+    private suspend fun healthy(port: Int): Boolean = try {
+        val req = HttpRequest.newBuilder(URI("http://127.0.0.1:$port/health")).timeout(Duration.ofSeconds(1)).GET().build()
+        http.sendAsync(req, HttpResponse.BodyHandlers.discarding()).await().statusCode() == 200
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
+    }
+
+    /** Sends the chat request without blocking a thread: a cancel or the [deadline] ends the request. */
+    private suspend fun complete(r: Running, ctx: ReplyContext, deadline: Long): String? {
+        val remaining = deadline - System.currentTimeMillis()
+        if (remaining <= 0) return null
+        return try {
+            val body = buildJsonObject {
+                put(
+                    "messages",
+                    buildJsonArray {
+                        ChatSafety.messages(ctx).forEach { (role, text) ->
+                            add(
+                                buildJsonObject {
+                                    put("role", role)
+                                    put("content", text)
+                                },
+                            )
+                        }
+                    },
+                )
+                put("max_tokens", 80)
+                put("temperature", 0.7)
+                put("top_p", 0.9)
+                put("stream", false)
+            }
+            val req = HttpRequest.newBuilder(URI("http://127.0.0.1:${r.port}/v1/chat/completions"))
+                .timeout(Duration.ofMillis(remaining))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer ${r.key}")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build()
+            val res = http.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+            if (res.statusCode() != 200) return null
+            Json.parseToJsonElement(res.body()).jsonObject.getValue("choices").jsonArray.first().jsonObject
+                .getValue("message").jsonObject["content"]?.let { (it as? JsonPrimitive)?.content }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn(TAG, "chat request failed", e)
+            null
         }
-        val req = HttpRequest.newBuilder(URI("http://127.0.0.1:${r.port}/v1/chat/completions"))
-            .timeout(Duration.ofMillis(replyMillis))
-            .header("Content-Type", "application/json")
-            .header("Authorization", "Bearer ${r.key}")
-            .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-            .build()
-        val res = http.send(req, HttpResponse.BodyHandlers.ofString())
-        if (res.statusCode() != 200) return@runCatching null
-        Json.parseToJsonElement(res.body()).jsonObject.getValue("choices").jsonArray.first().jsonObject
-            .getValue("message").jsonObject["content"]?.let { (it as? JsonPrimitive)?.content }
-    }.onFailure { log.warn(TAG, "chat request failed", it) }.getOrNull()
+    }
 
     private fun watchIdle() = scope.launch {
         while (isActive) {
@@ -185,42 +320,98 @@ class LocalChat(
         }
     }
 
-    /** A server left by a Pebble that did not exit cleanly: same program file, so it is ours. */
-    private fun killLeftovers(server: Path) {
-        val exe = server.toAbsolutePath().normalize().toString()
-        ProcessHandle.allProcesses()
-            .filter { p -> p.info().command().map { it.equals(exe, ignoreCase = true) }.orElse(false) }
-            .forEach { p ->
-                log.info(TAG, "stopping a chat server left from an earlier run (pid ${p.pid()})")
-                p.destroyForcibly()
-            }
-    }
-
     private fun stop(p: Process) {
         p.destroy()
-        if (!p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) p.destroyForcibly()
+        if (!p.waitFor(2, TimeUnit.SECONDS)) p.destroyForcibly()
     }
 
+    /**
+     * Stops the server now, also one that still loads its model, and cancels a start that is under way.
+     * You can ask for a reply again afterwards (Smart replies off, then on).
+     */
     override fun close() {
-        running?.let { stop(it.process) }
-        running = null
+        val r: Running?
+        val p: Process?
+        synchronized(state) {
+            generation++
+            r = running
+            p = pending
+            running = null
+            pending = null
+        }
+        starting?.cancel()
+        r?.let { stop(it.process) }
+        p?.let { stop(it) }
     }
 
     companion object {
         private const val TAG = "chat"
+        private const val MAX_ATTEMPTS = 3
+        private const val BIND_WINDOW_MILLIS = 10_000L
 
         /**
          * The chat files in [dir]: `llama-server.exe` and the first `.gguf` model. Null if either is missing.
          */
         fun filesIn(dir: Path?): ChatFiles? {
-            if (dir == null || !java.nio.file.Files.isDirectory(dir)) return null
-            val server = dir.resolve("llama-server.exe").takeIf { java.nio.file.Files.exists(it) } ?: return null
+            if (dir == null || !Files.isDirectory(dir)) return null
+            val server = dir.resolve("llama-server.exe").takeIf { Files.exists(it) } ?: return null
             val model =
-                java.nio.file.Files.list(dir).use { s ->
+                Files.list(dir).use { s ->
                     s.filter { it.fileName.toString().endsWith(".gguf") }.sorted().findFirst().orElse(null)
                 }
                     ?: return null
             return ChatFiles(server, model)
         }
+
+        /**
+         * A server left by a Pebble that did not exit cleanly: same program file, so it is ours. Stop it before a
+         * pack install ([ModelPack.applyStaged]), because a running server locks its files.
+         */
+        fun killLeftovers(server: Path, log: Logger) {
+            val exe = server.toAbsolutePath().normalize().toString()
+            ProcessHandle.allProcesses()
+                .filter { p -> p.info().command().map { it.equals(exe, ignoreCase = true) }.orElse(false) }
+                .forEach { p ->
+                    log.info(TAG, "stopping a chat server left from an earlier run (pid ${p.pid()})")
+                    p.destroyForcibly()
+                }
+        }
+
+        private fun launchProcess(command: List<String>, key: String, dir: Path, out: Path?): Process {
+            val pb = ProcessBuilder(command).directory(dir.toFile())
+            pb.environment()["LLAMA_API_KEY"] = key
+            pb.redirectErrorStream(true)
+            if (out != null) pb.redirectOutput(out.toFile()) else pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            return pb.start()
+        }
+
+        /**
+         * The process ids that listen on local TCP [port], from `netstat -ano` (the JDK has no API for this).
+         * Null if netstat cannot run.
+         */
+        fun netstatOwners(port: Int): Set<Long>? = runCatching {
+            val exe = Path.of(System.getenv("SystemRoot") ?: "C:\\Windows", "System32", "netstat.exe")
+            val out = Files.createTempFile("pebble-netstat", ".txt")
+            try {
+                val p = ProcessBuilder(exe.toString(), "-ano", "-p", "tcp").redirectErrorStream(true).redirectOutput(out.toFile()).start()
+                if (!p.waitFor(5, TimeUnit.SECONDS)) {
+                    p.destroyForcibly()
+                    return@runCatching null
+                }
+                parseListeners(Files.readAllLines(out), port)
+            } finally {
+                Files.deleteIfExists(out)
+            }
+        }.getOrNull()
+
+        /**
+         * The pids of the listening sockets on [port] in `netstat -ano` [lines]. A listener has the foreign address
+         * `...:0`. The state word is not read: it changes with the Windows language.
+         */
+        fun parseListeners(lines: List<String>, port: Int): Set<Long> = lines.mapNotNull { line ->
+            val t = line.trim().split(Regex("\\s+"))
+            val listener = t.size >= 5 && t[0].equals("TCP", ignoreCase = true) && t[1].endsWith(":$port") && t[2].endsWith(":0")
+            if (listener) t[4].toLongOrNull() else null
+        }.toSet()
     }
 }

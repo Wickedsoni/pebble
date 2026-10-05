@@ -145,8 +145,11 @@ fun QuickAddWindow(
                 val v = via()
                 thinking = true
                 scope.launch {
-                    val reply = app.smartReply(r.command)
-                    thinking = false
+                    val reply = try {
+                        app.smartReply(r.command)
+                    } finally {
+                        thinking = false
+                    }
                     answered(app.converse(said, v, r, reply) { t, a -> onRetry(QuickAddRetry(t, a)) })
                 }
                 return
@@ -163,8 +166,11 @@ fun QuickAddWindow(
                 val v = via()
                 thinking = true
                 scope.launch {
-                    val reply = app.smartReply(option.command)
-                    thinking = false
+                    val reply = try {
+                        app.smartReply(option.command)
+                    } finally {
+                        thinking = false
+                    }
                     answered(app.converseChoice(said, v, option, ask?.understood, reply))
                 }
                 return
