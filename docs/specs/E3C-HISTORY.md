@@ -1,6 +1,6 @@
 # Spec E3c: History and restore
 
-- **Status:** Draft. It waits for the approval of the maintainer. Do not start WP E3c before this file says "Approved".
+- **Status:** Approved by the maintainer on 2026-10-05, with the answers in section 10.
 - **Date:** 2026-10-05
 - **Work package:** E3c (new; the maintainer's decision on 2026-10-05, during E3b). It depends on E3a and E3b (ADR 0018).
 - **Author:** Opus. **Implementer:** Sonnet, in three PRs (section 9).
@@ -112,7 +112,7 @@ class ChangeHistory(db: PebbleDatabase, journal: ChangeJournal) {
 ```
 
 - **Group into versions:** replaced entries with the same `replaced_by`; lost entries with the same `hlc`.
-- **`restore`** writes only the fields of the version that differ from the current values. It goes through `ChangeJournal.record` and the merge's update path, with a new local HLC. For a calendar event, the caller then calls `agenda.eventChanged` (as for a local edit).
+- **`restore`** brings back **all** fields of the version (also `done_at` and `archived`; the maintainer's answer 4), but never `deleted_at`. It writes only the fields that differ from the current values. It goes through `ChangeJournal.record` and the merge's update path, with a new local HLC. For a calendar event, the caller then calls `agenda.eventChanged` (as for a local edit).
 - **`restoreCopy`** reads the tombstone row and makes a new item through the repository (`NoteRepository.add`, `ReminderRepository.addOneOff`, `CalendarRepository.save` with `CalendarRepository.newUid()`). A reminder whose time has passed comes back with its old time; you can change it after.
 
 ## 6. UI (PRs E3c-2 and E3c-3)
@@ -169,10 +169,11 @@ The text in the dialog uses the glossary words: "version", "restore", "restore a
 | **E3c-2** | History dialog on the Calendar and Reminders pages; "Recently deleted" card on the Memory page | State holder tests; a live check in the built app (on a copy of the data). |
 | **E3c-3** | Notes page to the state-holder pattern (B7), then its History button | The same. |
 
-## 10. Questions for the maintainer
+## 10. Decisions of the maintainer (2026-10-05)
 
-Answer these before you approve this spec:
-1. **"Recently deleted" in one place** (a card on the Memory page, for events, notes and reminders), or on each page (Calendar, Notes, Reminders)?
-2. **Keep old versions for 90 days**, the same as deleted items? Or a different time?
-3. **"Clear history" button** on the Memory page: yes?
-4. **What a restore brings back:** all fields of the version (also "done" and "archived"), or only the content (title, text, times, repeat)? A delete is never undone in place in either case.
+| # | Question | Answer |
+|---|---|---|
+| 1 | Where is "Recently deleted"? | **One card on the Memory page**, for events, notes and reminders (section 6). |
+| 2 | Keep old versions for 90 days? | Yes, the same as deleted items (4.3). |
+| 3 | A "Clear history" button on the Memory page? | Yes (section 6; it asks first). |
+| 4 | What does a restore bring back? | **Everything** in the version, also "done" and "archived". A delete is never undone in place (section 5). |
