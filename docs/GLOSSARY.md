@@ -7,7 +7,7 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 |---|---|---|
 | **command model** | The ONNX model that reads one text and gives an intent, slots and a mood (intent-v2, e5-small encoder, int8). Code: `OnnxIntentModel`, `ModelManager`. | "intent model" in new docs, "NLU", "classifier" |
 | **speech model** | A model that changes speech into text (Dolphin-base CTC, Whisper-base). Code: `SpeechRecognizer`. | "ASR model" in new docs, "voice model" |
-| **chat model** | A local large language model that writes free replies (planned, milestone M5). It runs as a separate process. | "LLM" alone, "AI" |
+| **chat model** | A local large language model that writes small-talk replies ("Smart replies", off by default). It runs as a separate process (`llama-server`) on 127.0.0.1. Code: `LocalChat`, `ChatSafety` (ADR 0012). | "LLM" alone, "AI" |
 | **rule** | Deterministic code that reads text without a model: `QuickAddParser`, `HinglishTime`. | "regex", "parser" alone |
 | **router** | The code that sends text through the rules, then the command model, and then the decision policy. Code: `CommandRouter`. | "pipeline", "dispatcher" |
 | **personal layer** | The code that changes the reading of the command model with your own examples: phrases that you taught, your "Did you mean…" picks and your "Not what I meant" taps. It does not train the model. Code: `PersonalLayer` (ADR 0010). | "fine-tuning", "personalization model" |

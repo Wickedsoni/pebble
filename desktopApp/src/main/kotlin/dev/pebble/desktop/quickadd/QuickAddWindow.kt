@@ -26,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
 import dev.pebble.core.brain.CommandRouter
 import dev.pebble.core.brain.Turn
+import dev.pebble.core.quickadd.QuickCommand
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.PetLine
 import dev.pebble.desktop.platform.UserActivity
@@ -58,6 +60,7 @@ import dev.pebble.desktop.ui.glassColors
 import dev.pebble.desktop.voice.VoiceInput
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
@@ -111,6 +114,9 @@ fun QuickAddWindow(
         var heard by remember { mutableStateOf<String?>(null) }
         // Pebble's last answer, with its buttons ("Not what I meant").
         var lastLine by remember { mutableStateOf<PetLine?>(null) }
+        // The chat model is writing a reply (Smart replies).
+        var thinking by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
         val turns by remember { app.conversation.recentFlow(30) }.collectAsState(initial = app.conversation.recent(30))
         val voice = app.voice
         val voiceState by voice.state.collectAsState()
@@ -131,13 +137,38 @@ fun QuickAddWindow(
         fun via() = if (heard != null) "voice" else "typed"
 
         fun run(r: CommandRouter.Routed.Run) {
+            if (thinking) return
             if (heard != null) app.noteVoiceCorrection(text)
+            if (r.command is QuickCommand.Chitchat && app.smartRepliesOn()) {
+                // Smart replies (WP C5): ask the chat model off the UI thread; it falls back to the canned line.
+                val said = text
+                val v = via()
+                thinking = true
+                scope.launch {
+                    val reply = app.smartReply(r.command)
+                    thinking = false
+                    answered(app.converse(said, v, r, reply) { t, a -> onRetry(QuickAddRetry(t, a)) })
+                }
+                return
+            }
             answered(app.converse(text, via(), r) { t, a -> onRetry(QuickAddRetry(t, a)) })
         }
 
         fun choose(option: CommandRouter.Option) {
+            if (thinking) return
             if (heard != null) app.noteVoiceCorrection(text)
             val ask = routed as? CommandRouter.Routed.Ask
+            if (option.command is QuickCommand.Chitchat && app.smartRepliesOn()) {
+                val said = text
+                val v = via()
+                thinking = true
+                scope.launch {
+                    val reply = app.smartReply(option.command)
+                    thinking = false
+                    answered(app.converseChoice(said, v, option, ask?.understood, reply))
+                }
+                return
+            }
             answered(app.converseChoice(text, via(), option, ask?.understood))
         }
 
@@ -201,6 +232,7 @@ fun QuickAddWindow(
             FrostedPanel {
                 Column(Modifier.fillMaxSize()) {
                     Conversation(turns, lastLine, Modifier.weight(1f).fillMaxWidth())
+                    if (thinking) Text("Pebble is thinking…", color = colors.secondary, fontSize = 11.sp)
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         dev.pebble.desktop.app.Icon(dev.pebble.desktop.app.PebbleIcons.Spark, colors.accent, 22.dp)

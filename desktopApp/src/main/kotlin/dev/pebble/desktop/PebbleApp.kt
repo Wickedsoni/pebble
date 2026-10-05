@@ -139,7 +139,7 @@ class PebbleApp(
 
     /** "Model packs" on the About page (WP D2): signed packs in `%APPDATA%\Pebble\models`, used from the next start. */
     val modelPacks = object : dev.pebble.desktop.app.pages.ModelPacksPort {
-        private val labels = mapOf("intent" to "Command model", "asr" to "Speech models")
+        private val labels = mapOf("intent" to "Command model", "asr" to "Speech models", "chat" to "Chat model (Smart replies)")
         private val bundled = System.getProperty("compose.application.resources.dir")?.let { java.nio.file.Path.of(it).resolve("models") }
 
         override suspend fun models() = withContext(env.dispatchers.io) {
@@ -411,17 +411,75 @@ class PebbleApp(
      * Everything you say to Pebble goes through here: runs it (with "Not what I meant" when the model chose),
      * remembers the exchange, and returns Pebble's reply. [via] is "typed" or "voice".
      */
-    fun converse(text: String, via: String, routed: CommandRouter.Routed.Run, retry: (text: String, wrongAction: String) -> Unit): PetLine {
-        val line = if (routed.source == CommandRouter.Source.MODEL) executeFromModel(text, routed, retry) else execute(routed.command)
+    fun converse(
+        text: String,
+        via: String,
+        routed: CommandRouter.Routed.Run,
+        /** A reply from the chat model ([smartReply]) in place of the canned line. */
+        reply: String? = null,
+        retry: (text: String, wrongAction: String) -> Unit,
+    ): PetLine {
+        val done = if (routed.source == CommandRouter.Source.MODEL) executeFromModel(text, routed, retry) else execute(routed.command)
+        val line = if (reply != null) done.copy(text = reply) else done
         remember(text, via, routed.command, line)
         return line
     }
 
+    /**
+     * The local chat model (WP C5, ADR 0012): `llama-server` from a signed "chat" pack, or from `PEBBLE_CHAT_DIR`
+     * (developers). It runs only while "Smart replies" is on and you chat; it listens only on 127.0.0.1.
+     */
+    val chat = dev.pebble.desktop.brain.LocalChat(
+        locate = {
+            dev.pebble.desktop.brain.LocalChat.filesIn(
+                System.getenv("PEBBLE_CHAT_DIR")?.let { java.nio.file.Path.of(it) }
+                    ?: dev.pebble.desktop.brain.ModelChecksums.trustedUserDir(
+                        DatabaseFactory.defaultDataDir().toPath(),
+                        "chat",
+                        models.cache,
+                    ),
+            )
+        },
+        scope = appScope + env.dispatchers.io,
+        log = log,
+        logFile = DatabaseFactory.defaultDataDir().toPath().resolve("chat-server.log"),
+    )
+
+    /** True when the chat model may answer small talk: the setting is on and a chat model is installed. */
+    fun smartRepliesOn(): Boolean = settings.bool(Keys.SMART_REPLIES, false) && chat.available
+
+    /**
+     * A chat-model reply to small talk [cmd], or null for the canned line (off, not installed, a low mood, a
+     * health or money question, a script the model writes badly, too slow, or not safe to show).
+     */
+    suspend fun smartReply(cmd: QuickCommand): String? {
+        val c = cmd as? QuickCommand.Chitchat ?: return null
+        if (!smartRepliesOn() || !dev.pebble.core.brain.ChatSafety.mayUseModel(c.text, c.intent, c.mood, CHAT_SCRIPTS)) return null
+        val ctx = withContext(env.dispatchers.io) {
+            dev.pebble.core.brain.ReplyContext(
+                userText = c.text,
+                mood = c.mood,
+                recentTurns = conversation.recent(3).map { it.said to it.reply },
+                memories = runCatching {
+                    memorySearch.search(c.text, limit = 3).filter { it.kind != dev.pebble.core.search.MemorySearch.SAID }.map { it.text }
+                }.getOrDefault(emptyList()),
+            )
+        }
+        return chat.reply(ctx)
+    }
+
     /** You picked [option] from "Did you mean…": a strong label for the next model, and a turn in the chat. */
-    fun converseChoice(text: String, via: String, option: CommandRouter.Option, understood: dev.pebble.core.brain.Understood?): PetLine {
+    fun converseChoice(
+        text: String,
+        via: String,
+        option: CommandRouter.Option,
+        understood: dev.pebble.core.brain.Understood?,
+        /** A reply from the chat model ([smartReply]) in place of the canned line. */
+        reply: String? = null,
+    ): PetLine {
         commandFeedback.record(text.trim(), option.action, understood, now())
         requestIndexing() // the personal layer learns the pick
-        val line = execute(option.command)
+        val line = execute(option.command).let { if (reply != null) it.copy(text = reply) else it }
         remember(text, via, option.command, line)
         return line
     }
@@ -458,6 +516,7 @@ class PebbleApp(
 
     /** On exit: saves the events still queued (at most 2 s), then stops every coroutine. */
     fun shutdown() {
+        runCatching { chat.close() }
         bus.publish(PebbleEvent.AppStopping(now()))
         val saved = runBlocking { eventLog.close(2.seconds) }
         if (!saved) log.warn(TAG, "event log not flushed within 2 s on exit")
@@ -466,6 +525,9 @@ class PebbleApp(
 
     companion object {
         private const val TAG = "app"
+
+        /** Scripts the shipped chat model writes well enough (brain/eval/chat_v1.jsonl, ADR 0012); others get canned lines. */
+        val CHAT_SCRIPTS = setOf(dev.pebble.core.brain.Script.EN)
 
         fun create(): PebbleApp {
             val env = AppEnv.system()

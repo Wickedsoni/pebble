@@ -37,5 +37,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
 
         /** The personal layer ignores picks and "Not what I meant" rows before this time ("Forget what you taught me"). */
         const val PERSONAL_SINCE = "brain.personalSince"
+
+        /** Small talk from the local chat model (WP C5). Off by default; it starts a process on 127.0.0.1. */
+        const val SMART_REPLIES = "chat.smartReplies"
     }
 }

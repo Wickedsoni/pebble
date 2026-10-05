@@ -52,7 +52,8 @@ fun AboutPage(app: PebbleApp) {
                 CardLabel("Your privacy", PebbleIcons.Shield, c.water)
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     listOf(
-                        "Everything stays on this computer. No account, no cloud, no ads, no analytics. Pebble makes no network connections.",
+                        "Everything stays on this computer. No account, no cloud, no ads, no analytics. Pebble makes no connections to the internet.",
+                        "Connections: only if you turn on Smart replies, Pebble starts its chat model as a helper program and talks to it on this computer (127.0.0.1, a random port and key). Nothing else listens or connects.",
                         "Your notes, reminders, conversation and habits live in %APPDATA%\\Pebble, and you can delete any of it (Chat, Memory pages).",
                         "The microphone opens only while you hold Ctrl+Alt+Space or press 🎤, and can be switched off in Memory → Privacy. Speech is understood on this PC; audio is thrown away.",
                         "Pebble glances at the title of the window in front to stay quiet during videos. It isn't stored unless you turn on \"Notice what I watch\".",

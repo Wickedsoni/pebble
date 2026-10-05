@@ -149,7 +149,8 @@ compose.desktop {
             packageVersion = "0.1.2"
             description = "Desktop pet and glass widgets"
             // jdk.crypto.ec: Ed25519 for signed model packs on JDK 21 (in java.base only from JDK 22).
-            modules("java.sql", "jdk.unsupported", "jdk.crypto.ec")
+            // java.net.http: the HttpClient that talks to the local chat server on 127.0.0.1 (WP C5).
+            modules("java.sql", "jdk.unsupported", "jdk.crypto.ec", "java.net.http")
             windows {
                 menuGroup = "Pebble"
                 perUserInstall = true
