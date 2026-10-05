@@ -1,6 +1,5 @@
 package dev.pebble.core.history
 
-import dev.pebble.core.db.writeTransaction
 import dev.pebble.core.settings.SettingsRepository.Keys
 import dev.pebble.db.PebbleDatabase
 
@@ -16,9 +15,9 @@ class HistoryCompactor(private val db: PebbleDatabase, private val dayOf: (Long)
      */
     fun rollUpBefore(until: Long): Int {
         val history = EventHistory(db, dayOf)
-        return db.writeTransaction {
+        return db.transactionWithResult {
             val from = history.watermark()
-            if (until <= from) return@writeTransaction 0
+            if (until <= from) return@transactionWithResult 0
             val rows = db.historyQueries.eventsBetween(from, until).executeAsList()
             rows.groupingBy { Triple(dayOf(it.at_millis), it.type, EventHistory.keyOf(it.payload)) }.eachCount()
                 .forEach { (k, n) -> db.historyQueries.addDailyStat(k.first, k.second, k.third, n.toLong()) }

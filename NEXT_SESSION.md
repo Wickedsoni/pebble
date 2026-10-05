@@ -8,7 +8,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### Start here (end of 5 Oct 2026, after WP C4)
-- **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the SQLITE_BUSY fix (PR #41, `727a1f5`). There are no open PRs.
+- **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the first SQLITE_BUSY fix (PR #41, `727a1f5`). **The global SQLITE_BUSY fix (ADR 0017) is in a PR on `wp/fix-sqlite-busy-global`, waiting for your yes to merge.**
 - **Next WP: E3** (ChangeJournal + HLC). It is `[Opus spec]`: do not start it without an approved spec. Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
@@ -21,11 +21,19 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: SQLITE_BUSY fix (small WP, PR #41, merged)
-- **Problem:** two transactions read and then write: the history roll-up ("history roll-up failed" in `pebble.log` on 4 and 5 Oct) and `ReminderRepository.addLinked` (the reminder for a calendar event; it failed once in CI on PR #40). SQLDelight begins every transaction deferred. In WAL such a transaction fails at once with `SQLITE_BUSY_SNAPSHOT` when the event writer committed after its read. `busy_timeout` does not help there.
-- **What did not work:** sqlite-jdbc's `transaction_mode=IMMEDIATE`. SQLDelight 2.4.0 sends its own `BEGIN TRANSACTION` (checked in the jar), so the setting has no effect. Its driver class is final, so we cannot change that statement.
-- **Fix:** `db.writeTransaction { }` begins with a write that changes nothing, so it holds the write lock before it reads; the event writer waits for the busy timeout. The roll-up and `addLinked` use it. The other transactions start with a write and are safe. Rule added to CLAUDE.md trap 11.
-- **Tests:** `ConcurrentWriteTest` (4). A deferred read-then-write fails with `SQLITE_BUSY_SNAPSHOT` (control). `writeTransaction` makes the other writer wait and holds the lock from the start. A stress test runs `addLinked` + the roll-up 200 times while the event writer saves without a pause: it fails with the CI error without the fix and passes with it (5 of 5 runs). 277 Kotlin tests, 0 skipped.
+### 5 Oct: SQLITE_BUSY fix, now global (PR #41 merged; follow-up PR on `wp/fix-sqlite-busy-global`)
+- **Problem:** two transactions read and then write: the history roll-up ("history roll-up failed" in `pebble.log` on 4 and 5 Oct) and `ReminderRepository.addLinked` (it failed once in CI on PR #40). SQLDelight begins every transaction deferred. In WAL such a transaction fails at once with `SQLITE_BUSY_SNAPSHOT` when the event writer committed after its read. `busy_timeout` does not help.
+- **PR #41 (merged)** added an opt-in helper (`writeTransaction`) at the two call sites. You asked for a global fix, because new code could forget the helper.
+- **Global fix (ADR 0017):** `PebbleSqliteDriver` is a copy of SQLDelight 2.4.0's `JdbcSqliteDriver` (about 80 lines) with `BEGIN IMMEDIATE TRANSACTION`. `DatabaseFactory` uses it, so every transaction takes the write lock at its start. The helper is removed.
+  - sqlite-jdbc's `transaction_mode` has no effect, because SQLDelight sends its own `BEGIN` (checked in the jars).
+- **SQLDelight updates:** `ConcurrentWriteTest.theCopiedDriverMatchesThePinnedSqlDelight` fails when SQLDelight is not 2.4.0. Before an update (also a Dependabot one), ask Claude to compare the copy with the new driver. The rule is in CLAUDE.md rule 3.
+- **Tests:** `ConcurrentWriteTest` (6):
+  - SQLDelight's own driver still fails (the control test);
+  - every transaction makes the other writer wait, and holds the lock from `BEGIN`;
+  - stress: `addLinked` + the roll-up 200 times while the event writer saves;
+  - live queries still hear changes;
+  - the version guard.
+  - With a deferred `BEGIN` in the copy, the three lock tests fail with the CI errors.
 
 ### 5 Oct: WP C4 done (offline IPS evaluator, PR #39, merged)
 - **What:** `NudgeIpsEvaluator` (`shared/.../brain/`) pairs each logged `nudge_decided` (with its propensity) with the reaction, as the engine scores it. It gives IPS, SNIPS and ESS for a fixed target policy (ADR 0016).
@@ -73,7 +81,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - "Forget what you taught me" → back to "Can't do this yet". Test data was removed afterwards.
   - The check found that the Teach card was squeezed under the Privacy card. It now shares the left column.
   - Your database is now at schema 11 (C2's `vector_item`). The installed v0.1.2 still starts on it.
-- **Follow-up (not C3), fixed on 5 Oct (PR #41):** `pebble.log` showed "history roll-up failed: [SQLITE_BUSY] database is locked" at start-up. Cause: a deferred transaction that reads, then writes after the event writer committed. See the "SQLITE_BUSY fix" entry above.
+- **Follow-up (not C3), fixed on 5 Oct (PR #41, then globally in ADR 0017):** `pebble.log` showed "history roll-up failed: [SQLITE_BUSY] database is locked" at start-up. Cause: a deferred transaction that reads, then writes after the event writer committed. See the "SQLITE_BUSY fix" entry above.
 
 ### 5 Oct: WP E1 done (sync-ready rows)
 - Migration `11.sqm`: `note` and `one_off_reminder` gain `uid` (unique, backfilled), `updated_at`, `deleted_at`, `hlc`, `origin_device`. Deletes are tombstones, purged after 90 days. `device.id` is made at the first start (ADR 0013).
