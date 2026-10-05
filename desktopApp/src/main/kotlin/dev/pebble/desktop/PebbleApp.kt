@@ -71,10 +71,15 @@ class PebbleApp(
     val notes = NoteRepository(db)
     val memory = MemoryRepository(db)
 
+    /** Calendar events (WP E2); [agenda] expands them into days and keeps their linked reminders. */
+    val calendar = dev.pebble.core.calendar.CalendarRepository(db)
+    val agenda = dev.pebble.core.calendar.CalendarAgenda(calendar, reminders, env.zone)
+
     /** This device's id (WP E1), made at the first start; rows from before it existed are claimed for it. */
     val deviceId: String = dev.pebble.core.settings.DeviceIdentity.ensure(settings).also { id ->
         notes.claim(id)
         reminders.claim(id)
+        calendar.claim(id)
     }
 
     /** The pet's growth: levels earned by what you do (reminders done, water goals, active days, chats). */
@@ -333,6 +338,10 @@ class PebbleApp(
                 runCatching {
                     withContext(env.dispatchers.io) { rollUpHistory() }
                 }.onFailure { log.warn(TAG, "history roll-up failed", it) }
+                runCatching {
+                    val n = withContext(env.dispatchers.io) { agenda.scheduleReminders(now()) }
+                    if (n > 0) engine.tick()
+                }.onFailure { log.warn(TAG, "calendar reminders failed", it) }
                 runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning failed", it) }
                 requestIndexing() // edited notes and cleared chats have no event of their own
                 delay(10 * 60_000L)
@@ -348,8 +357,8 @@ class PebbleApp(
         if (n > 0) log.info(TAG, "rolled up $n log entries before $until")
         // Tombstones (WP E1): kept 90 days, so a device that syncs later still learns about the delete.
         val purgeBefore = env.millis() - TOMBSTONE_DAYS * 24 * 60 * 60_000L
-        val purged = notes.purgeTombstones(purgeBefore) + reminders.purgeTombstones(purgeBefore)
-        if (purged > 0) log.info(TAG, "purged $purged deleted notes and reminders older than $TOMBSTONE_DAYS days")
+        val purged = notes.purgeTombstones(purgeBefore) + reminders.purgeTombstones(purgeBefore) + calendar.purgeTombstones(purgeBefore)
+        if (purged > 0) log.info(TAG, "purged $purged deleted notes, reminders and events older than $TOMBSTONE_DAYS days")
     }
 
     fun completeNote(id: Long) {
@@ -410,6 +419,20 @@ class PebbleApp(
 
     fun undoWater() {
         water.undoLast(startOfToday())
+    }
+
+    /** Saves [e] (new or changed) and makes its reminders again. */
+    override fun saveEvent(e: dev.pebble.core.calendar.CalendarEvent) {
+        calendar.save(e, now())
+        agenda.eventChanged(e.uid, now())
+        engine.tick()
+    }
+
+    /** Deletes the event [uid] (a tombstone) and its reminders that did not fire yet. */
+    override fun deleteEvent(uid: String) {
+        calendar.delete(uid, now())
+        agenda.eventChanged(uid, now())
+        engine.tick()
     }
 
     override fun addNote(text: String): Long = notes.add(text, now()).also { bus.publish(PebbleEvent.NoteCreated(it, now())) }
@@ -536,7 +559,7 @@ class PebbleApp(
     companion object {
         private const val TAG = "app"
 
-        /** Deleted notes and reminders stay as tombstones this long (until sync can confirm that peers saw them). */
+        /** Deleted notes, reminders and events stay as tombstones this long (until sync can confirm that peers saw them). */
         const val TOMBSTONE_DAYS = 90L
 
         /** Scripts the shipped chat model writes well enough (brain/eval/chat_v1.jsonl, ADR 0012); others get canned lines. */

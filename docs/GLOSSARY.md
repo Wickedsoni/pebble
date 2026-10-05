@@ -16,7 +16,8 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 | **nudge** | A message from a repeating reminder (for example, "drink water"). The nudge policy decides its time. Code: `NudgePolicy`. | "notification", "ping" |
 | **reminder (one-off)** | A reminder that occurs one time, at a set time. Table: `one_off_reminder`. | "alarm", "task" |
 | **reminder (repeating)** | A reminder that occurs again after a set interval (eyes, water, stretch). | "habit", "recurring task" |
-| **event (calendar)** | An item in the calendar with a start time (planned, milestone M8). | "event" without "(calendar)" when the meaning is not clear |
+| **event (calendar)** | An item in the calendar with a start and an end. It can repeat (an RRULE). Table: `calendar_event` (ADR 0014). | "event" without "(calendar)" when the meaning is not clear |
+| **occurrence** | One time that a calendar event occurs. A repeating event has many occurrences in one row. Code: `Occurrence`, `RecurrenceExpander`. | "instance", "recurrence" |
 | **log entry** | One row in the `event_log` table. It records one thing that occurred in the app. In code, the type name is `PebbleEvent`. | "event" for a log entry in new docs |
 | **peer** | One of your own devices that you paired with Pebble (planned, milestone M9). | "node", "client" |
 | **hub** | A family computer that runs Pebble Home. It relays data and runs larger models for the peers (planned, milestone M10). | "server", "cloud" |

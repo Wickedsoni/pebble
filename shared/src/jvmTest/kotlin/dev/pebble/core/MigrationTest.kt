@@ -141,6 +141,32 @@ class MigrationTest {
         }
     }
 
+    /** 12.sqm (WP E2): a version-12 database gains the empty calendar table; its reminders stay and gain the event link. */
+    @Test
+    fun version12DatabaseGainsTheCalendar() {
+        val file = Files.createTempFile("pebble-v12", ".db").toFile().apply { deleteOnExit() }
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute("CREATE TABLE setting (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+                s.execute(
+                    "CREATE TABLE one_off_reminder (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, due_at INTEGER NOT NULL, strictness TEXT NOT NULL, done_at INTEGER, uid TEXT, updated_at INTEGER, deleted_at INTEGER, hlc TEXT, origin_device TEXT)",
+                )
+                s.execute("CREATE UNIQUE INDEX one_off_reminder_uid ON one_off_reminder(uid)")
+                s.execute(
+                    "INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at) VALUES ('Call mom', 5000, 'NORMAL', 'u1', 1)",
+                )
+                s.execute("PRAGMA user_version = 12")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        assertEquals(listOf("Call mom"), dev.pebble.core.reminders.ReminderRepository(db).pendingOneOffs().map { it.title })
+        val calendar = dev.pebble.core.calendar.CalendarRepository(db)
+        assertEquals(emptyList(), calendar.live())
+        calendar.save(dev.pebble.core.calendar.CalendarEvent("e", "Dentist", 10, 20, "Asia/Kolkata", remindMinutes = 15), at = 1)
+        assertEquals(listOf("Dentist"), calendar.live().map { it.title })
+        assertEquals(true, dev.pebble.core.reminders.ReminderRepository(db).addLinked("Dentist at 5", 5, "e", 10, at = 1))
+    }
+
     /** Dry run on a *copy* of this machine's real database, if there is one. */
     @Test
     fun realDatabaseCopyMigrates() {

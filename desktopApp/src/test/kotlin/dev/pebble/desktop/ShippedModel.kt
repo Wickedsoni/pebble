@@ -26,14 +26,27 @@ object ShippedModel {
 /** The Pebble action a command performs, as eval files label it. */
 internal fun actionOf(c: QuickCommand): String = when (c) {
     is QuickCommand.RemindAt, is QuickCommand.RemindIn -> A.REMIND
+
     is QuickCommand.AddNote -> A.ADD_NOTE
+
     is QuickCommand.RememberFact -> "remember_fact"
+
     is QuickCommand.LogWater -> "log_water"
+
     is QuickCommand.SetInterval -> "set_interval"
+
     QuickCommand.ShowUpcoming -> A.REMINDERS_QUERY
+
     QuickCommand.ShowNotes, is QuickCommand.SearchMemory -> A.NOTES_QUERY
+
     QuickCommand.TellTime -> A.TIME_QUERY
+
     is QuickCommand.Chitchat -> if (c.intent == Replies.LOW_MOOD) "mood" else A.CHITCHAT
+
     is QuickCommand.Unsupported -> A.OTHER
+
+    is QuickCommand.AddEvent -> "add_event"
+
+    // explicit syntax only (WP E2); the model has no calendar action yet
     is QuickCommand.OpenPage -> if (c.page == "notes") A.NOTE_REMOVE else A.REMINDER_REMOVE
 }

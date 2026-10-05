@@ -51,6 +51,9 @@ object PebbleIcons {
     val Check = icon("check", "M5 12.5 L10 17 L19 7")
     val Minimize = icon("minimize", "M6 12 H18")
     val Search = icon("search", "M10.5 4 A6.5 6.5 0 1 1 10.49 4 Z", "M15.3 15.3 L20 20")
+    val Calendar = icon("calendar", "M4.5 6 H19.5 V20 H4.5 Z", "M4.5 10 H19.5", "M8.5 3.5 V7.5", "M15.5 3.5 V7.5")
+    val Back = icon("back", "M14.5 6 L8.5 12 L14.5 18")
+    val Forward = icon("forward", "M9.5 6 L15.5 12 L9.5 18")
     val Clock = icon("clock", "M12 3.5 A8.5 8.5 0 1 1 11.99 3.5 Z", "M12 7.5 V12 L15 14")
     val Flame =
         icon(

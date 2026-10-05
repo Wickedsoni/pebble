@@ -1,0 +1,65 @@
+-- The calendar (WP E2, 12.sqm). Times are epoch milliseconds (UTC instants).
+-- start_at / end_at: the first occurrence. An all-day event starts at midnight in tz and ends at the next midnight.
+-- tz: the IANA time zone the event was made in; a repeating event keeps its local time of day in this zone.
+-- rrule: the RFC 5545 RRULE value (without "RRULE:"), or null. Pebble expands a subset (RecurrenceRule);
+-- other rules are kept, shown once, and exported again unchanged.
+-- exdates: start instants of skipped occurrences (EXDATE), comma-separated epoch milliseconds.
+-- remind_minutes: a one-off reminder this many minutes before each occurrence (linked by one_off_reminder.event_uid).
+-- owner_device: the device whose calendar it is. visibility: what a paired device may see (milestone F).
+-- uid, hlc, updated_at, deleted_at, origin_device: the sync-ready columns of WP E1 (ADR 0013).
+CREATE TABLE calendar_event (
+    uid TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    notes TEXT,
+    start_at INTEGER NOT NULL,
+    end_at INTEGER NOT NULL,
+    all_day INTEGER NOT NULL DEFAULT 0,
+    tz TEXT NOT NULL,
+    rrule TEXT,
+    exdates TEXT,
+    remind_minutes INTEGER,
+    owner_device TEXT,
+    visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'busy', 'full')),
+    hlc TEXT,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER,
+    origin_device TEXT
+);
+
+CREATE INDEX calendar_event_start ON calendar_event(start_at);
+
+liveEvents:
+SELECT * FROM calendar_event WHERE deleted_at IS NULL ORDER BY start_at;
+
+-- Events that can have an occurrence in [from, to): repeating ones that started before `to`, and single ones that overlap.
+eventsBetween:
+SELECT * FROM calendar_event
+WHERE deleted_at IS NULL AND start_at < :to AND (rrule IS NOT NULL OR end_at >= :from)
+ORDER BY start_at;
+
+eventByUid:
+SELECT * FROM calendar_event WHERE uid = ? AND deleted_at IS NULL;
+
+-- Insert, or replace the fields of the event with this uid (an edit, or an ICS file imported again).
+-- A tombstone with this uid comes back. origin_device and owner_device stay as they were.
+upsertEvent:
+INSERT INTO calendar_event(uid, title, notes, start_at, end_at, all_day, tz, rrule, exdates, remind_minutes, visibility, updated_at, owner_device, origin_device)
+VALUES (:uid, :title, :notes, :startAt, :endAt, :allDay, :tz, :rrule, :exdates, :remindMinutes, :visibility, :at,
+    (SELECT value FROM setting WHERE key = 'device.id'), (SELECT value FROM setting WHERE key = 'device.id'))
+ON CONFLICT(uid) DO UPDATE SET
+    title = excluded.title, notes = excluded.notes, start_at = excluded.start_at, end_at = excluded.end_at,
+    all_day = excluded.all_day, tz = excluded.tz, rrule = excluded.rrule, exdates = excluded.exdates,
+    remind_minutes = excluded.remind_minutes, visibility = excluded.visibility, updated_at = excluded.updated_at,
+    deleted_at = NULL;
+
+-- A tombstone, not a DELETE (WP E1).
+deleteEvent:
+UPDATE calendar_event SET deleted_at = :at, updated_at = :at WHERE uid = :uid AND deleted_at IS NULL;
+
+purgeEventTombstones:
+DELETE FROM calendar_event WHERE deleted_at IS NOT NULL AND deleted_at < ?;
+
+-- Events made before this device had an id: they are this device's.
+claimEvents:
+UPDATE calendar_event SET origin_device = coalesce(origin_device, :device), owner_device = coalesce(owner_device, :device)
+WHERE origin_device IS NULL OR owner_device IS NULL;

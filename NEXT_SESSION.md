@@ -7,21 +7,29 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
-### Start here (end of 5 Oct 2026)
-- **State:** everything is on `main` (A1 … E1, 17 WPs). No open PRs, no other branches. CI on `main` is green.
-- **Next WP: E2 (calendar):** master plan `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`, section E2. Read its "Read first" files.
-  - The next migration file is `12.sqm` (current schema version 12; see CLAUDE.md "Verified facts").
-  - New calendar rows must follow E1: `uid`, `updated_at`, `deleted_at`, `hlc`, `origin_device`, and tombstones (ADR 0013).
+### Start here (end of 5 Oct 2026, after WP E2)
+- **State:** A1 … E1 are on `main`. **WP E2 (calendar) is in a PR on `wp/e2-calendar`, waiting for your yes to merge.**
+- **Next WP: E4 (encrypted backup/restore)**, then C4 (offline IPS evaluator). Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
+  - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
   2. Build the distributable and **open and check the app** (no need to ask).
-  3. PR → CI. Merging into `main`: on 5 Oct you asked to merge the finished stack; ask before merging new PRs, unless you say otherwise.
-- **Waiting for your yes:** cut release **0.3.0** (`gh release`). It ships the v3 command model. Publish the chat pack and a speech pack with it: sign them with `./gradlew :desktopApp:modelPack`; the key is in `%USERPROFILE%\.pebble\signing\` (back it up offline).
-- **Deferred by you:** C6 model training (Hindi/Hinglish chat distillation). Hardware: RTX 4050 6 GB, no budget for now. The plan is in ADR 0012. Do not start it until you ask.
+  3. PR → CI. Ask before you merge.
+- **Waiting for your yes:** cut release **0.3.0** (`gh release`). It ships the v3 command model and now the calendar. Publish the chat pack and a speech pack with it: sign them with `./gradlew :desktopApp:modelPack`; the key is in `%USERPROFILE%\.pebble\signing\` (back it up offline).
+- **Deferred by you:** C6 model training (Hindi/Hinglish chat distillation). Do not start it until you ask.
 - **Your housekeeping:**
-  - delete `%APPDATA%\Pebble\pebble-backup-e1.db` when you are happy;
+  - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
-- **Dependabot PR #6** (Gradle wrapper 9.8.0) was closed by you on 5 Oct. A wrapper update can come back as its own WP.
+
+### 5 Oct: WP E2 done (calendar, PR on `wp/e2-calendar`)
+- **Data (ADR 0014):** migration `12.sqm` adds `calendar_event` with the E1 sync columns (uid primary key, tombstones, `hlc`, `origin_device`) and `owner_device` / `visibility` (`private`) for milestone F. `one_off_reminder` gains `event_uid` + `occurrence_at`: reminders before events are linked one-off reminders, made 2 days ahead.
+- **Repeats:** the RRULE subset DAILY / WEEKLY (BYDAY) / MONTHLY (BYMONTHDAY), INTERVAL, UNTIL or COUNT. Other rules are kept and shown once with a warning. DST, the 31st and 29 Feb are tested.
+- **Difference from the plan:** the expander and ICS code are in `:shared` **jvmMain** (`java.time`), because commonMain has no date library and the WP names no dependency. An `exdates` column was added (EXDATE), so imported skipped days and the new **"Skip day"** button work.
+- **UI:** Calendar page (month grid + the selected day; Add field uses the Quick Add syntax; chips for repeat and reminder; Import / Export .ics). "Agenda" card on the Today page. Quick Add: `event: dentist fri 5pm for 30 min` (rules only; the model has no calendar action yet).
+- **Tests:** 248 Kotlin tests, 0 skipped (models present).
+- **Live check (built distributable, 5 Oct):** your real database migrated 12 → 13 (`integrity_check` ok, new columns present); the app started with no errors in `pebble.log`. Computer use was not available in the session, so the page was checked as rendered images (dark and light) of the real `CalendarContent` and Agenda card. **Please click through the Calendar page once yourself:** add an event, Skip day on a repeating one, import an .ics from Google Calendar.
+- **Defaults to review:** an event lasts 1 hour; a timed event reminds 15 min before (also imported ones: the import uses the reminder chip on the page; pick "No reminder" first to import without); all-day events have no reminder.
+- **Follow-ups:** edit an event (today: delete and add again); change one occurrence other than "skip"; `calendar_set` from the command model (needs a new eval file and gate).
 
 ### 5 Oct: WP C3 done (PR #29, on top of #28)
 - **Formula review (Opus) → ADR 0010.** Measured on the eval sets, the plan's formula had 3 problems:
@@ -193,11 +201,12 @@ Lessons from the merge (for the next stack):
   - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
+  - WP E2 (PR): calendar (`calendar_event`, migration `12.sqm`, RRULE subset, ICS import/export, Calendar page, Agenda card, `event:` syntax; ADR 0014).
   - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** E2 (calendar), then E4; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
+- **Next:** E4 (backup), then C4; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)

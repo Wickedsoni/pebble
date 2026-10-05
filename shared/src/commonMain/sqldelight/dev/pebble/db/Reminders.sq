@@ -21,10 +21,15 @@ CREATE TABLE one_off_reminder (
     updated_at INTEGER,
     deleted_at INTEGER,
     hlc TEXT,
-    origin_device TEXT
+    origin_device TEXT,
+    -- A reminder that a calendar event made (WP E2, 12.sqm): the event's uid and the occurrence's start.
+    event_uid TEXT,
+    occurrence_at INTEGER
 );
 
 CREATE UNIQUE INDEX one_off_reminder_uid ON one_off_reminder(uid);
+
+CREATE INDEX one_off_reminder_event ON one_off_reminder(event_uid, occurrence_at);
 
 allRules:
 SELECT * FROM reminder_rule ORDER BY id;
@@ -67,3 +72,15 @@ UPDATE one_off_reminder SET done_at = :at, updated_at = :at WHERE id = :id;
 
 rescheduleOneOff:
 UPDATE one_off_reminder SET due_at = :dueAt, updated_at = coalesce(:at, CAST(strftime('%s', 'now') AS INTEGER) * 1000) WHERE id = :id;
+
+insertLinkedOneOff:
+INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at, origin_device, event_uid, occurrence_at)
+VALUES (?, ?, ?, lower(hex(randomblob(16))), ?, (SELECT value FROM setting WHERE key = 'device.id'), ?, ?);
+
+-- Done, pending or skipped: any live row means this occurrence already had its reminder.
+linkedOneOffExists:
+SELECT count(*) FROM one_off_reminder WHERE event_uid = ? AND occurrence_at = ? AND deleted_at IS NULL;
+
+-- The event changed or was deleted: its reminders that did not fire yet go (tombstones).
+deletePendingLinked:
+UPDATE one_off_reminder SET deleted_at = :at, updated_at = :at WHERE event_uid = :eventUid AND done_at IS NULL AND deleted_at IS NULL;

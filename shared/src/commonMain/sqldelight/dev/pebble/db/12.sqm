@@ -1,0 +1,28 @@
+-- WP E2: the calendar. Rows follow the sync-ready rules of WP E1 (ADR 0013): uid, updated_at, deleted_at
+-- (a tombstone; reads skip it), hlc (filled by sync, WP E3), origin_device. See Calendar.sq for each column.
+
+CREATE TABLE calendar_event (
+    uid TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    notes TEXT,
+    start_at INTEGER NOT NULL,
+    end_at INTEGER NOT NULL,
+    all_day INTEGER NOT NULL DEFAULT 0,
+    tz TEXT NOT NULL,
+    rrule TEXT,
+    exdates TEXT,
+    remind_minutes INTEGER,
+    owner_device TEXT,
+    visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'busy', 'full')),
+    hlc TEXT,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER,
+    origin_device TEXT
+);
+
+CREATE INDEX calendar_event_start ON calendar_event(start_at);
+
+-- A one-off reminder that an event made: the event's uid and the start of the occurrence it is for.
+ALTER TABLE one_off_reminder ADD COLUMN event_uid TEXT;
+ALTER TABLE one_off_reminder ADD COLUMN occurrence_at INTEGER;
+CREATE INDEX one_off_reminder_event ON one_off_reminder(event_uid, occurrence_at);
