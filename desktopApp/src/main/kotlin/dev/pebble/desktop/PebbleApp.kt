@@ -38,6 +38,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 
@@ -167,6 +168,9 @@ class PebbleApp(
     /** Runs every quick-add command. */
     val executor = CommandExecutor(env, bus, notes, reminders, engine, actions = this, ui = ui)
 
+    /** Rolls old log days into `daily_stat` (WP B6); declared before `init`, which starts the loop that uses it. */
+    private val compactor = dev.pebble.core.history.HistoryCompactor(db, env::dayOf)
+
     /** Saves bus events to `event_log`; one writer thread, so the UI thread never waits for SQLite. */
     val eventLog = EventLogger(db)
 
@@ -178,10 +182,21 @@ class PebbleApp(
         // Learning is cheap (a few small queries); every 10 minutes keeps memories fresh.
         appScope.launch {
             while (isActive) {
+                runCatching {
+                    withContext(env.dispatchers.io) { rollUpHistory() }
+                }.onFailure { log.warn(TAG, "history roll-up failed", it) }
                 runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning failed", it) }
                 delay(10 * 60_000L)
             }
         }
+    }
+
+    /** Counts whole days older than a week into `daily_stat`; does work once a day (the first time: all history). */
+    private fun rollUpHistory() {
+        val until = env.today().minusDays(dev.pebble.core.history.HistoryCompactor.KEEP_RAW_DAYS.toLong())
+            .atStartOfDay(env.zone()).toInstant().toEpochMilli()
+        val n = compactor.rollUpBefore(until)
+        if (n > 0) log.info(TAG, "rolled up $n log entries before $until")
     }
 
     fun completeNote(id: Long) {

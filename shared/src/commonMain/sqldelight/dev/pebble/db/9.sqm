@@ -1,0 +1,11 @@
+-- WP B6: per-day counts of old log entries, so growth stays fast on years of history.
+-- Raw event_log rows are kept; HistoryCompactor only adds counts for whole days it has rolled up,
+-- and records how far it got in the setting "history.rolledUpUntil".
+
+CREATE TABLE daily_stat (
+    day INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    key TEXT NOT NULL DEFAULT '',
+    count INTEGER NOT NULL,
+    PRIMARY KEY (day, type, key)
+);

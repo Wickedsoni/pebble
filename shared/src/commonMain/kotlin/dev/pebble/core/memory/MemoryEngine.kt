@@ -4,6 +4,7 @@ import dev.pebble.core.brain.NudgeArm
 import dev.pebble.core.brain.NudgeContext
 import dev.pebble.core.brain.NudgePolicy
 import dev.pebble.core.event.PebbleEvent
+import dev.pebble.core.history.EventHistory
 import dev.pebble.core.reminders.ReminderAction
 import dev.pebble.core.reminders.ReminderKind
 import dev.pebble.db.PebbleDatabase
@@ -156,7 +157,7 @@ class MemoryEngine(
             memory.dropDerived(KEY_WATER_STREAK)
         }
 
-        val finished = db.pebbleQueries.eventsOfTypeSince("note_completed", 0).executeAsList().size
+        val finished = EventHistory(db, dayOf).count("note_completed")
         if (finished >= 3) memory.putDerived(MemoryKind.STREAK, KEY_NOTES_DONE, "You've finished $finished notes.", "$finished", now)
 
         val activeDays = events<PebbleEvent.ActiveHour>("active_hour", now - 60 * DAY).map { dayOf(it.atMillis) }.toSet()

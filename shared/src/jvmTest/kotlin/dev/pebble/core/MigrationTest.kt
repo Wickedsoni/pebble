@@ -44,6 +44,32 @@ class MigrationTest {
         assertEquals(30, rules.getValue("stretch").intervalMinutes, "a value you chose is kept")
     }
 
+    /** 9.sqm (WP B6): an older database gains daily_stat, empty, and keeps every log entry. */
+    @Test
+    fun olderDatabaseGainsDailyStatAndKeepsItsLog() {
+        val file = Files.createTempFile("pebble-v1", ".db").toFile().apply { deleteOnExit() }
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute(
+                    "CREATE TABLE widget_layout (widget_id TEXT NOT NULL PRIMARY KEY, x INTEGER NOT NULL, y INTEGER NOT NULL, visible INTEGER NOT NULL DEFAULT 1)",
+                )
+                s.execute(
+                    "CREATE TABLE event_log (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, payload TEXT NOT NULL, at_millis INTEGER NOT NULL)",
+                )
+                s.execute("CREATE INDEX event_log_type_at ON event_log(type, at_millis)")
+                s.execute("CREATE TABLE setting (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+                s.execute(
+                    """INSERT INTO event_log(type, payload, at_millis) VALUES ('note_completed', '{"type":"note_completed","noteId":1,"atMillis":5}', 5)""",
+                )
+                s.execute("PRAGMA user_version = 1")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        assertEquals(0L, db.historyQueries.statSum("note_completed").executeAsOne())
+        assertEquals(1, db.pebbleQueries.recentEvents(10).executeAsList().size)
+        assertEquals(1L, dev.pebble.core.history.EventHistory(db) { it }.count("note_completed"))
+    }
+
     /** Dry run on a *copy* of this machine's real database, if there is one. */
     @Test
     fun realDatabaseCopyMigrates() {

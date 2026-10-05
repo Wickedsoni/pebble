@@ -91,11 +91,11 @@ Line numbers can move. If a line does not match, search for the name.
 | `VerifiedModelCache` (`%APPDATA%\Pebble\models-verified.json`: path, size, mtime, sha256) skips re-hashing unchanged files; the speech check went from ~180 ms to ~1 ms. Only the `ModelRuntime` instances use it; `ModelManager(scope)` / `SpeechRecognizer(scope)` built directly still hash every load (WP B4) | `brain/VerifiedModelCache.kt`, `brain/ModelChecksums.kt` |
 | **Load-order invariant:** ONNX Runtime env before sherpa `LibraryUtils.load()`, in one place: `ModelRuntime.loadSherpa()` (lazy, not at start-up) | `brain/ModelRuntime.kt`, `VoiceSpikeTest` |
 | Intent ONNX outputs read by name (`intent_logits`, `slot_logits`, `mood_logits`; `OrtSession.Result.get(String): Optional<OnnxValue>`, checked in ORT 1.30), with index fallback. The mean-pooled vector exists in PyTorch but is **not exported** | `OnnxIntentModel.kt:73-94`, `brain/src/pebble_brain/export_onnx.py:48`, `intent_model.py:36-41` |
-| Schema: `.sq` files + migrations `1.sqm`…`8.sqm`. The **current schema version is 9; the next migration file is `9.sqm`** (upgrades 9→10). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
+| Schema: `.sq` files + migrations `1.sqm`…`9.sqm`. The **current schema version is 10; the next migration file is `10.sqm`** (upgrades 10→11). The `.sq` `CREATE TABLE` must also show the final schema | `shared/src/commonMain/sqldelight/dev/pebble/db/` |
 | `one_off_reminder.id INTEGER AUTOINCREMENT`; hard `DELETE`; no `updated_at` | `Reminders.sq:13-19,43-44` |
 | `ReminderEngine` keys one-off reminders by `Long` id: `oneOffKey(r.id)` | `shared/.../reminders/ReminderEngine.kt:61,91,195` |
 | `DatabaseFactory.create(file)`: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=true` (sqlite-jdbc 3.53.4.0 property names); `inMemory()` keeps the defaults (WP B5) | `shared/src/jvmMain/.../db/DatabaseFactory.kt` |
-| `GrowthEngine.stats()` loads the whole `event_log` per type and matches JSON by substring `"\"action\":\"DONE\""` | `shared/.../growth/Growth.kt:76-100` |
+| Counts over all history go through `EventHistory` (`daily_stat` before the watermark `history.rolledUpUntil`, raw rows after). `HistoryCompactor` rolls whole days older than 7 days from the learning loop (IO); raw rows are **kept** (ADR 0004). The reminder action is decoded, not matched as text. 200 000 entries: `stats()` 158 ms → 31 ms (WP B6) | `shared/.../history/`, `growth/Growth.kt` |
 | Migration test pattern: build the old schema with raw JDBC, set `PRAGMA user_version`, open with `DatabaseFactory.create(file)` | `shared/src/jvmTest/.../MigrationTest.kt` |
 | jlink modules: `modules("java.sql", "jdk.unsupported")`; JVM `-Xmx256m`, SerialGC | `desktopApp/build.gradle.kts:106-124` |
 | Models bundled from `brain/models/manifest.json` by `stageModel`; the downloader is stdlib-only Python | `desktopApp/build.gradle.kts:69-96`, `brain/src/pebble_brain/download_models.py` |
@@ -119,7 +119,7 @@ Line numbers can move. If a line does not match, search for the name.
    - the updated `CREATE TABLE` in the `.sq` file;
    - a new `MigrationTest` case;
    - `SchemaParityTest` must stay green. It migrates a version-1 database through every `.sqm` and compares it with a fresh one.
-5. **Do not delete `event_log` rows without a roll-up.** Growth, `MemoryEngine` and the offline IPS eval all read the history.
+5. **Do not delete `event_log` rows.** The offline IPS eval needs the raw history (ADR 0004). To count over all history, use `EventHistory`, not `eventsOfTypeSince(type, 0)`: rows before the watermark are already in `daily_stat`, and a raw query from 0 is slow on long histories.
 6. **`Understood` is a data class that equality checks use.** Do not add a raw `FloatArray` field: arrays compare by reference. Use a wrapper that uses `contentEquals`.
 7. **Code that opens a socket** must obey the privacy invariant above.
 8. **Spotless/ktlint 1.8.0 runs in CI.** Run `./gradlew spotlessApply` before you commit.
@@ -129,6 +129,7 @@ Line numbers can move. If a line does not match, search for the name.
     - A model with 8-bit weights passed on a VNNI laptop but read 3 of 194 commands differently on the CI runner (AMD EPYC 7763).
     - The CI log step "Runner CPU" shows which CPU ran the tests.
 11. **The database runs in WAL mode.** Recent changes can be in `pebble.db-wal`, not in `pebble.db`. To copy the database (backup, export), use SQLite's backup (`VACUUM INTO` or the backup API), not a file copy. `event_log` rows appear a few milliseconds after `bus.publish`; call `eventLog.flush()` before you read your own event.
+    - `DatabaseFactory.inMemory()` (tests) is a temp **file**, not `:memory:`: SQLDelight shares one connection across threads for `:memory:`, and the IO writer and roll-up then collide with the test thread ("cannot start a transaction within a transaction").
 
 ## Docs
 
