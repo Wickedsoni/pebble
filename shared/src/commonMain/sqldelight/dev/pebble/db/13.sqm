@@ -1,0 +1,121 @@
+-- WP E3a (ADR 0018, docs/specs/E3-CHANGE-JOURNAL.md): the change journal and its guard triggers.
+-- Existing rows get their journal entries and HLCs from ChangeJournal.reconcile at the next start.
+
+CREATE TABLE change_journal (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    tbl TEXT NOT NULL,
+    uid TEXT NOT NULL,
+    field TEXT NOT NULL,
+    value TEXT NOT NULL,
+    hlc TEXT NOT NULL,
+    UNIQUE (tbl, uid, field)
+);
+
+CREATE INDEX change_journal_row ON change_journal(tbl, uid);
+CREATE INDEX change_journal_hlc ON change_journal(hlc);
+
+-- Guard triggers (SQLDelight 2.4.0 resolves only lower-case new. and old.). A write by new code sets a new hlc: each synced field that it writes must have a journal entry
+-- with that hlc, written first in the same transaction. Writes that keep the hlc (an older Pebble on the same file)
+-- pass; ChangeJournal.reconcile records them at the next start. A deleted row never comes back (spec D5).
+
+CREATE TRIGGER note_journal_insert AFTER INSERT ON note
+WHEN new.uid IS NOT NULL AND new.hlc IS NOT NULL AND (
+    NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'text' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'created_at' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'archived' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'deleted_at' AND hlc = new.hlc)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'note: insert without journal entries');
+END;
+
+CREATE TRIGGER note_journal_update AFTER UPDATE ON note
+WHEN new.uid IS NOT NULL AND new.hlc IS NOT NULL AND new.hlc IS NOT old.hlc AND (
+    (new.text IS NOT old.text AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'text' AND hlc = new.hlc))
+    OR (new.created_at IS NOT old.created_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'created_at' AND hlc = new.hlc))
+    OR (new.archived IS NOT old.archived AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'archived' AND hlc = new.hlc))
+    OR (new.deleted_at IS NOT old.deleted_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'note' AND uid = new.uid AND field = 'deleted_at' AND hlc = new.hlc))
+)
+BEGIN
+    SELECT RAISE(ABORT, 'note: a synced field changed without a journal entry');
+END;
+
+CREATE TRIGGER note_delete_is_final BEFORE UPDATE OF deleted_at ON note
+WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'note: a deleted row cannot come back');
+END;
+
+CREATE TRIGGER one_off_reminder_journal_insert AFTER INSERT ON one_off_reminder
+WHEN new.event_uid IS NULL AND new.uid IS NOT NULL AND new.hlc IS NOT NULL AND (
+    NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'title' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'due_at' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'strictness' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'done_at' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'deleted_at' AND hlc = new.hlc)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'one_off_reminder: insert without journal entries');
+END;
+
+CREATE TRIGGER one_off_reminder_journal_update AFTER UPDATE ON one_off_reminder
+WHEN new.event_uid IS NULL AND new.uid IS NOT NULL AND new.hlc IS NOT NULL AND new.hlc IS NOT old.hlc AND (
+    (new.title IS NOT old.title AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'title' AND hlc = new.hlc))
+    OR (new.due_at IS NOT old.due_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'due_at' AND hlc = new.hlc))
+    OR (new.strictness IS NOT old.strictness AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'strictness' AND hlc = new.hlc))
+    OR (new.done_at IS NOT old.done_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'done_at' AND hlc = new.hlc))
+    OR (new.deleted_at IS NOT old.deleted_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'one_off_reminder' AND uid = new.uid AND field = 'deleted_at' AND hlc = new.hlc))
+)
+BEGIN
+    SELECT RAISE(ABORT, 'one_off_reminder: a synced field changed without a journal entry');
+END;
+
+CREATE TRIGGER one_off_reminder_delete_is_final BEFORE UPDATE OF deleted_at ON one_off_reminder
+WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'one_off_reminder: a deleted row cannot come back');
+END;
+
+CREATE TRIGGER calendar_event_journal_insert AFTER INSERT ON calendar_event
+WHEN new.hlc IS NOT NULL AND (
+    NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'title' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'notes' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'start_at' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'end_at' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'all_day' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'tz' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'rrule' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'exdates' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'remind_minutes' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'visibility' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'owner_device' AND hlc = new.hlc)
+    OR NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'deleted_at' AND hlc = new.hlc)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'calendar_event: insert without journal entries');
+END;
+
+CREATE TRIGGER calendar_event_journal_update AFTER UPDATE ON calendar_event
+WHEN new.hlc IS NOT NULL AND new.hlc IS NOT old.hlc AND (
+    (new.title IS NOT old.title AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'title' AND hlc = new.hlc))
+    OR (new.notes IS NOT old.notes AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'notes' AND hlc = new.hlc))
+    OR (new.start_at IS NOT old.start_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'start_at' AND hlc = new.hlc))
+    OR (new.end_at IS NOT old.end_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'end_at' AND hlc = new.hlc))
+    OR (new.all_day IS NOT old.all_day AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'all_day' AND hlc = new.hlc))
+    OR (new.tz IS NOT old.tz AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'tz' AND hlc = new.hlc))
+    OR (new.rrule IS NOT old.rrule AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'rrule' AND hlc = new.hlc))
+    OR (new.exdates IS NOT old.exdates AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'exdates' AND hlc = new.hlc))
+    OR (new.remind_minutes IS NOT old.remind_minutes AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'remind_minutes' AND hlc = new.hlc))
+    OR (new.visibility IS NOT old.visibility AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'visibility' AND hlc = new.hlc))
+    OR (new.owner_device IS NOT old.owner_device AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'owner_device' AND hlc = new.hlc))
+    OR (new.deleted_at IS NOT old.deleted_at AND NOT EXISTS (SELECT 1 FROM change_journal WHERE tbl = 'calendar_event' AND uid = new.uid AND field = 'deleted_at' AND hlc = new.hlc))
+)
+BEGIN
+    SELECT RAISE(ABORT, 'calendar_event: a synced field changed without a journal entry');
+END;
+
+CREATE TRIGGER calendar_event_delete_is_final BEFORE UPDATE OF deleted_at ON calendar_event
+WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'calendar_event: a deleted row cannot come back');
+END;

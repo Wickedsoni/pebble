@@ -40,21 +40,34 @@ ORDER BY start_at;
 eventByUid:
 SELECT * FROM calendar_event WHERE uid = ? AND deleted_at IS NULL;
 
--- Insert, or replace the fields of the event with this uid (an edit, or an ICS file imported again).
--- A tombstone with this uid comes back. origin_device and owner_device stay as they were.
+-- Insert, or replace the fields of the live event with this uid (an edit, or an ICS file imported again).
+-- origin_device and owner_device stay as they were. A deleted event never comes back (WP E3, spec D5):
+-- CalendarRepository.save skips its uid. :hlc is the HLC of the journal entries (ChangeJournal).
 upsertEvent:
-INSERT INTO calendar_event(uid, title, notes, start_at, end_at, all_day, tz, rrule, exdates, remind_minutes, visibility, updated_at, owner_device, origin_device)
-VALUES (:uid, :title, :notes, :startAt, :endAt, :allDay, :tz, :rrule, :exdates, :remindMinutes, :visibility, :at,
-    (SELECT value FROM setting WHERE key = 'device.id'), (SELECT value FROM setting WHERE key = 'device.id'))
+INSERT INTO calendar_event(uid, title, notes, start_at, end_at, all_day, tz, rrule, exdates, remind_minutes, visibility, updated_at, hlc, owner_device, origin_device)
+VALUES (:uid, :title, :notes, :startAt, :endAt, :allDay, :tz, :rrule, :exdates, :remindMinutes, :visibility, :at, :hlc,
+    :ownerDevice, (SELECT value FROM setting WHERE key = 'device.id'))
 ON CONFLICT(uid) DO UPDATE SET
     title = excluded.title, notes = excluded.notes, start_at = excluded.start_at, end_at = excluded.end_at,
     all_day = excluded.all_day, tz = excluded.tz, rrule = excluded.rrule, exdates = excluded.exdates,
     remind_minutes = excluded.remind_minutes, visibility = excluded.visibility, updated_at = excluded.updated_at,
-    deleted_at = NULL;
+    hlc = excluded.hlc;
 
 -- A tombstone, not a DELETE (WP E1).
 deleteEvent:
-UPDATE calendar_event SET deleted_at = :at, updated_at = :at WHERE uid = :uid AND deleted_at IS NULL;
+UPDATE calendar_event SET deleted_at = :at, updated_at = :at, hlc = :hlc WHERE uid = :uid AND deleted_at IS NULL;
+
+-- The event with this uid, also a tombstone.
+eventRowByUid:
+SELECT * FROM calendar_event WHERE uid = ?;
+
+-- The synced fields of each event, live and tombstones (ChangeJournal.reconcile).
+syncEvents:
+SELECT uid, title, notes, start_at, end_at, all_day, tz, rrule, exdates, remind_minutes, visibility, owner_device, deleted_at, hlc
+FROM calendar_event;
+
+setEventHlc:
+UPDATE calendar_event SET hlc = ? WHERE uid = ?;
 
 purgeEventTombstones:
 DELETE FROM calendar_event WHERE deleted_at IS NOT NULL AND deleted_at < ?;

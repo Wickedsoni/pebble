@@ -1,6 +1,6 @@
 # ADR 0008: Extract a module only when a second consumer exists
 
-- **Status:** Accepted
+- **Status:** Accepted (revised in WP E3a: `:sync` waits for `:hub`)
 - **Date:** 2026-10-04
 - **Work package:** E3 (`:sync`), F5 (`:brain-runtime`, `:hub`)
 
@@ -13,7 +13,7 @@ A module with only one consumer adds build cost and gives no value.
 ## Decision
 
 We will extract a module only when a second consumer needs the code:
-- `:sync` at WP E3;
+- `:sync` at WP F5, with `:hub` (revised in E3a: at E3 the journal had to be written in the transactions of the repositories in `:shared`, so `:sync` would have had one consumer; see `docs/specs/E3-CHANGE-JOURNAL.md`, D1);
 - `:brain-runtime` and `:hub` at WP F5.
 
 ## Consequences

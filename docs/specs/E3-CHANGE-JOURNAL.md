@@ -1,6 +1,6 @@
 # Spec E3: Change journal and hybrid logical clock
 
-- **Status:** Approved by the maintainer on 2026-10-05, with the answers in section 12.
+- **Status:** Approved by the maintainer on 2026-10-05, with the answers in section 12. Changed during E3a with the maintainer's approval: D6 (older Pebble versions keep working). E3a is done (ADR 0018).
 - **Date:** 2026-10-05
 - **Work package:** E3 (master plan, milestone E). It depends on E1 (ADR 0013), E2 (ADR 0014) and ADR 0017.
 - **Author:** Opus. **Implementer:** Sonnet, in two PRs (E3a and E3b, see section 11).
@@ -17,7 +17,7 @@ The test of E3 is a convergence test with replicas in one process.
 
 ## 2. Decisions that change the master plan
 
-The plan text for E3 is short. The code shows four facts that change it. The maintainer changed one rule (D5).
+The plan text for E3 is short. The code shows four facts that change it. The maintainer changed one rule (D5), and one more during E3a (D6).
 
 | # | Plan | This spec | Reason |
 |---|---|---|---|
@@ -26,6 +26,7 @@ The plan text for E3 is short. The code shows four facts that change it. The mai
 | D3 | Sync all of `note`, `one_off_reminder`, `calendar_event`. | Rows of `one_off_reminder` with `event_uid` are **not** synced. | The calendar agenda makes these reminders on each device (ADR 0014). If they sync, each device gets copies from the others. |
 | D4 | One journal row for each change. | One journal row for each **field**: a newer change replaces the older row and gets a new `seq`. | A peer needs only the newest value of each field. The journal then keeps its size near the size of the data. |
 | D5 | "Delete wins over concurrent edit only if its HLC is greater." | **A delete always wins.** A deleted row never comes back, on any device. | The maintainer's decision (section 12, question 1). An item that you deleted must not come back because another device edited it later. |
+| D6 | (E3a) Triggers stop every write to a synced field without a journal entry (6.2). | Triggers check only writes that set a **new** HLC. `ChangeJournal.reconcile` records, at each start, the changes made without the journal. Tests call `ChangeJournal.verify`. | The maintainer's decision during E3a. An older Pebble (the installed v0.1.2) writes to the same file and knows nothing of the journal. Strict triggers would stop its writes (ADR 0013 promises that it still works). |
 
 ## 3. Terms
 
@@ -163,7 +164,9 @@ All write queries of the three tables get an `:hlc` parameter and set `hlc = :hl
 
 Repositories get the `ChangeJournal` in the constructor (ADR 0009). `PebbleApp` makes one `HlcClock` and one `ChangeJournal`.
 
-### 6.4 Rows from before E3 (E3a)
+### 6.4 Rows from before E3, and writes of an older Pebble (E3a, D6)
+
+In E3a this became `ChangeJournal.reconcile(wall)` (ADR 0018). It also records fields that an older Pebble changed, and gives a grave to a row that an older Pebble deleted with `DELETE`. The first form follows.
 
 `ChangeJournal.claim()` runs at each start, after `DeviceIdentity` and the `claim` of the repositories:
 - For each synced row with no `hlc` (`NULL` or `''`), it records all synced fields with one `send()`, and sets `hlc`. Linked reminders are not included.

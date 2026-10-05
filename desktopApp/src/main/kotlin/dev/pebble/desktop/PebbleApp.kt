@@ -82,6 +82,24 @@ class PebbleApp(
         calendar.claim(id)
     }
 
+    /**
+     * The change journal (WP E3a, ADR 0018). At each start it records rows from before E3, and changes that an older
+     * Pebble made to the same file without the journal (they keep their HLC, so the guard triggers let them pass).
+     */
+    val journal = dev.pebble.core.sync.ChangeJournal(db).also { j ->
+        runCatching { j.reconcile(now()) }
+            .onSuccess { r ->
+                if (r.backfilled > 0) log.info(TAG, "change journal: recorded ${r.backfilled} rows from before the journal")
+                if (r.repaired + r.graves > 0) {
+                    log.warn(
+                        TAG,
+                        "change journal: recorded ${r.repaired} changes and ${r.graves} deletes made without it (an older Pebble?)",
+                    )
+                }
+            }
+            .onFailure { log.warn(TAG, "change journal: reconcile failed", it) }
+    }
+
     /** The pet's growth: levels earned by what you do (reminders done, water goals, active days, chats). */
     val growth = dev.pebble.core.growth.GrowthEngine(
         db,
