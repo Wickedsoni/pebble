@@ -9,7 +9,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ### Start here (end of 5 Oct 2026, after WP C4)
 - **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
-- **Next WP: E3** (ChangeJournal + HLC). It is `[Opus spec]`: do not start it without an approved spec. Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
+- **Next WP: E3** (ChangeJournal + HLC). The spec is `docs/specs/E3-CHANGE-JOURNAL.md` (**Draft**, PR on `wp/e3-spec`). Do not start E3 until its status says "Approved". It has 5 questions for you (section 12). Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
@@ -146,7 +146,7 @@ Lessons from the merge (for the next stack):
 
 ### Next session
 1. Say "continue from NEXT_SESSION.md" on `main`.
-2. **E3** is next in the delivery order, but it needs an approved Opus spec first. Release 0.3.0 waits for your yes: publish the chat pack and a speech pack with it.
+2. **E3** is next in the delivery order. Its spec (`docs/specs/E3-CHANGE-JOURNAL.md`) waits for your answers and approval. Release 0.3.0 waits for your yes: publish the chat pack and a speech pack with it.
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 
 ### Lessons from this session (for the implementer)
