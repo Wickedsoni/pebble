@@ -415,6 +415,12 @@ class PebbleApp(
         if (dropped > 0) log.info(TAG, "purged $dropped history entries")
     }
 
+    /** Changes the text of note [id] (a journaled edit, so its History keeps the old text); the search index catches up. */
+    fun editNote(id: Long, text: String) {
+        notes.update(id, text, now())
+        requestIndexing()
+    }
+
     fun completeNote(id: Long) {
         notes.archive(id, now())
         bus.publish(PebbleEvent.NoteCompleted(id, now()))

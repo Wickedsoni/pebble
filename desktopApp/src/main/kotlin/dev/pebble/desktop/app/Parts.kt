@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -71,11 +74,24 @@ fun IconButton(icon: ImageVector, filled: Boolean = false, size: Dp = 36.dp, tin
     ) { Icon(icon, if (filled) Color.White else c.content, size * 0.5f) }
 }
 
-/** Single-line input on glass; Enter submits. */
+/**
+ * Single-line input on glass; Enter submits. [initial]: the text it starts with (an edit). [onCancel]: Escape calls
+ * it (null: Escape does nothing). [autoFocus]: takes the keyboard when it appears.
+ */
 @Composable
-fun GlassField(placeholder: String, modifier: Modifier = Modifier, icon: ImageVector = PebbleIcons.Plus, onSubmit: (String) -> Unit) {
+fun GlassField(
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector = PebbleIcons.Plus,
+    initial: String = "",
+    onCancel: (() -> Unit)? = null,
+    autoFocus: Boolean = false,
+    onSubmit: (String) -> Unit,
+) {
     val c = LocalGlass.current
-    var text by remember { mutableStateOf("") }
+    var text by remember { mutableStateOf(initial) }
+    val focus = remember { FocusRequester() }
+    if (autoFocus) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     fun submit() {
         if (text.isNotBlank()) { onSubmit(text.trim()); text = "" }
     }
@@ -91,8 +107,13 @@ fun GlassField(placeholder: String, modifier: Modifier = Modifier, icon: ImageVe
                 singleLine = true,
                 textStyle = TextStyle(color = c.content, fontSize = 13.sp),
                 cursorBrush = SolidColor(c.accent),
-                modifier = Modifier.fillMaxWidth().onPreviewKeyEvent {
-                    if (it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter)) { submit(); true } else false
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+                    when {
+                        it.type != KeyEventType.KeyDown -> false
+                        it.key == Key.Enter || it.key == Key.NumPadEnter -> { submit(); true }
+                        it.key == Key.Escape && onCancel != null -> { onCancel(); true }
+                        else -> false
+                    }
                 },
             )
         }

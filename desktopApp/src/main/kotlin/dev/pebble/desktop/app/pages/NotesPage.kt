@@ -1,6 +1,7 @@
 package dev.pebble.desktop.app.pages
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,13 +28,14 @@ import dev.pebble.desktop.app.GlassCard
 import dev.pebble.desktop.app.GlassField
 import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
+import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
 
 /** The Notes page: makes its [NotesStateHolder] once, then only draws its state (docs/UI-PATTERN.md). */
 @Composable
 fun NotesPage(app: PebbleApp) {
     val scope = rememberCoroutineScope()
-    val holder = remember { NotesStateHolder(app.notes, app::addNote, app::completeNote, app.env, scope) }
+    val holder = remember { NotesStateHolder(app.notes, app::addNote, app::completeNote, app::editNote, app.env, scope) }
     val history = remember { HistoryStateHolder(app.history, app.journal, app.agenda, app.engine, app.env, scope) }
     val state by holder.state.collectAsState()
     val historyState by history.state.collectAsState()
@@ -58,8 +60,22 @@ fun NotesContent(state: NotesUiState, onEvent: (NotesEvent) -> Unit, onHistory: 
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(PebbleIcons.Check, size = 28.dp) { onEvent(NotesEvent.Complete(n.id)) }
                     Spacer(Modifier.width(12.dp))
-                    Text(n.text, color = c.content, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
+                    if (n.id == state.editingId) {
+                        GlassField(
+                            "Note text",
+                            Modifier.weight(1f),
+                            icon = PebbleIcons.Check,
+                            initial = n.text,
+                            onCancel = { onEvent(NotesEvent.CancelEdit) },
+                            autoFocus = true,
+                        ) { onEvent(NotesEvent.SaveEdit(n.id, it)) }
+                    } else {
+                        Text(n.text, color = c.content, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
+                    }
                     Spacer(Modifier.width(8.dp))
+                    if (n.id != state.editingId) {
+                        Box(Modifier.padding(end = 6.dp)) { Chip("Edit", false) { onEvent(NotesEvent.StartEdit(n.id)) } }
+                    }
                     if (n.uid != null) HistoryChip { onHistory(n) }
                     Text(n.timeLabel, color = c.secondary, fontSize = 11.sp)
                 }
