@@ -215,14 +215,18 @@ class ChangeJournalTest {
 
     @Test
     fun recordAddsLittleToAWrite() {
-        repeat(200) { notes.add("warm up $it", at = it.toLong()) }
-        val n = 1_000
-        val withJournal = measureNanoTime { repeat(n) { notes.add("note $it", at = 10_000L + it) } } / n
-        val plain = measureNanoTime {
-            repeat(n) { db.transaction { db.wellnessQueries.insertNote("plain $it", 1, 1, null, null) } }
+        // The cost of record itself (spec: < 1 ms on the dev laptop), on the test database (no disk sync) and inside
+        // one transaction, so that the disk sync of each commit (tens of ms on a CI runner) does not hide it.
+        val fast = DatabaseFactory.inMemory()
+        val j = ChangeJournal(fast)
+        val values = mapOf("text" to ChangeJournal.v("note"), "created_at" to ChangeJournal.v(1L), "archived" to ChangeJournal.v(0L))
+        fast.transaction { repeat(500) { j.record(dev.pebble.core.sync.SyncTable.NOTE, "warm$it", values, it.toLong()) } }
+        val n = 2_000
+        val perRecord = measureNanoTime {
+            fast.transaction { repeat(n) { j.record(dev.pebble.core.sync.SyncTable.NOTE, "u$it", values, 10_000L + it) } }
         } / n
-        println("notes.add with the journal: ${withJournal / 1000} µs; a plain insert: ${plain / 1000} µs")
-        assertNotNull(maxHlc())
-        assertTrue(withJournal - plain < 5_000_000, "record adds ${(withJournal - plain) / 1000} µs") // spec: < 1 ms on the dev laptop
+        println("ChangeJournal.record: ${perRecord / 1000} µs for each write of 3 fields")
+        assertNotNull(Hlc.parse(fast.journalQueries.maxHlc().executeAsOne().hlc!!))
+        assertTrue(perRecord < 2_000_000, "record takes ${perRecord / 1000} µs") // 2 ms: room for a slow CI runner
     }
 }

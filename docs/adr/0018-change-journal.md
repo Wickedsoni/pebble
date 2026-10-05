@@ -38,7 +38,7 @@ Facts that we found during the work:
 - A write path in new code that forgets the journal fails in the tests, because it sets a new HLC without entries. If it also forgets the HLC, `verify()` in its test shows it. In the app, `reconcile` repairs it at the next start and writes a warning.
 - Your installed v0.1.2 keeps working on the database at schema 14. Its changes become local changes of this device at the next start of a new Pebble.
 - A deleted event does not come back from an ICS file. Before E3 it did.
-- Each write adds one query for `max(hlc)` and one journal entry for each field. Measured on the developer laptop: about 0.16 ms for each note (9.96 ms against 9.81 ms; most of the time is the disk sync of the commit).
+- Each write adds one query for `max(hlc)` and one journal entry for each field. `record` takes 82 µs for 3 fields on the developer laptop (`ChangeJournalTest`, no disk sync). A whole note write takes about 10 ms; most of that is the disk sync of the commit.
 - The journal keeps a second copy of the text of notes, reminders and events. After the 90-day purge, only the grave of a deleted row stays.
 
 ## Alternatives

@@ -28,7 +28,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - **calendar-made reminders stay local** (never journaled);
   - **older Pebble versions keep working** (D6): triggers check only writes that set a new HLC; `reconcile` at each start records what an older app changed, with a warning in `pebble.log`.
 - **Found:** SQLDelight 2.4.0 accepts only lower-case `new.`/`old.` in triggers (trap 12 in CLAUDE.md).
-- **Tests:** `HlcTest` (6, 10 000 steps each), `ChangeJournalTest` (10), `MigrationTest` 13→14, a Calendar page test. Four older tests changed, each for a stated reason (PR). 297 Kotlin tests, 0 skipped. Speed: the journal adds about 0.16 ms to a note write.
+- **Tests:** `HlcTest` (6, 10 000 steps each), `ChangeJournalTest` (10), `MigrationTest` 13→14, a Calendar page test. Four older tests changed, each for a stated reason (PR). 297 Kotlin tests, 0 skipped. Speed: `ChangeJournal.record` takes 82 µs for 3 fields (spec: < 1 ms). The first speed test compared whole commits and failed on CI (disk sync noise, 71 vs 42 ms); it now measures `record` alone.
 - **Live check (5 Oct):**
   - backup first: `%APPDATA%\Pebble\pebble-backup-e3a.db` (schema 13, `integrity_check` ok). Delete it when you are happy.
   - your real database migrated 13 → 14; at start the log said "recorded 3 rows from before the journal": your note, your reminder and your event got their entries (4, 5, 12); the reminder that the event made got none. `integrity_check` ok.
