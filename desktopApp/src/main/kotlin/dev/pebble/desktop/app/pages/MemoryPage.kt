@@ -101,6 +101,7 @@ fun MemoryPage(app: PebbleApp) {
         }
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             MemorySearchCard(app, Modifier.fillMaxWidth())
+            RecentlyDeletedCard(app, Modifier.fillMaxWidth().weight(1f))
             // Scrolls: with Smart replies the switches are taller than the card on a small window.
             GlassCard(Modifier.fillMaxWidth().weight(1f)) {
                 CardLabel("Privacy", PebbleIcons.Shield, c.water)
@@ -287,5 +288,67 @@ fun TeachContent(state: TeachUiState, onEvent: (TeachEvent) -> Unit, modifier: M
         }
         Spacer(Modifier.height(6.dp))
         Chip("Forget what you taught me", false) { onEvent(TeachEvent.ForgetAll) }
+    }
+}
+
+/** "Recently deleted" (WP E3c-2): makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
+@Composable
+private fun RecentlyDeletedCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember {
+        RecentlyDeletedStateHolder(app.history, app.notes, app.reminders, app.calendar, app.agenda, app.engine, app.env, scope)
+    }
+    val state by holder.state.collectAsState()
+    RecentlyDeletedContent(state, holder::onEvent, modifier)
+}
+
+/** Stateless: deleted events, notes and reminders of the last 90 days, each with "Restore as a copy"; "Clear history". */
+@Composable
+fun RecentlyDeletedContent(state: RecentlyDeletedUiState, onEvent: (RecentlyDeletedEvent) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalGlass.current
+    GlassCard(modifier) {
+        CardLabel("Recently deleted", PebbleIcons.Clock, c.warm)
+        Text(
+            state.message ?: "Deleted events, notes and reminders of the last 90 days. A copy comes back; the deleted one stays deleted.",
+            color = c.secondary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(Modifier.weight(1f, fill = false)) {
+            if (state.items.isEmpty()) item { Text("Nothing deleted.", color = c.secondary, fontSize = 13.sp) }
+            items(state.items, key = { "${it.table}-${it.uid}" }) { row ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(row.title, color = c.content, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "${row.kindLabel} · ${row.deletedLabel}",
+                            color = c.secondary,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Chip("Restore as a copy", false) { onEvent(RecentlyDeletedEvent.RestoreCopy(row.table, row.uid)) }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        if (state.confirmClear) {
+            Text(
+                "Delete all old versions on this computer? You cannot undo this.",
+                color = c.warm,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip("Delete them", false) { onEvent(RecentlyDeletedEvent.ConfirmClear) }
+                Chip("Cancel", false) { onEvent(RecentlyDeletedEvent.CancelClear) }
+            }
+        } else {
+            Chip("Clear history", false) { onEvent(RecentlyDeletedEvent.AskClear) }
+        }
     }
 }

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.pebble.core.sync.SyncTable
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
@@ -50,8 +51,12 @@ import java.nio.file.Path
 fun CalendarPage(app: PebbleApp) {
     val scope = rememberCoroutineScope()
     val holder = remember { CalendarStateHolder(app.calendar, app.agenda, app.engine, app.env, scope) }
+    val history = remember { HistoryStateHolder(app.history, app.journal, app.agenda, app.engine, app.env, scope) }
     val state by holder.state.collectAsState()
-    CalendarContent(state, holder::onEvent)
+    val historyState by history.state.collectAsState()
+    WithHistory(historyState, history::onEvent) {
+        CalendarContent(state, holder::onEvent) { history.onEvent(HistoryEvent.Open(SyncTable.CALENDAR_EVENT, it.uid, it.title)) }
+    }
 }
 
 private const val HINT =
@@ -59,10 +64,10 @@ private const val HINT =
 
 private val WEEKDAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-/** Stateless: draws [state], sends what you do to [onEvent]. */
+/** Stateless: draws [state], sends what you do to [onEvent]; [onHistory] opens the History dialog of an event. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CalendarContent(state: CalendarUiState, onEvent: (CalendarPageEvent) -> Unit) {
+fun CalendarContent(state: CalendarUiState, onEvent: (CalendarPageEvent) -> Unit, onHistory: (CalendarUiState.EventRow) -> Unit = {}) {
     val c = LocalGlass.current
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         GlassCard(Modifier.weight(1.25f).fillMaxHeight(), padding = 18.dp) {
@@ -113,6 +118,7 @@ fun CalendarContent(state: CalendarUiState, onEvent: (CalendarPageEvent) -> Unit
                             Text(listOfNotNull(r.timeLabel, r.repeatLabel).joinToString(" · "), color = c.secondary, fontSize = 12.sp)
                             r.warning?.let { Text(it, color = c.warm, fontSize = 11.sp, lineHeight = 14.sp) }
                         }
+                        HistoryChip { onHistory(r) }
                         if (r.canSkip) {
                             Chip("Skip day", false) { onEvent(CalendarPageEvent.SkipDay(r.uid, r.occurrenceAt)) }
                             Spacer(Modifier.width(6.dp))

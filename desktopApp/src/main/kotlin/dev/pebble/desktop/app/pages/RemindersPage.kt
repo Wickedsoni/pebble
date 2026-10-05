@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pebble.core.reminders.Strictness
+import dev.pebble.core.sync.SyncTable
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
@@ -37,13 +38,19 @@ import dev.pebble.desktop.ui.Toggle
 fun RemindersPage(app: PebbleApp) {
     val scope = rememberCoroutineScope()
     val holder = remember { RemindersStateHolder(app.reminders, app.engine, app.memory, app.env, scope) }
+    val history = remember { HistoryStateHolder(app.history, app.journal, app.agenda, app.engine, app.env, scope) }
     val state by holder.state.collectAsState()
-    RemindersContent(state, holder::onEvent)
+    val historyState by history.state.collectAsState()
+    WithHistory(historyState, history::onEvent) {
+        RemindersContent(state, holder::onEvent) { r ->
+            r.uid?.let { history.onEvent(HistoryEvent.Open(SyncTable.ONE_OFF_REMINDER, it, r.title)) }
+        }
+    }
 }
 
-/** Stateless: draws [state], sends what you do to [onEvent]. */
+/** Stateless: draws [state], sends what you do to [onEvent]; [onHistory] opens the History dialog of a reminder. */
 @Composable
-fun RemindersContent(state: RemindersUiState, onEvent: (RemindersEvent) -> Unit) {
+fun RemindersContent(state: RemindersUiState, onEvent: (RemindersEvent) -> Unit, onHistory: (RemindersUiState.OneOffRow) -> Unit = {}) {
     val c = LocalGlass.current
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         GlassCard(Modifier.fillMaxWidth(), padding = 20.dp) {
@@ -95,6 +102,7 @@ fun RemindersContent(state: RemindersUiState, onEvent: (RemindersEvent) -> Unit)
                         )
                         Text(r.dueLabel, color = c.secondary, fontSize = 12.sp)
                         Spacer(Modifier.width(8.dp))
+                        if (r.uid != null) HistoryChip { onHistory(r) }
                         IconButton(PebbleIcons.Close, size = 22.dp) { onEvent(RemindersEvent.DeleteOneOff(r.id)) }
                     }
                 }

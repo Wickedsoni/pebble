@@ -62,13 +62,13 @@ Test these items for each page:
 
 | Page | Status |
 |---|---|
-| Reminders | Done (WP B7, the template) |
-| Calendar | Done (WP E2: `CalendarStateHolder`) |
+| Reminders | Done (WP B7, the template); "History" dialog (WP E3c-2: `HistoryStateHolder`, shared with Calendar) |
+| Calendar | Done (WP E2: `CalendarStateHolder`); "History" dialog (WP E3c-2: `HistoryStateHolder`) |
 | Today | "Agenda" card done (WP E2: `AgendaStateHolder`); the rest of the page to do |
 | Notes | To do |
 | Water | To do |
 | Chat | To do |
-| Memory | Search card done (WP C2: `MemorySearchStateHolder`); "Teach Pebble a command" card done (WP C3: `TeachStateHolder`); the rest of the page to do |
+| Memory | Search card done (WP C2: `MemorySearchStateHolder`); "Teach Pebble a command" card done (WP C3: `TeachStateHolder`); "Recently deleted" card done (WP E3c-2: `RecentlyDeletedStateHolder`); the rest of the page to do |
 | Companion | To do |
 | About | "Model packs" card done (WP D2: `ModelPacksStateHolder`); "Backup" card done (WP E4: `BackupStateHolder`); the rest is fixed text |
 
