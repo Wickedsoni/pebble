@@ -8,19 +8,21 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * The RRULE subset that Pebble expands (WP E2): `FREQ=DAILY|WEEKLY|MONTHLY`, `INTERVAL`, `BYDAY` (WEEKLY only, no
- * numbers such as `1MO`), `BYMONTHDAY` (MONTHLY only, 1 to 31), and one of `UNTIL` or `COUNT`. `WKST=MO` is
- * accepted. [parse] returns null for every other rule; such an event is kept and shown once, with a warning.
+ * The RRULE subset that Pebble expands (WP E2): `FREQ=DAILY|WEEKLY|MONTHLY|YEARLY`, `INTERVAL`, `BYDAY` (WEEKLY only, no
+ * numbers such as `1MO`), `BYMONTHDAY` (MONTHLY: 1 to 31; YEARLY: only with `BYMONTH`), `BYMONTH` (YEARLY only,
+ * 1 to 12), and one of `UNTIL` or `COUNT`. YEARLY without `BYMONTH` and `BYMONTHDAY` repeats on the day of DTSTART.
+ * `WKST=MO` is accepted. [parse] returns null for every other rule; such an event is kept and shown once, with a warning.
  */
 data class RecurrenceRule(
     val freq: Freq,
     val interval: Int = 1,
     val byDay: Set<DayOfWeek> = emptySet(),
     val byMonthDay: List<Int> = emptyList(),
+    val byMonth: List<Int> = emptyList(),
     val until: Until? = null,
     val count: Int? = null,
 ) {
-    enum class Freq { DAILY, WEEKLY, MONTHLY }
+    enum class Freq { DAILY, WEEKLY, MONTHLY, YEARLY }
 
     /** The last allowed start: a date (all-day), a UTC instant, or a local time in the event's zone. */
     sealed interface Until {
@@ -36,6 +38,7 @@ data class RecurrenceRule(
         add("FREQ=$freq")
         if (interval != 1) add("INTERVAL=$interval")
         if (byDay.isNotEmpty()) add("BYDAY=" + byDay.sorted().joinToString(",") { DAYS.getValue(it) })
+        if (byMonth.isNotEmpty()) add("BYMONTH=" + byMonth.joinToString(","))
         if (byMonthDay.isNotEmpty()) add("BYMONTHDAY=" + byMonthDay.joinToString(","))
         when (val u = until) {
             is Until.Date -> add("UNTIL=" + u.date.format(DateTimeFormatter.BASIC_ISO_DATE))
@@ -73,6 +76,7 @@ data class RecurrenceRule(
                 "DAILY" -> Freq.DAILY
                 "WEEKLY" -> Freq.WEEKLY
                 "MONTHLY" -> Freq.MONTHLY
+                "YEARLY" -> Freq.YEARLY
                 else -> return null
             }
             var rule = RecurrenceRule(freq)
@@ -94,10 +98,19 @@ data class RecurrenceRule(
                     }
 
                     "BYMONTHDAY" -> {
-                        if (freq != Freq.MONTHLY) return null
+                        if (freq != Freq.MONTHLY && freq != Freq.YEARLY) return null
                         rule.copy(
                             byMonthDay = v.split(',').map {
                                 it.trim().toIntOrNull()?.takeIf { d -> d in 1..31 } ?: return null
+                            }.distinct().sorted(),
+                        )
+                    }
+
+                    "BYMONTH" -> {
+                        if (freq != Freq.YEARLY) return null
+                        rule.copy(
+                            byMonth = v.split(',').map {
+                                it.trim().toIntOrNull()?.takeIf { m -> m in 1..12 } ?: return null
                             }.distinct().sorted(),
                         )
                     }
@@ -106,6 +119,8 @@ data class RecurrenceRule(
                 }
             }
             if (rule.count != null && rule.until != null) return null // RFC 5545: not both
+            // BYMONTHDAY alone in a YEARLY rule means every month (RFC 5545); Pebble expands only a named month.
+            if (freq == Freq.YEARLY && rule.byMonthDay.isNotEmpty() && rule.byMonth.isEmpty()) return null
             return rule
         }
 

@@ -189,7 +189,7 @@ class CalendarStateHolderTest {
 
     @Test
     fun anUnsupportedRuleShowsAWarning() = runTest {
-        calendar.save(CalendarEvent("y", "Birthday", at(4, 0), at(5, 0), zone.id, allDay = true, rrule = "FREQ=YEARLY"), at = 1)
+        calendar.save(CalendarEvent("y", "Birthday", at(4, 0), at(5, 0), zone.id, allDay = true, rrule = "FREQ=MONTHLY;BYDAY=1MO"), at = 1)
         val row = holder().state.value.selected.single()
         assertEquals("Repeats", row.repeatLabel)
         assertTrue(row.warning!!.contains("shown once"))
@@ -201,7 +201,7 @@ class CalendarStateHolderTest {
         val inFile = dir.resolve("in.ics")
         val source = listOf(
             CalendarEvent("a", "Standup", at(5, 9), at(5, 9, 15), zone.id, rrule = "FREQ=DAILY;COUNT=3"),
-            CalendarEvent("b", "Birthday", at(6, 0), at(7, 0), zone.id, allDay = true, rrule = "FREQ=YEARLY"),
+            CalendarEvent("b", "Birthday", at(6, 0), at(7, 0), zone.id, allDay = true, rrule = "FREQ=MONTHLY;BYDAY=1MO"),
         )
         Files.writeString(inFile, Ics.write(source, now))
         val h = holder()
@@ -277,5 +277,23 @@ class CalendarStateHolderTest {
         assertEquals(listOf("Workshop", "Dinner", "Standup"), rows.map { it.title })
         assertEquals(listOf(true, false, false), rows.map { it.now })
         assertEquals(listOf("Today", "Today", "Tomorrow"), rows.map { it.day })
+    }
+
+    @Test
+    fun theYearlyChipMakesAYearlyEventAndTheLabelNamesTheInterval() = runTest {
+        val h = holder()
+        h.onEvent(CalendarPageEvent.Select(LocalDate.of(2026, 10, 9)))
+        h.onEvent(CalendarPageEvent.SetRepeat(Repeat.YEARLY))
+        h.onEvent(CalendarPageEvent.Add("Anniversary 6pm"))
+        advanceUntilIdle()
+        assertEquals("FREQ=YEARLY", calendar.live().single().rrule)
+        val row = h.state.value.selected.single()
+        assertEquals("Yearly", row.repeatLabel)
+        assertNull(row.warning)
+
+        calendar.save(CalendarEvent("y2", "Passport", at(12, 9), at(12, 10), zone.id, rrule = "FREQ=YEARLY;INTERVAL=2"), at = 2)
+        h.onEvent(CalendarPageEvent.Select(LocalDate.of(2026, 10, 12)))
+        advanceUntilIdle()
+        assertEquals("Every 2 years", h.state.value.selected.single().repeatLabel)
     }
 }

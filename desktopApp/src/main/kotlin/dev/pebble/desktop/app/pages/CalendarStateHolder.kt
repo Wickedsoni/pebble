@@ -31,7 +31,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 /** How a new event repeats (the chips on the Calendar page). */
-enum class Repeat(val label: String) { NONE("Once"), DAILY("Daily"), WEEKLY("Weekly"), MONTHLY("Monthly") }
+enum class Repeat(val label: String) { NONE("Once"), DAILY("Daily"), WEEKLY("Weekly"), MONTHLY("Monthly"), YEARLY("Yearly") }
 
 /** Everything the Calendar page shows, ready to draw. */
 @Immutable
@@ -178,6 +178,7 @@ class CalendarStateHolder(
                 Repeat.DAILY -> "FREQ=DAILY"
                 Repeat.WEEKLY -> "FREQ=WEEKLY;BYDAY=" + day.dayOfWeek.name.take(2)
                 Repeat.MONTHLY -> "FREQ=MONTHLY;BYMONTHDAY=${day.dayOfMonth}"
+                Repeat.YEARLY -> "FREQ=YEARLY"
             },
             remindMinutes = if (base.allDay) null else v.remind,
         )
@@ -322,6 +323,7 @@ class CalendarStateHolder(
             RecurrenceRule.Freq.DAILY -> "days"
             RecurrenceRule.Freq.WEEKLY -> "weeks"
             RecurrenceRule.Freq.MONTHLY -> "months"
+            RecurrenceRule.Freq.YEARLY -> "years"
         }
         return "Every ${r.interval} $unit"
     }
