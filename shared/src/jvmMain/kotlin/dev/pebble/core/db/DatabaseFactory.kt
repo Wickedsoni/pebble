@@ -1,6 +1,5 @@
 package dev.pebble.core.db
 
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import dev.pebble.db.PebbleDatabase
 import java.io.File
 import java.util.Properties
@@ -14,12 +13,13 @@ object DatabaseFactory {
     }
 
     fun create(file: File = File(defaultDataDir(), "pebble.db")): PebbleDatabase =
-        PebbleDatabase(JdbcSqliteDriver("jdbc:sqlite:${file.absolutePath}", fileProperties(), PebbleDatabase.Schema))
+        PebbleDatabase(PebbleSqliteDriver.open("jdbc:sqlite:${file.absolutePath}", fileProperties(), PebbleDatabase.Schema))
 
     /**
      * sqlite-jdbc connection settings (names from `org.sqlite.SQLiteConfig.Pragma`, checked in 3.53.4.0):
      * WAL lets the event writer and the UI read and write at the same time; a busy writer makes others
-     * wait up to 5 s instead of failing with SQLITE_BUSY. Copy the database with SQLite's backup, not a
+     * wait up to 5 s instead of failing with SQLITE_BUSY ([PebbleSqliteDriver] begins every transaction IMMEDIATE, so
+     * this holds for transactions that read first, too). Copy the database with SQLite's backup, not a
      * file copy: recent changes may still be in `pebble.db-wal`.
      */
     private fun fileProperties() = Properties().apply {
@@ -39,6 +39,6 @@ object DatabaseFactory {
         file.delete()
         listOf("", "-wal", "-shm").forEach { File(file.path + it).deleteOnExit() }
         val props = fileProperties().apply { setProperty("synchronous", "OFF") }
-        return PebbleDatabase(JdbcSqliteDriver("jdbc:sqlite:${file.absolutePath}", props, PebbleDatabase.Schema))
+        return PebbleDatabase(PebbleSqliteDriver.open("jdbc:sqlite:${file.absolutePath}", props, PebbleDatabase.Schema))
     }
 }
