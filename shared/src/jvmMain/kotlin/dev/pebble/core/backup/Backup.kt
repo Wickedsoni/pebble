@@ -61,6 +61,8 @@ object Backup {
             val summary = runCatching { check(tmp) }.getOrElse { e ->
                 throw e as? BackupException ?: BackupException("The backup does not hold a Pebble database.")
             }
+            // A stale side file of an earlier staged file must not meet the new one: SQLite would replay it.
+            SIDE.drop(1).forEach { File(dataDir, STAGED + it).delete() }
             Files.move(tmp.toPath(), File(dataDir, STAGED).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
             return summary
         } finally {
@@ -105,7 +107,7 @@ object Backup {
         try {
             writeIds(staged, deviceId)
         } catch (e: Exception) {
-            throw BackupException("The restore failed; the old database stays (${e.message}).")
+            throw BackupException("The restore failed (${e.message}). The old database stays.")
         }
         val aside = "$DB$RESTORING${System.currentTimeMillis()}"
         val moved = ArrayDeque<Pair<Path, Path>>() // (from, to), in the order done
@@ -120,17 +122,18 @@ object Backup {
             }
             step(staged, db)
         } catch (e: Exception) {
-            val failure = BackupException("The restore failed; the old database stays (${e.message}).")
+            val undoErrors = mutableListOf<Throwable>()
             while (moved.isNotEmpty()) {
                 val (from, to) = moved.removeLast()
                 // Never write over a file that is there: that could destroy the one copy of the restore or of the old data.
                 if (Files.exists(from)) {
-                    failure.addSuppressed(IllegalStateException("cannot undo, $from exists"))
+                    undoErrors += IllegalStateException("cannot undo, $from exists")
                 } else {
-                    runCatching { move(to, from) }.onFailure(failure::addSuppressed)
+                    runCatching { move(to, from) }.onFailure { undoErrors += it }
                 }
             }
-            throw failure
+            val outcome = if (undoErrors.isEmpty()) "The old database stays." else "Some files could not be put back; see the log."
+            throw BackupException("The restore failed (${e.message}). $outcome").also { f -> undoErrors.forEach(f::addSuppressed) }
         }
         // Only now replace the older before-restore files: all three, so a stale -wal never meets a new database.
         SIDE.forEach { File(dataDir, BEFORE + it).delete() }
@@ -161,11 +164,16 @@ object Backup {
         return true
     }
 
+    /** True when files of a cut-short swap (`pebble.db.restoring-*`) wait in [dataDir]. */
+    fun interruptedSwapPending(dataDir: File): Boolean = dataDir.list().orEmpty().any { it.startsWith("$DB$RESTORING") }
+
     private fun moveFile(from: Path, to: Path) {
         Files.move(from, to, StandardCopyOption.REPLACE_EXISTING)
     }
 
     private fun writeIds(db: File, deviceId: String?) = connect(db).use { c ->
+        // No WAL side files for a file that is staged; `DatabaseFactory` sets WAL again when it opens the database.
+        c.createStatement().use { it.execute("PRAGMA journal_mode = DELETE") }
         if (deviceId != null) {
             c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('device.id', ?)").use {
                 it.setString(1, deviceId)

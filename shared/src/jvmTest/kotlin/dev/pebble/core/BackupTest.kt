@@ -311,6 +311,8 @@ class BackupTest {
         }
         assertTrue(e.suppressed.isNotEmpty(), "undo failures are kept on the exception")
         assertTrue(Backup.restorePending(dir), "the staged copy is not lost")
+        assertTrue(Backup.recoverInterrupted(dir), "the next start brings the old database back")
+        assertEquals("olddevice", deviceOf(File(dir, Backup.DB)))
     }
 
     @Test
@@ -320,5 +322,15 @@ class BackupTest {
         File(dir, "${Backup.DB}.restoring-1-wal").writeText("old leftover")
         assertTrue(Backup.applyStaged(dir)!!.startsWith("restored"))
         assertTrue(dir.list()!!.none { it.contains("restoring") }, dir.list()!!.toList().toString())
+    }
+
+    @Test
+    fun aNewStagedFileNeverMeetsAStaleSideFile() {
+        val dir = withStaged()
+        File(dir, "${Backup.DB}.restore-wal").writeText("stale wal of an earlier staged file")
+        Backup.stageRestore(File(dir, "b.pebblebackup").toPath(), dir, pass.copyOf())
+        assertFalse(File(dir, "${Backup.DB}.restore-wal").exists())
+        Backup.applyStaged(dir)
+        assertTrue(dir.list()!!.none { it.contains(".restore-") }, dir.list()!!.toList().toString())
     }
 }

@@ -9,12 +9,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import java.nio.file.Files
 import java.sql.DriverManager
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -133,9 +136,15 @@ class EventLoggerTest {
         val errors = mutableListOf<Throwable>()
         val bus = EventBus()
         val logger = EventLogger(db) { synchronized(errors) { errors += it } }
-        logger.attach(bus, scope, Dispatchers.IO.limitedParallelism(1))
+        // Hold the writer until all 10 events are queued, so they are one batch.
+        val executor = Executors.newSingleThreadExecutor()
+        val gate = CountDownLatch(1)
+        executor.execute { gate.await() }
+        logger.attach(bus, scope, executor.asCoroutineDispatcher())
         repeat(10) { bus.publish(event(it)) }
+        gate.countDown()
         assertTrue(logger.flush(10.seconds))
+        executor.shutdown()
         assertEquals(0, rows(db))
         assertEquals(4, errors.size, "3 failed rows, then one report for the rest")
         assertTrue(errors.last().message!!.contains("7 more"), errors.last().message)

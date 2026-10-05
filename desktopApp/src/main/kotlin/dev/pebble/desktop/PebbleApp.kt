@@ -636,9 +636,9 @@ class PebbleApp(
             runCatching { Backup.applyStaged(dir) }
                 .onSuccess { it?.let { line -> log.info(TAG, line) } }
                 .onFailure {
-                    log.warn(TAG, "restoring the backup failed; the old database stays", it)
+                    log.warn(TAG, "restoring the backup failed", it)
                     // No new empty database next to the old files: the next start puts them back (Backup.recoverInterrupted).
-                    if (!File(dir, Backup.DB).exists()) throw RestoreNotFinishedException(dir, it)
+                    if (!File(dir, Backup.DB).exists() && Backup.interruptedSwapPending(dir)) throw RestoreNotFinishedException(dir, it)
                 }
             return PebbleApp(DatabaseFactory.create(), env, log)
         }
