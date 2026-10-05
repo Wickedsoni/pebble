@@ -48,6 +48,7 @@ LEARN
 | Decisions | `shared/.../brain/DecisionPolicy.kt`, `CommandRouter.kt`, `Understanding.kt` | temperatures in `labels.json` |
 | Acting, undo | `desktopApp/.../PebbleApp.kt`, `quickadd/QuickAddWindow.kt` | SQLite (`%APPDATA%\Pebble\pebble.db`) |
 | Calendar | `shared/.../calendar/` (`CalendarRepository`; jvmMain: `RecurrenceExpander`, `Ics`, `CalendarAgenda`); Calendar page, Agenda card on Today | `calendar_event` table; linked `one_off_reminder` rows (ADR 0014) |
+| Backup | `shared/.../backup/` (jvmMain: `BackupFile`, `Backup`); "Backup" card on the About page; `Backup.applyStaged` in `PebbleApp.create` | `.pebblebackup` files you choose; `pebble.db.restore`, `pebble.db.before-restore` (ADR 0015) |
 | Nudge timing | `shared/.../brain/NudgePolicy.kt`, `reminders/ReminderEngine.kt` | `nudge_stats` table |
 | Memory | `shared/.../memory/MemoryEngine.kt` | `event_log`, `memory` tables |
 | Training | `brain/src/pebble_brain/` | `brain/models/`, `brain/eval/` |

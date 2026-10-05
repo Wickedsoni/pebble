@@ -8,8 +8,8 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### Start here (end of 5 Oct 2026, after WP E2)
-- **State:** A1 … E2 are on `main` (E2 = PR #35, merged 5 Oct 2026). No open PRs.
-- **Next WP: E4 (encrypted backup/restore)**, then C4 (offline IPS evaluator). Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
+- **State:** A1 … E2 are on `main`. **WP E4 (encrypted backup) is in a PR on `wp/e4-backup`, waiting for your yes to merge.**
+- **Next WP: C4 (offline IPS evaluator)**, then E3 (ChangeJournal + HLC, `[Opus spec]`). Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
@@ -20,6 +20,14 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 - **Your housekeeping:**
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
+
+### 5 Oct: WP E4 done (encrypted backup, PR on `wp/e4-backup`)
+- **About → Backup:** "Back up to a file…" writes `pebble-backup-<date>.pebblebackup` (asks the passphrase two times, 8+ characters); "Restore from a file…" checks the file and restores it at the next start (your current data is kept as `pebble.db.before-restore`); "Cancel the restore".
+- **Format (ADR 0015):** AES-256-GCM in 1 MiB chunks (STREAM nonces, header as AAD), key PBKDF2-HMAC-SHA256 600 000 iterations (369 ms). Difference from the plan: chunks instead of one GCM message, so a large database never needs the whole file in the 256 MB heap.
+- **Restore keeps this computer's `device.id`** (no two devices with one id after a move to a new PC).
+- **Live check (built distributable, jlink runtime, 5 Oct):** a real backup of your database was written from About → Backup (225 KB, `PEBBLEBK` header); a wrong passphrase was refused; the right one staged the restore, and "Cancel the restore" removed it (your data was not replaced). Restore at start was checked with a second built app on a temp `APPDATA`: the log says "restored a backup". The test file was deleted. Found and fixed: the Help card on the About page cut its last line once the Backup card was added (it now scrolls).
+- **Please try it once yourself:** back up to a USB stick or a cloud folder, and keep the passphrase in a password manager.
+- **Tests:** `BackupTest` (10: sizes across chunk boundaries, wrong passphrase, cut files incl. at a chunk boundary, changed bytes, export → restore on "another computer", newer schema refused, cancel) and `BackupStateHolderTest` (5).
 
 ### 5 Oct: WP E2 done (calendar, PR #35, merged)
 - **Data (ADR 0014):** migration `12.sqm` adds `calendar_event` with the E1 sync columns (uid primary key, tombstones, `hlc`, `origin_device`) and `owner_device` / `visibility` (`private`) for milestone F. `one_off_reminder` gains `event_uid` + `occurrence_at`: reminders before events are linked one-off reminders, made 2 days ahead.
@@ -201,12 +209,13 @@ Lessons from the merge (for the next stack):
   - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
+  - WP E4 (PR): encrypted backup/restore (`BackupFile`, `Backup`, About → Backup; ADR 0015).
   - WP E2: calendar (`calendar_event`, migration `12.sqm`, RRULE subset, ICS import/export, Calendar page, Agenda card, `event:` syntax; ADR 0014).
   - WP C3: `PersonalLayer` (Tier 2): taught phrases, picks and "Not what I meant" change the next reading at once; hour-of-day prior re-ranks "Did you mean…"; "Teach Pebble a command" card. Formula reviewed and changed (ADR 0010). Replay: right 14 → 27, wrong actions 12 → 4; eval v1 unchanged.
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** E4 (backup), then C4; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
+- **Next:** C4, then E3; B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)

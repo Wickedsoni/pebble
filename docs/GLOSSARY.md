@@ -18,6 +18,7 @@ See [STYLE-STE.md](STYLE-STE.md) for the writing rules.
 | **reminder (repeating)** | A reminder that occurs again after a set interval (eyes, water, stretch). | "habit", "recurring task" |
 | **event (calendar)** | An item in the calendar with a start and an end. It can repeat (an RRULE). Table: `calendar_event` (ADR 0014). | "event" without "(calendar)" when the meaning is not clear |
 | **occurrence** | One time that a calendar event occurs. A repeating event has many occurrences in one row. Code: `Occurrence`, `RecurrenceExpander`. | "instance", "recurrence" |
+| **backup file** | An encrypted copy of the whole database that you save with a passphrase (`.pebblebackup`). Code: `BackupFile`, `Backup` (ADR 0015). | "export" alone, "dump" |
 | **log entry** | One row in the `event_log` table. It records one thing that occurred in the app. In code, the type name is `PebbleEvent`. | "event" for a log entry in new docs |
 | **peer** | One of your own devices that you paired with Pebble (planned, milestone M9). | "node", "client" |
 | **hub** | A family computer that runs Pebble Home. It relays data and runs larger models for the peers (planned, milestone M10). | "server", "cloud" |

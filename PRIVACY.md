@@ -18,6 +18,14 @@ Everything lives in one folder on your PC: `%APPDATA%\Pebble` (for example `C:\U
 | Voice clips, **only if you turn it on** (Memory → "Keep voice clips I correct", off by default), and only clips whose transcript you corrected | To tune speech recognition to your voice | Memory → **Delete voice clips** |
 | Search index: for each note, each fact you told Pebble and each thing you said, a list of 384 numbers that the command model makes on your computer, and a copy of the text it was made from (to notice when you edit a note) | So Memory → **Search memory** (and "what did I note about …") can find them by meaning | Delete the note or fact, or clear the conversation. A deleted item never shows in search results, and its numbers and copy are removed at the next index pass. Or remove the folder |
 | Settings (pet, sizes, toggles) | To remember your choices | Remove the folder |
+| Calendar events you add or import | That's the app | Delete them on the Calendar page, or remove the folder |
+
+### Backups
+
+Pebble makes a backup **only when you ask** (About → **Backup**). The backup is one file in the place you choose. It holds a copy of everything above, except voice clip audio and model packs.
+- The file is encrypted with AES-256-GCM. The key comes from your passphrase (PBKDF2-HMAC-SHA256, 600 000 iterations). Without the passphrase, nobody can read the file, not even Pebble. A forgotten passphrase cannot be recovered.
+- Pebble does not keep your passphrase, and it does not send the file anywhere. Where you keep the file (a USB stick, a cloud folder) is your choice.
+- A restore replaces your data at the next start. Pebble keeps the data from before the restore in `%APPDATA%\Pebble\pebble.db.before-restore`. Delete that file when you no longer need it.
 
 ## Microphone
 
