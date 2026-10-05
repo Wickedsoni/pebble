@@ -76,3 +76,16 @@ DELETE FROM calendar_event WHERE deleted_at IS NOT NULL AND deleted_at < ?;
 claimEvents:
 UPDATE calendar_event SET origin_device = coalesce(origin_device, :device), owner_device = coalesce(owner_device, :device)
 WHERE origin_device IS NULL OR owner_device IS NULL;
+
+-- The merge (WP E3b, ChangeJournal.apply).
+mergeInsertEvent:
+INSERT INTO calendar_event(uid, title, notes, start_at, end_at, all_day, tz, rrule, exdates, remind_minutes, visibility, owner_device,
+    deleted_at, updated_at, origin_device, hlc)
+VALUES (:uid, :title, :notes, :startAt, :endAt, :allDay, :tz, :rrule, :exdates, :remindMinutes, :visibility, :ownerDevice,
+    :deletedAt, :updatedAt, :originDevice, NULL);
+
+mergeUpdateEvent:
+UPDATE calendar_event SET title = :title, notes = :notes, start_at = :startAt, end_at = :endAt, all_day = :allDay, tz = :tz,
+    rrule = :rrule, exdates = :exdates, remind_minutes = :remindMinutes, visibility = :visibility, owner_device = :ownerDevice,
+    deleted_at = :deletedAt, updated_at = max(updated_at, :updatedAt), hlc = :hlc
+WHERE uid = :uid;

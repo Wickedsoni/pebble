@@ -97,3 +97,16 @@ SELECT count(*) FROM one_off_reminder WHERE event_uid = ? AND occurrence_at = ? 
 -- The event changed or was deleted: its reminders that did not fire yet go (tombstones).
 deletePendingLinked:
 UPDATE one_off_reminder SET deleted_at = :at, updated_at = :at WHERE event_uid = :eventUid AND done_at IS NULL AND deleted_at IS NULL;
+
+-- The merge (WP E3b, ChangeJournal.apply); reminders that an event made are never merged.
+syncOneOffByUid:
+SELECT uid, title, due_at, strictness, done_at, deleted_at, hlc, updated_at, event_uid FROM one_off_reminder WHERE uid = ?;
+
+mergeInsertOneOff:
+INSERT INTO one_off_reminder(uid, title, due_at, strictness, done_at, deleted_at, updated_at, origin_device, hlc)
+VALUES (:uid, :title, :dueAt, :strictness, :doneAt, :deletedAt, :updatedAt, :originDevice, NULL);
+
+mergeUpdateOneOff:
+UPDATE one_off_reminder SET title = :title, due_at = :dueAt, strictness = :strictness, done_at = :doneAt, deleted_at = :deletedAt,
+    updated_at = max(coalesce(updated_at, 0), :updatedAt), hlc = :hlc
+WHERE uid = :uid AND event_uid IS NULL;

@@ -43,5 +43,8 @@ class SettingsRepository(private val db: PebbleDatabase) {
 
         /** This device's id for sync (WP E1, [DeviceIdentity]). Never changes once made. */
         const val DEVICE_ID = "device.id"
+
+        /** The id of this copy of the change journal (WP E3b). A restore from a backup makes a new one (spec 8). */
+        const val JOURNAL_EPOCH = "sync.journalEpoch"
     }
 }
