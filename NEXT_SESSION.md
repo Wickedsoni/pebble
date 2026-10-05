@@ -9,7 +9,8 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ### Start here (end of 5 Oct 2026, after WP C4)
 - **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
-- **State:** E3a is on `main` (PR #46). **WP E3b (merge + convergence gate) is in a PR on `wp/e3b-merge`, waiting for your yes to merge.** Next: **E3c** (history and restore, your decision on 5 Oct): write its short spec first and get your approval. Then milestone F (F0 needs an Opus spec and a security review).
+- **State:** E3a and E3b are on `main` (PRs #46, #47). Next: **E3c** (history and restore, your decision on 5 Oct): its spec `docs/specs/E3C-HISTORY.md` must be approved first. Then milestone F (F0 needs an Opus spec and a security review).
+- **CI is faster (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR (about 20 s) and the full 300 on a push to `main` or with "Run workflow" in GitHub Actions.
   - The next migration file is `14.sqm` (current schema version 14).
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
@@ -21,7 +22,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
   - delete `%APPDATA%\Pebble\pebble-backup-e1.db` and `pebble-backup-e2.db` (taken at schema 12, before the E2 migration) when you are happy;
   - the old local model folders `brain/models/intent-v0…v2*` can be deleted (ask Claude).
 
-### 5 Oct: WP E3b done (merge + convergence gate, PR on `wp/e3b-merge`)
+### 5 Oct: WP E3b done (merge + convergence gate, PR #47, merged)
 - **What:** `ChangeJournal.changesSince(cursor, limit)` gives whole rows after a cursor; `ChangeJournal.apply(batch, wall)` merges a peer's batch: the larger HLC wins field by field, a delete always wins, all or nothing. Every name, type and HLC is checked first; a clock more than 60 minutes ahead is refused. A restore gives the journal a new epoch, so peers read again from the start.
 - **Gate:** `ConvergenceTest`: 3 devices with skewed clocks, 300 sequences of 50 random changes (also the same event made on two devices, edits against deletes), exchanged in random orders and batch sizes with duplicates and late batches. All three agree after every sequence. It runs for about 100 s.
 - **Speed (warm):** `changesSince` of 500 rows 17 ms (spec < 50); `apply` of 500 rows 110 to 130 ms (spec < 200).
@@ -252,7 +253,7 @@ Lessons from the merge (for the next stack):
   - WP E1: sync-ready rows (`uid`, tombstones, `device.id`; migration `11.sqm`; ADR 0013).
   - WP C5: local chat ("Smart replies", off by default): `LocalChat` (llama-server b11146 on 127.0.0.1), `ChatSafety`, Qwen2.5-1.5B English only; ADR 0012.
   - WP D2: signed model packs (`ModelPack`, Ed25519, ADR 0011): the user folder loads only valid signed packs; "Model packs" card on the About page; `-Pflavor=lite`; the release builds both MSIs.
-  - WP E3b (PR): merge (`changesSince`, `apply`), journal epoch on restore, `ConvergenceTest` gate.
+  - WP E3b (PR #47): merge (`changesSince`, `apply`), journal epoch on restore, `ConvergenceTest` gate.
   - WP E3a (PR #46): change journal + HLC, guard triggers, reconcile for older Pebble versions; a delete always wins (ADR 0018).
   - WP C4 (PR #39): offline IPS evaluator and gate for nudge policy changes (`NudgeIpsEvaluator`, `nudgeIps`; ADR 0016).
   - WP E4 (PR #37): encrypted backup/restore (`BackupFile`, `Backup`, About → Backup; ADR 0015).
