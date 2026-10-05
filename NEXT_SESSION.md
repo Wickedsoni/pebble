@@ -9,7 +9,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ### Start here (end of 5 Oct 2026, after WP C4)
 - **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
-- **State:** E3a and E3b are on `main` (PRs #46, #47). Next: **E3c** (history and restore, your decision on 5 Oct): its spec `docs/specs/E3C-HISTORY.md` must be approved first. Then milestone F (F0 needs an Opus spec and a security review).
+- **State:** E3a and E3b are on `main` (PRs #46, #47). Next: **E3c** (history and restore, your decision on 5 Oct): its spec `docs/specs/E3C-HISTORY.md` is **approved** (5 Oct: "Recently deleted" on the Memory page, 90 days, a "Clear history" button, a restore brings back everything but a delete). Start with E3c-1 (data + API, migration `14.sqm`). Then milestone F (F0 needs an Opus spec and a security review).
 - **CI is faster (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR (about 20 s) and the full 300 on a push to `main` or with "Run workflow" in GitHub Actions.
   - The next migration file is `14.sqm` (current schema version 14).
 - **How each WP lands:**
