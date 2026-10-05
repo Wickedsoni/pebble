@@ -5,6 +5,7 @@ import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import dev.pebble.core.brain.Embedding
 import dev.pebble.core.brain.IntentGuess
 import dev.pebble.core.brain.MoodGuess
 import dev.pebble.core.brain.Understanding
@@ -93,11 +94,11 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
                 MoodGuess(names[k], p[k])
             }
         }
-        return Understood(words, guesses, wordTags, mood)
+        return Understood(words, guesses, wordTags, mood, raw.embedding?.let(::Embedding))
     }
 
-    /** Raw head outputs for one sentence; [mood] is null for models exported before the mood head. */
-    private class Logits(val intent: FloatArray, val slots: Array<FloatArray>, val mood: FloatArray?)
+    /** Raw outputs for one sentence; [mood] / [embedding] are null for models exported before them. */
+    private class Logits(val intent: FloatArray, val slots: Array<FloatArray>, val mood: FloatArray?, val embedding: FloatArray?)
 
     private fun infer(enc: Encoding): Logits {
         val ids = enc.ids
@@ -117,7 +118,10 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
 
                     @Suppress("UNCHECKED_CAST")
                     val mood = (output("mood_logits", 2) as Array<FloatArray>?)?.get(0)
-                    return Logits(intent, slots, mood)
+
+                    @Suppress("UNCHECKED_CAST")
+                    val embedding = (output("embedding", 3) as Array<FloatArray>?)?.get(0)
+                    return Logits(intent, slots, mood, embedding)
                 }
             }
         }

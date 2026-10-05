@@ -3,7 +3,7 @@
 Run:  uv run python -m pebble_brain.export_onnx models/intent-v0
 
 Produces in the checkpoint folder:
-  intent.onnx         fp32 graph: (input_ids, attention_mask) → (intent_logits, slot_logits)
+  intent.onnx         fp32 graph: (input_ids, attention_mask) → (intent_logits, slot_logits, mood_logits, embedding)
   intent.int8.onnx    dynamic int8 quantisation — what the Kotlin app ships (≈4× smaller, faster on CPU)
   tokenizer/tokenizer.json   loaded in Kotlin by a HuggingFace tokenizers binding
 Then compares int8 vs PyTorch on the Pebble eval set and measures ONNX Runtime CPU latency.
@@ -28,12 +28,20 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 class _Graph(torch.nn.Module):
+    """The model's three heads, plus the sentence embedding as a 4th output (for memory search and the
+    personal layer). Same operations as IntentSlotModel.forward in eval mode, where dropout does nothing."""
+
     def __init__(self, model):
         super().__init__()
         self.model = model
 
     def forward(self, input_ids, attention_mask):
-        return self.model(input_ids, attention_mask)
+        m = self.model
+        h = m.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        mask = attention_mask.unsqueeze(-1).to(h.dtype)
+        pooled = (h * mask).sum(1) / mask.sum(1).clamp(min=1)  # mean over real tokens, before dropout
+        embedding = torch.nn.functional.normalize(pooled, p=2.0, dim=-1)
+        return m.intent_head(m.dropout(pooled)), m.slot_head(m.dropout(h)), m.mood_head(m.dropout(pooled)), embedding
 
 
 def export(ckpt: pathlib.Path) -> None:
@@ -45,13 +53,14 @@ def export(ckpt: pathlib.Path) -> None:
         (enc["input_ids"], enc["attention_mask"]),
         str(fp32),
         input_names=["input_ids", "attention_mask"],
-        output_names=["intent_logits", "slot_logits", "mood_logits"],
+        output_names=["intent_logits", "slot_logits", "mood_logits", "embedding"],
         dynamic_axes={
             "input_ids": {0: "batch", 1: "seq"},
             "attention_mask": {0: "batch", 1: "seq"},
             "intent_logits": {0: "batch"},
             "slot_logits": {0: "batch", 1: "seq"},
             "mood_logits": {0: "batch"},
+            "embedding": {0: "batch"},
         },
         opset_version=17,
         dynamo=False,
@@ -125,6 +134,8 @@ def export(ckpt: pathlib.Path) -> None:
                 mp /= mp.sum()
                 parity[-1]["mood"] = MOODS[int(mp.argmax())]
                 parity[-1]["mood_p"] = float(mp.max())
+            if len(rest) > 1:  # the sentence embedding: Kotlin checks its first values
+                parity[-1]["embedding8"] = [float(v) for v in rest[1][0][:8]]
     (ckpt / "parity.json").write_text(json.dumps(parity, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"parity.json: {len(parity)} reference readings")
     print(f"ONNX Runtime int8 CPU latency (4 threads): median {np.median(times):.1f} ms, p95 {np.percentile(times, 95):.1f} ms")
