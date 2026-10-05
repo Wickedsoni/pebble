@@ -1,6 +1,6 @@
 # Spec E3: Change journal and hybrid logical clock
 
-- **Status:** Draft. It waits for the approval of the maintainer. Do not start WP E3 before this file says "Approved".
+- **Status:** Approved by the maintainer on 2026-10-05, with the answers in section 12.
 - **Date:** 2026-10-05
 - **Work package:** E3 (master plan, milestone E). It depends on E1 (ADR 0013), E2 (ADR 0014) and ADR 0017.
 - **Author:** Opus. **Implementer:** Sonnet, in two PRs (E3a and E3b, see section 11).
@@ -17,7 +17,7 @@ The test of E3 is a convergence test with replicas in one process.
 
 ## 2. Decisions that change the master plan
 
-The plan text for E3 is short. The code shows four facts that change it.
+The plan text for E3 is short. The code shows four facts that change it. The maintainer changed one rule (D5).
 
 | # | Plan | This spec | Reason |
 |---|---|---|---|
@@ -25,6 +25,7 @@ The plan text for E3 is short. The code shows four facts that change it.
 | D2 | "Repositories call it inside the same transaction." | Repositories call it, **and** SQLite triggers stop any write to a synced field that has no journal entry. | A rule that code must remember fails later (see the opt-in fix of PR #41, replaced by ADR 0017). |
 | D3 | Sync all of `note`, `one_off_reminder`, `calendar_event`. | Rows of `one_off_reminder` with `event_uid` are **not** synced. | The calendar agenda makes these reminders on each device (ADR 0014). If they sync, each device gets copies from the others. |
 | D4 | One journal row for each change. | One journal row for each **field**: a newer change replaces the older row and gets a new `seq`. | A peer needs only the newest value of each field. The journal then keeps its size near the size of the data. |
+| D5 | "Delete wins over concurrent edit only if its HLC is greater." | **A delete always wins.** A deleted row never comes back, on any device. | The maintainer's decision (section 12, question 1). An item that you deleted must not come back because another device edited it later. |
 
 ## 3. Terms
 
@@ -129,6 +130,7 @@ Obey trap 4 in `CLAUDE.md`: `13.sqm`, the `.sq` file, a `MigrationTest` case, an
   - If there is no such entry, it stops the write: `RAISE(ABORT, '<tbl>.<f> changed without a journal entry')`.
 - **Insert:** if one synced field has no entry with `hlc = NEW.hlc`, then `RAISE(ABORT, ...)`.
 - For `one_off_reminder`, the triggers apply only `WHEN NEW.event_uid IS NULL`.
+- **A delete is final:** if `OLD.deleted_at IS NOT NULL` and `NEW.deleted_at IS NULL`, the update trigger stops the write: `RAISE(ABORT, '<tbl>: a deleted row cannot come back')`.
 - The triggers do not check local columns. `claim`, `fillUids` and the 90-day purge thus work as before.
 
 Thus a write path that forgets the journal fails at once, in the tests. It cannot fail quietly on a user's computer.
@@ -145,9 +147,14 @@ The order in each transaction is: first the journal entries, then the row with `
 
 Rules for the repositories:
 - **Insert:** record **all** synced fields of the table. Make the `uid` in Kotlin (32 lower-case hex digits, the format of `lower(hex(randomblob(16)))`), so that the journal can use it before the row exists. The insert queries take `:uid` and `:hlc`.
-- **Update:** record the fields that change **and** `deleted_at = null`. Section 7.2 gives the reason.
+- **Insert:** `deleted_at` is null, so the journal entry of `deleted_at` is `null`.
+- **Update:** record only the fields that change. Do not record `deleted_at`.
 - **Delete (tombstone):** record `deleted_at = <time>`.
-- `upsertEvent` (an ICS file imported again) records all synced fields and `deleted_at = null`. It is an edit.
+- **`upsertEvent` changes (D5).** Today it brings a tombstone back (`deleted_at = NULL`, ADR 0014). After E3a:
+  - for a live event, it records the synced fields that change;
+  - for a uid that is deleted (a tombstone or a grave), it does nothing and returns false;
+  - the ICS import counts these events and shows "N events were deleted before and were not imported again";
+  - revise ADR 0014 for this change.
 
 All write queries of the three tables get an `:hlc` parameter and set `hlc = :hlc`. The list today:
 - `Wellness.sq`: `insertNote`, `updateNote`, `deleteNote`, `archiveNote`;
@@ -167,7 +174,7 @@ Repositories get the `ChangeJournal` in the constructor (ADR 0009). `PebbleApp` 
 
 The daily job deletes tombstones older than 90 days (ADR 0013). In E3 it also deletes the journal entries of these rows, except the `deleted_at` entry. That entry is the **grave** of the row:
 - The text of a deleted note then leaves the journal after 90 days, as it leaves the table.
-- A late change for a row that has a grave and no row is dropped (7.3).
+- A late change for a row that has a grave and no row is dropped (7.3). With D5 this is also correct: the row was deleted.
 - In F4, the purge waits until all peers acknowledged the delete (ADR 0013). Then a late change is rare.
 
 ## 7. Merge
@@ -187,11 +194,10 @@ For each field of each `RowChange`:
 - If the HLCs are equal: it is the same change. Do nothing (idempotence).
 - If the local HLC is larger: the local value stays.
 
-**Delete and edit.** `deleted_at` is a synced field like the others. Each edit records `deleted_at = null` with its HLC (6.3). Thus:
-- a delete with a larger HLC than a concurrent edit wins, and the row stays deleted;
-- an edit with a larger HLC than the delete wins, and the row comes back with the edit.
-
-This is the rule of the master plan: "delete wins over concurrent edit only if its HLC is greater".
+**Delete (D5).** The field `deleted_at` has its own rule. Order its values by (deleted, HLC): any non-null value wins over null, and between two non-null values the larger HLC wins. Thus:
+- a delete wins over each edit, also an edit with a larger HLC;
+- the other fields still merge by LWW, so the tombstone rows are the same on all devices;
+- this order is a maximum over a total order, so the result does not depend on the order of delivery.
 
 ### 7.3 Apply (E3b)
 
@@ -249,7 +255,8 @@ A cursor is (`epoch`, `seq`). The `seq` of a restored journal can be smaller tha
   - after each sequence, exchange batches in a random order, with random `limit`, duplicates and batches sent again;
   - assert that all replicas have the same synced fields for all rows, live and tombstones;
   - assert that all replicas have the same set of (`tbl`, `uid`, `field`, `hlc`) in the journal.
-- **Delete and edit:** both orders of a delete and a concurrent edit, on two replicas; the larger HLC wins (7.2).
+- **Delete wins (D5):** a delete and an edit with a larger HLC, delivered in both orders, on two replicas. The row stays deleted on both. A local write that sets `deleted_at` back to null fails with the trigger message.
+- **ICS import of a deleted event:** the event stays deleted, and the import reports it.
 - **Idempotence:** apply the same batch two times; the second apply changes nothing.
 - **Refused batches:** an unknown field, a bad HLC, a wrong type, an HLC 61 minutes ahead, an incomplete new row. Nothing changes.
 - **Linked reminders:** never in a batch.
@@ -270,16 +277,17 @@ A cursor is (`epoch`, `seq`). The `seq` of a restored journal can be smaller tha
 
 | PR | Content | Done when |
 |---|---|---|
-| **E3a** | `Hlc`, `HlcClock`, `SyncSchema`, `ChangeJournal.record` and `claim`, `13.sqm` with the table and the guard triggers, all write paths of 6.3, the purge of 6.5, the glossary terms, the revised ADR 0008 and a new ADR 0018 (this design) | The tests of E3a pass. The built app starts on the real database: it migrates 13 → 14, `claim` fills the journal, and `integrity_check` is ok. |
+| **E3a** | `Hlc`, `HlcClock`, `SyncSchema`, `ChangeJournal.record` and `claim`, `13.sqm` with the table and the guard triggers, all write paths of 6.3 (with the `upsertEvent` change and a revised ADR 0014), the purge of 6.5, the glossary terms, the revised ADR 0008 and a new ADR 0018 (this design) | The tests of E3a pass. The built app starts on the real database: it migrates 13 → 14, `claim` fills the journal, and `integrity_check` is ok. |
 | **E3b** | `changesSince`, `apply`, the epoch (8), the convergence test | The tests of E3b pass, including the convergence gate. |
 
 Each PR obeys the Definition of Done in `CLAUDE.md`. Each PR adds its facts to the "Verified facts" table.
 
-## 12. Questions for the maintainer
+## 12. Decisions of the maintainer (2026-10-05)
 
-Answer these before you approve this spec:
-1. **Edit after delete brings the item back** (7.2). This is the rule of the plan. The alternative is "a delete always wins". Keep the plan's rule?
-2. **Calendar reminders stay local** (D3). Each device makes its own from the synced events. Agree?
-3. **No `:sync` module in E3** (D1). ADR 0008 changes: `:sync` comes with `:hub` in F5. Agree?
-4. **Clock drift limit of 60 minutes** (4.2). A peer with a clock more than 60 minutes ahead cannot sync until its clock is right. Agree?
-5. **One skipped day can be lost** when two devices skip days at the same time (7.5). Accept this for now?
+| # | Question | Answer |
+|---|---|---|
+| 1 | Edit after delete: does the item come back? | **No. A delete always wins** (D5, sections 6.2, 6.3, 7.2). |
+| 2 | Calendar reminders stay local (D3)? | Yes. |
+| 3 | No `:sync` module in E3; `:sync` comes with `:hub` in F5 (D1)? | Yes. Revise ADR 0008 in E3a. |
+| 4 | Clock drift limit of 60 minutes (4.2)? | Yes. |
+| 5 | Accept that a skipped day can be lost (7.5)? | Yes. |

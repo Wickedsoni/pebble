@@ -9,7 +9,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ### Start here (end of 5 Oct 2026, after WP C4)
 - **State:** A1 … E4 and C4 are on `main` (C4 merged as PR #39, `014fa7e`), and the global SQLITE_BUSY fix (PR #43, `f782d6b`, ADR 0017; it replaces the opt-in fix of PR #41). There are no open PRs.
-- **Next WP: E3** (ChangeJournal + HLC). The spec is `docs/specs/E3-CHANGE-JOURNAL.md` (**Draft**, PR on `wp/e3-spec`). Do not start E3 until its status says "Approved". It has 5 questions for you (section 12). Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
+- **Next WP: E3a** (HLC, change journal, guard triggers, write paths, migration `13.sqm`), then **E3b** (merge, epoch, convergence test). The spec `docs/specs/E3-CHANGE-JOURNAL.md` is **Approved** (5 Oct). Your answers: **a delete always wins** (a deleted item never comes back; ICS re-import skips deleted events), calendar reminders stay local, no `:sync` module until F5, 60-minute drift limit, a lost skipped day is accepted. Master plan: `C:\Users\Avik\.claude\plans\lets-improve-the-current-fuzzy-puffin.md`.
   - The next migration file is `13.sqm` (current schema version 13).
 - **How each WP lands:**
   1. Branch `wp/<id>-<slug>` from `main`, then the tests.
@@ -146,7 +146,7 @@ Lessons from the merge (for the next stack):
 
 ### Next session
 1. Say "continue from NEXT_SESSION.md" on `main`.
-2. **E3** is next in the delivery order. Its spec (`docs/specs/E3-CHANGE-JOURNAL.md`) waits for your answers and approval. Release 0.3.0 waits for your yes: publish the chat pack and a speech pack with it.
+2. **E3a, then E3b** are next (spec approved: `docs/specs/E3-CHANGE-JOURNAL.md`). Release 0.3.0 waits for your yes: publish the chat pack and a speech pack with it.
 3. B7 roll-outs, one page per PR (Today, Notes, Water, Chat, rest of Memory, Companion), using `docs/UI-PATTERN.md`.
 
 ### Lessons from this session (for the implementer)
@@ -237,7 +237,7 @@ Lessons from the merge (for the next stack):
 - **Coverage baseline (2026-10-04, local, with models):** 45.4% of lines, 32.2% of branches, both modules merged.
 - **Kotlin compiler warnings:** 0. The build script has 1 Gradle deprecation warning (`compose.material3` in `desktopApp/build.gradle.kts`).
 - **Model fix (from A3):** the command model `intent-v2-pruned` saturated on x86 CPUs without VNNI. `intent-v2r-pruned` uses `reduce_range=True`. Router eval 68/68 right or right-first-choice (was 67/68), 0 acted wrongly, mood 86.7%, 4.3 ms. It ships in the models release `models-2026.10b`.
-- **Next:** E3 (needs an Opus spec); B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
+- **Next:** E3a, E3b (spec approved); B7 page roll-outs one per PR (`docs/UI-PATTERN.md`); C6 distillation for Hindi/Hinglish chat.
 - **Search quality decision (open):** memory search uses the command model's embedding + shared words: 14/16 on `memory_search_v1`; the two misses are English words for Hindi notes. The original e5-small scored 16/16 but is a second ~100 MB model. Options: keep as is; ship e5-small as a search model; or a contrastive fine-tune in C6.
 
 ### User-only tasks (do not automate)
