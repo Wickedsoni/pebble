@@ -58,6 +58,7 @@ import dev.pebble.desktop.ui.FrostedPanel
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.glassColors
 import dev.pebble.desktop.voice.VoiceInput
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -145,8 +146,15 @@ fun QuickAddWindow(
                 val v = via()
                 thinking = true
                 scope.launch {
-                    val reply = app.smartReply(r.command)
-                    thinking = false
+                    val reply = try {
+                        app.smartReply(r.command)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null // the canned line answers
+                    } finally {
+                        thinking = false
+                    }
                     answered(app.converse(said, v, r, reply) { t, a -> onRetry(QuickAddRetry(t, a)) })
                 }
                 return
@@ -163,8 +171,15 @@ fun QuickAddWindow(
                 val v = via()
                 thinking = true
                 scope.launch {
-                    val reply = app.smartReply(option.command)
-                    thinking = false
+                    val reply = try {
+                        app.smartReply(option.command)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null // the canned line answers
+                    } finally {
+                        thinking = false
+                    }
                     answered(app.converseChoice(said, v, option, ask?.understood, reply))
                 }
                 return

@@ -534,6 +534,7 @@ class PebbleApp(
             )
         },
         scope = appScope + env.dispatchers.io,
+        dispatcher = env.dispatchers.io,
         log = log,
         logFile = DatabaseFactory.defaultDataDir().toPath().resolve("chat-server.log"),
     )
@@ -552,7 +553,7 @@ class PebbleApp(
             dev.pebble.core.brain.ReplyContext(
                 userText = c.text,
                 mood = c.mood,
-                recentTurns = conversation.recent(3).map { it.said to it.reply },
+                recentTurns = runCatching { conversation.recent(3).map { it.said to it.reply } }.getOrDefault(emptyList()),
                 memories = runCatching {
                     memorySearch.search(c.text, limit = 3).filter { it.kind != dev.pebble.core.search.MemorySearch.SAID }.map { it.text }
                 }.getOrDefault(emptyList()),

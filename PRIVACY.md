@@ -46,6 +46,7 @@ Pebble makes no connections to the internet. The models ship inside the installe
 
 **One local connection, off by default: Smart replies.** If you install the chat pack and turn on "Smart replies" (Memory → Privacy), Pebble starts the chat model as a helper program (`llama-server` from llama.cpp) and sends it your small-talk line, the last 3 exchanges and up to 3 matching notes or facts. The helper:
 - listens only on this computer (127.0.0.1), on a random port, and needs a random key that changes at each start;
+- gets the key only after Pebble has checked that the helper itself listens on the port. If another program has taken the port, Pebble sends no key and no text, and starts the helper again on a new port;
 - runs with `--offline` (it downloads nothing) and `--no-webui` (no web page);
 - keeps nothing: it stops after 10 idle minutes and when Pebble exits. Its log (`%APPDATA%\Pebble\chat-server.log`) holds timings, not your text.
 
