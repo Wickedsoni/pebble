@@ -142,6 +142,7 @@ class ReminderEnginePruneTest {
 
     @Test
     fun upcomingFindsTheWindowStartAfterTheClocksGoBack() {
+        // A guard: the repeated hour must not move an 08:00 start (the corrected guess is right at once).
         val london = ZoneId.of("Europe/London") // 25 Oct 2026 02:00 BST: the clocks go back to 01:00
         now = ZonedDateTime.of(2026, 10, 24, 22, 50, 0, 0, london).toInstant().toEpochMilli()
         val e = engine(minuteOfDay = { Instant.ofEpochMilli(it).atZone(london).let { t -> t.hour * 60 + t.minute } })

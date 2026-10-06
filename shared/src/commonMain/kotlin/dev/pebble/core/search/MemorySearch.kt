@@ -87,7 +87,9 @@ class MemorySearch(
         var result = scan(version, qv, queryWords, asked, limit, keepNow)
         while (result.hits.size < limit && result.stale && result.cut && keepNow < MAX_RESCAN_KEEP) {
             keepNow = (keepNow * 4).coerceAtMost(MAX_RESCAN_KEEP)
-            result = scan(version, qv, queryWords, asked, limit, keepNow)
+            val next = scan(version, qv, queryWords, asked, limit, keepNow)
+            if (next.hits.size <= result.hits.size) break // a larger cut found nothing new: few hits is the real answer
+            result = next
         }
         return result.hits
     }
@@ -95,7 +97,7 @@ class MemorySearch(
     private class Scan(val hits: List<Result>, val stale: Boolean, val cut: Boolean)
 
     private fun scan(version: String, qv: Embedding, queryWords: Set<String>, asked: String, limit: Int, keep: Int): Scan {
-        val top = ArrayList<Candidate>(keep + 1) // best first
+        val top = ArrayList<Candidate>(minOf(keep, MAX_RESCAN_KEEP) + 1) // best first
         var cut = false
         // The mapper does the work row by row, so only the few best candidates stay in memory, not every vector.
         q.vectorsForSearch(version) { kind, refId, text, vec ->

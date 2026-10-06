@@ -208,7 +208,9 @@ class ReminderEngine(
         val corrected = guess + drift * MINUTE
         if (corrected >= from && minuteOfDay(corrected) == rule.activeFromMinute) return corrected
         val start = maxOf(corrected, from - from.mod(MINUTE))
-        return (0 until MAX_GAP_MINUTES).asSequence().map { start + it * MINUTE }.firstOrNull { inWindow(rule, it) } ?: guess
+        // A window that lies wholly in the gap does not open that day: show the start of the next day.
+        return (0 until MAX_GAP_MINUTES).asSequence().map { start + it * MINUTE }.firstOrNull { inWindow(rule, it) }
+            ?: (guess + MINUTE * MINUTES_PER_DAY)
     }
 
     private fun inWindow(rule: ReminderRule, now: Long): Boolean {
