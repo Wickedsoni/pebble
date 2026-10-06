@@ -21,14 +21,22 @@ private val isWindows = System.getProperty("os.name").startsWith("Windows")
  * System-wide hotkey via Win32 `RegisterHotKey`. Runs its own message loop thread and calls
  * [onPress] on the Swing thread. Pressing it also lets us take keyboard focus legitimately.
  */
-class GlobalHotkey(private val modifiers: Int, private val virtualKey: Int, private val onPress: () -> Unit) {
+class GlobalHotkey(
+    private val modifiers: Int,
+    private val virtualKey: Int,
+    private val onRegistered: (Boolean) -> Unit = {},
+    private val onPress: () -> Unit,
+) {
     @Volatile var registered = false
         private set
 
+    /** Starts the thread. [onRegistered] gets the result of `RegisterHotKey` (false: another app owns the keys). */
     fun start() {
         if (!isWindows) return
         thread(isDaemon = true, name = "pebble-hotkey") {
-            registered = User32.INSTANCE.RegisterHotKey(null, HOTKEY_ID, modifiers or MOD_NOREPEAT, virtualKey)
+            registered = runCatching { User32.INSTANCE.RegisterHotKey(null, HOTKEY_ID, modifiers or MOD_NOREPEAT, virtualKey) }
+                .getOrDefault(false)
+            runCatching { onRegistered(registered) }
             if (!registered) return@thread
             val msg = WinUser.MSG()
             while (User32.INSTANCE.GetMessage(msg, null, 0, 0) > 0) {

@@ -32,13 +32,20 @@ import dev.pebble.desktop.quickadd.QuickAddWindow
 import dev.pebble.desktop.ui.rememberSystemDarkTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.swing.SwingUtilities
 import kotlin.system.exitProcess
 
 private const val PET = "pet"
 
 /** `--background` (used by "Start with Windows") starts with just the pet; a normal launch opens the app. */
 fun main(args: Array<String>) {
-    if (!SingleInstance.acquire(DatabaseFactory.defaultDataDir())) exitProcess(0)
+    val dataDir = DatabaseFactory.defaultDataDir()
+    if (!SingleInstance.acquire(dataDir)) {
+        // Pebble runs already, maybe hidden (Start with Windows). A normal launch asks it to open its window.
+        if ("--background" !in args) SingleInstance.signalFirst(dataDir)
+        exitProcess(0)
+    }
     val app = try {
         PebbleApp.create()
     } catch (e: RestoreNotFinishedException) {
@@ -66,6 +73,7 @@ fun main(args: Array<String>) {
         var quickAddRetry by remember { mutableStateOf<dev.pebble.desktop.quickadd.QuickAddRetry?>(null) }
         var appOpen by remember { mutableStateOf(!startInBackground) }
         var page by remember { mutableStateOf(Page.TODAY) }
+        var quitting by remember { mutableStateOf(false) }
 
         val pet = remember {
             PetController(app, openQuickAdd = { quickAddOpen = true }, openApp = { appOpen = true; page = Page.TODAY })
@@ -106,9 +114,22 @@ fun main(args: Array<String>) {
                     override fun openPage(page: String) = showPage(page)
                 },
             )
+            // A second launch (Start menu, shortcut) sets a Win32 event; then this window opens. After bindUi, so
+            // the signal is not lost. The waiter runs on its own thread: move to the Swing thread to open the page.
+            SingleInstance.listen { SwingUtilities.invokeLater { app.ui.openPage("today") } }
+                ?.let { waiter -> Runtime.getRuntime().addShutdownHook(Thread({ waiter.stop() }, "pebble-show-signal-stop")) }
         }
         LaunchedEffect(Unit) {
-            GlobalHotkey(GlobalHotkey.MOD_CONTROL or GlobalHotkey.MOD_ALT, GlobalHotkey.VK_SPACE) {
+            GlobalHotkey(
+                GlobalHotkey.MOD_CONTROL or GlobalHotkey.MOD_ALT,
+                GlobalHotkey.VK_SPACE,
+                onRegistered = { ok ->
+                    if (!ok) {
+                        app.log.warn("hotkey", "Ctrl+Alt+Space is already used by another app; Quick Add works from the tray only")
+                        SwingUtilities.invokeLater { app.ui.notify("Pebble", "Ctrl+Alt+Space is used by another app") }
+                    }
+                },
+            ) {
                 // Tap: type. Hold (> 300 ms): talk until the keys are released.
                 quickAddOpen = true
                 talkScope.launch {
@@ -152,17 +173,21 @@ fun main(args: Array<String>) {
                 )
                 Separator()
                 Item("Quit Pebble", onClick = {
-                    app.shutdown()
-                    exitApplication()
+                    // Hide every window first, then save (up to 2 s) off the UI thread: the UI never looks frozen.
+                    quitting = true
+                    talkScope.launch {
+                        withContext(app.env.dispatchers.io) { app.shutdown() }
+                        exitApplication()
+                    }
                 })
             },
         )
 
-        if (petVisible) PetWindows(pet, dark)
+        if (petVisible && !quitting) PetWindows(pet, dark)
 
         PebbleWindow(
             app, pet,
-            visible = appOpen,
+            visible = appOpen && !quitting,
             page = page,
             onPage = { page = it },
             dark = dark,
@@ -175,7 +200,7 @@ fun main(args: Array<String>) {
 
         QuickAddWindow(
             app,
-            quickAddOpen,
+            quickAddOpen && !quitting,
             dark,
             quickAddRetry,
             onRetry = {

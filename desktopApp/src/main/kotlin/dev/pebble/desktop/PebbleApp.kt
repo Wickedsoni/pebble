@@ -724,8 +724,27 @@ class PebbleApp(
         presenterJob = appScope.launch { presenter.run() }
     }
 
-    /** On exit: saves the events still queued (at most 2 s), then stops every coroutine. */
+    private val stopping = AtomicBoolean(false)
+    private val stopped = java.util.concurrent.CountDownLatch(1)
+
+    /**
+     * On exit: saves the events still queued (at most 2 s), then stops every coroutine. Safe to call more than
+     * once and from any thread (the tray "Quit" and the JVM shutdown hook both call it): the first call does the
+     * work, a later call waits for it (at most 3 s) and returns.
+     */
     fun shutdown() {
+        if (!stopping.compareAndSet(false, true)) {
+            stopped.await(3, java.util.concurrent.TimeUnit.SECONDS)
+            return
+        }
+        try {
+            stopNow()
+        } finally {
+            stopped.countDown()
+        }
+    }
+
+    private fun stopNow() {
         runCatching { chat.close() }
         bus.publish(PebbleEvent.AppStopping(now()))
         val saved = runBlocking { eventLog.close(2.seconds) }
@@ -742,7 +761,18 @@ class PebbleApp(
         /** Scripts the shipped chat model writes well enough (brain/eval/chat_v1.jsonl, ADR 0012); others get canned lines. */
         val CHAT_SCRIPTS = setOf(dev.pebble.core.brain.Script.EN)
 
+        /**
+         * Makes the app and registers a JVM shutdown hook that calls [shutdown]. Windows sign-out, shutdown and a
+         * killed console end the JVM without the tray "Quit"; without the hook `AppStopping` and queued events are
+         * lost and `llama-server` stays running. The hook does not touch Compose.
+         */
         fun create(): PebbleApp {
+            val app = createApp()
+            Runtime.getRuntime().addShutdownHook(Thread({ app.shutdown() }, "pebble-shutdown"))
+            return app
+        }
+
+        private fun createApp(): PebbleApp {
             val env = AppEnv.system()
             val dir = DatabaseFactory.defaultDataDir()
             val log = FileLogger(dir.toPath().resolve("pebble.log"), env::millis, env.zone)
