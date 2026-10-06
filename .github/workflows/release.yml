@@ -1,11 +1,11 @@
 name: Release
 
-# Push a tag like v0.1.0 on main: builds the Windows installers with the models named in
+# Push a tag like v0.1.0 (digits only: the MSI version has no suffix) on main: builds the Windows installers with the models named in
 # brain/models/manifest.json (downloaded from GitHub Releases, SHA-256 verified) and publishes them:
 # Pebble-x.y.z.msi (all models) and Pebble-lite-x.y.z.msi (no speech models; voice as a signed pack).
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
   contents: write
@@ -13,6 +13,7 @@ permissions:
 jobs:
   installer:
     runs-on: windows-latest
+    timeout-minutes: 90
     defaults:
       run:
         shell: bash
@@ -25,11 +26,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Fetch models (checksums verified)
         run: python brain/src/pebble_brain/download_models.py
+      - name: Version from the tag
+        # The tag is the only source of the version: v0.2.0 gives Pebble-0.2.0.msi and jpackage.app-version 0.2.0.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag '$GITHUB_REF_NAME' is not vX.Y.Z"; exit 1; }
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Format check and tests
+        # A release runs the same gate as a pull request (the model tests run: the models are downloaded above).
+        run: ./gradlew spotlessCheck :shared:jvmTest :desktopApp:test --console=plain
       - name: Build installers (full, then lite without the speech models)
         run: |
-          ./gradlew :desktopApp:packageMsi --console=plain
+          ./gradlew :desktopApp:packageMsi "-PappVersion=$APP_VERSION" --console=plain
+          [ -f "desktopApp/build/compose/binaries/main/msi/Pebble-$APP_VERSION.msi" ] || { echo "MSI version does not match the tag"; ls desktopApp/build/compose/binaries/main/msi; exit 1; }
           mkdir -p dist && mv desktopApp/build/compose/binaries/main/msi/*.msi dist/
-          ./gradlew :desktopApp:packageMsi -Pflavor=lite --console=plain
+          ./gradlew :desktopApp:packageMsi -Pflavor=lite "-PappVersion=$APP_VERSION" --console=plain
           for f in desktopApp/build/compose/binaries/main/msi/*.msi; do mv "$f" "dist/$(basename "$f" | sed 's/^Pebble-/Pebble-lite-/')"; done
           ls -l dist
       - name: Checksums

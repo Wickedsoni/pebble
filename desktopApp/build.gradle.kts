@@ -7,6 +7,10 @@ plugins {
     alias(libs.plugins.kover)
 }
 
+// The release workflow passes the version from the tag: -PappVersion=1.2.3 (the MSI needs digits and dots only).
+val appVersion: String = providers.gradleProperty("appVersion").getOrElse("0.1.2")
+require(Regex("""\d+\.\d+\.\d+""").matches(appVersion)) { "appVersion must look like 1.2.3, got '$appVersion'" }
+
 kotlin {
     jvmToolchain(21)
     // The build has zero warnings; keep it that way.
@@ -155,7 +159,7 @@ compose.desktop {
             appResourcesRootDir.set(layout.buildDirectory.dir("model-resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Pebble"
-            packageVersion = "0.1.2"
+            packageVersion = appVersion
             description = "Desktop pet and glass widgets"
             // jdk.crypto.ec: Ed25519 for signed model packs on JDK 21 (in java.base only from JDK 22).
             // java.net.http: the HttpClient that talks to the local chat server on 127.0.0.1 (WP C5).

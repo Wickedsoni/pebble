@@ -46,8 +46,8 @@ CI runs everything below on every PR. Run it locally first:
 ./gradlew spotlessApply                   # format Kotlin (ktlint, rules in .editorconfig)
 ./gradlew spotlessCheck :shared:jvmTest :desktopApp:test
 cd brain
-uvx ruff format . ; uvx ruff check .      # Python format + lint (config in brain/pyproject.toml)
-uv run python -m unittest tests/test_feedback.py
+uvx ruff@0.16.10 format . ; uvx ruff@0.16.10 check .      # Python format + lint (config in brain/pyproject.toml)
+uv run python -m unittest discover -s tests
 ```
 
 - **Tests:** new behaviour comes with a test next to the existing ones (`shared/src/jvmTest`, `desktopApp/src/test`, `brain/tests`). Bug fixes come with a test that failed before the fix.

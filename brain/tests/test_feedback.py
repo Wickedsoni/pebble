@@ -63,6 +63,17 @@ class FeedbackTest(unittest.TestCase):
         self.assertEqual(report["by_outcome"], {"picked": 1})
         self.assertEqual(len(examples), 3)
 
+    def test_path_with_special_characters(self):
+        # A Windows-style path with a space and "#" broke the old hand-built "file:" URI.
+        db = self.make_db([("pebble tu toh kamaal hai", "chitchat", "general_quirky", 0.4, 1, "picked")])
+        odd = db.parent / "my data #1"
+        odd.mkdir()
+        moved = odd / "pebble.db"
+        db.replace(moved)
+        examples, report = from_db(moved)
+        self.assertEqual(report["rows"], 1)
+        self.assertEqual(len(examples), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

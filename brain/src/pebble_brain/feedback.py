@@ -15,6 +15,7 @@ The database is opened read-only; nothing leaves the laptop.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import pathlib
 import sqlite3
@@ -45,18 +46,18 @@ def default_db() -> pathlib.Path:
 
 
 def load_rows(db: pathlib.Path) -> list[dict]:
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    con.row_factory = sqlite3.Row
-    cols = {r[1] for r in con.execute("PRAGMA table_info(command_feedback)")}
-    outcome = "outcome" if "outcome" in cols else "'picked' AS outcome"  # databases from before the migration
-    rows = [
-        dict(r)
-        for r in con.execute(
-            f"SELECT text, chosen_action, model_intent, model_confidence, at_millis, {outcome} FROM command_feedback ORDER BY at_millis"
-        )
-    ]
-    con.close()
-    return rows
+    # as_uri() escapes a Windows path (backslashes, drive letter, spaces, "#", "?") the way a file: URI needs.
+    uri = pathlib.Path(db).resolve().as_uri() + "?mode=ro"
+    with contextlib.closing(sqlite3.connect(uri, uri=True)) as con:
+        con.row_factory = sqlite3.Row
+        cols = {r[1] for r in con.execute("PRAGMA table_info(command_feedback)")}
+        outcome = "outcome" if "outcome" in cols else "'picked' AS outcome"  # databases from before the migration
+        return [
+            dict(r)
+            for r in con.execute(
+                f"SELECT text, chosen_action, model_intent, model_confidence, at_millis, {outcome} FROM command_feedback ORDER BY at_millis"
+            )
+        ]
 
 
 def to_examples(rows: list[dict], held_out: list[set[str]] | None = None, leak_threshold: float = 0.6):

@@ -11,6 +11,7 @@ Rules:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import random
@@ -710,6 +711,27 @@ def eval_texts() -> list[set[str]]:
     return out
 
 
+def split_of(key: str) -> str:
+    """ "dev" for about 10% of the sentences, chosen by a stable hash of the sentence itself.
+
+    The choice does not use the random stream, so a new template or filler never moves an old sentence
+    between train and dev (the dev set the calibration and the gates read stays comparable).
+    """
+    return "dev" if int(hashlib.md5(key.encode("utf-8")).hexdigest(), 16) % 10 == 0 else "train"
+
+
+def _accept(tokens: list[str], seen: set[str], held_out: list[set[str]], leak_threshold: float) -> tuple[str, str]:
+    """De-duplicate, then leak-check one sentence. Returns (key, "ok" | "duplicate" | "leak")."""
+    key = " ".join(tokens).lower()
+    if key in seen:
+        return key, "duplicate"
+    seen.add(key)
+    w = _words(key)
+    if any(len(w & e) / len(w | e) >= leak_threshold for e in held_out):
+        return key, "leak"
+    return key, "ok"
+
+
 def generate(per_template: int = 30, seed: int = 0, leak_threshold: float = 0.6) -> list[Example]:
     """Template sentences, de-duplicated, with anything close to an eval sentence removed."""
     rng = random.Random(seed)
@@ -724,16 +746,10 @@ def generate(per_template: int = 30, seed: int = 0, leak_threshold: float = 0.6)
                 tokens, tags = parse_annotated(_fill(template, fillers, rng))
                 if script == "hi_roman":
                     tokens = chatify(tokens, rng)
-                key = " ".join(tokens).lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                w = _words(key)
-                if any(len(w & e) / len(w | e) >= leak_threshold for e in held_out):
-                    dropped += 1
-                    continue
-                part = "dev" if rng.random() < 0.1 else "train"
-                out.append(Example(tokens, tags, intent, script, part, small_talk_mood(intent, tokens)))
+                key, status = _accept(tokens, seen, held_out, leak_threshold)
+                dropped += status == "leak"
+                if status == "ok":
+                    out.append(Example(tokens, tags, intent, script, split_of(key), small_talk_mood(intent, tokens)))
     # Mood sentences: small talk to the command model, labelled for the mood head.
     for script, templates in ((k, T_MOOD[k] + T_MOOD_EXTRA[k]) for k in T_MOOD):
         fill = MOOD_FILL[script]
@@ -743,16 +759,10 @@ def generate(per_template: int = 30, seed: int = 0, leak_threshold: float = 0.6)
                 tokens = text.split()
                 if script == "hi_roman":
                     tokens = chatify(tokens, rng)
-                key = " ".join(tokens).lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                w = _words(key)
-                if any(len(w & e) / len(w | e) >= leak_threshold for e in held_out):
-                    dropped += 1
-                    continue
-                part = "dev" if rng.random() < 0.1 else "train"
-                out.append(Example(tokens, ["O"] * len(tokens), "general_quirky", script, part, mood))
+                key, status = _accept(tokens, seen, held_out, leak_threshold)
+                dropped += status == "leak"
+                if status == "ok":
+                    out.append(Example(tokens, ["O"] * len(tokens), "general_quirky", script, split_of(key), mood))
     print(f"pebble data: {len(out)} sentences ({dropped} dropped as too close to the eval sets)")
     return out
 
