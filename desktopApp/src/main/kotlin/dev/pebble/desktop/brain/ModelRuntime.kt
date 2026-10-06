@@ -42,7 +42,9 @@ class ModelRuntime(scope: CoroutineScope, dataDir: Path, idleMillis: Long = 10 *
          */
         @Synchronized
         fun loadSherpa() {
+            NativeLibs.configureOrt()
             OrtEnvironment.getEnvironment()
+            NativeLibs.configureSherpa()
             LibraryUtils.load()
         }
     }

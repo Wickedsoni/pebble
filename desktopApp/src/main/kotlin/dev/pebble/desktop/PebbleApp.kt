@@ -21,6 +21,7 @@ import dev.pebble.core.wellness.GLASS_ML
 import dev.pebble.core.wellness.NoteRepository
 import dev.pebble.core.wellness.WaterRepository
 import dev.pebble.db.PebbleDatabase
+import dev.pebble.desktop.brain.NativeLibs
 import dev.pebble.desktop.command.CommandActions
 import dev.pebble.desktop.command.CommandExecutor
 import dev.pebble.desktop.core.AppEnv
@@ -745,6 +746,11 @@ class PebbleApp(
             val env = AppEnv.system()
             val dir = DatabaseFactory.defaultDataDir()
             val log = FileLogger(dir.toPath().resolve("pebble.log"), env::millis, env.zone)
+            // Old runs left DLL copies in %TEMP% (QA R4-2); remove them off the start-up path.
+            Thread { runCatching { NativeLibs.cleanStaleTempFolders(log = log) } }.apply {
+                name = "native-temp-cleanup"
+                isDaemon = true
+            }.start()
             // A restore staged on the About page replaces the database before it is opened (WP E4).
             runCatching { Backup.applyStaged(dir) }
                 .onSuccess { it?.let { line -> log.info(TAG, line) } }
