@@ -95,7 +95,6 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     private var transientUntil = 0L
     private var menuOpen = false
     private var reminderBubble: String? = null
-    private val toasted = mutableSetOf<String>()
 
     // ------------------------------------------------------------------ memory-driven moments
 
@@ -176,13 +175,11 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
     /** Progress towards the next stage (tasks + counts) for the Companion page. */
     fun growth(): dev.pebble.core.growth.Growth = app.growth.growth()
 
-    private fun earnedStage(): Stage = runCatching { Stage.valueOf(app.growth.growth().earned.name) }.getOrDefault(Stage.BABY)
+    /** The earned stage. It reads the whole history, so the app-level [ReminderPresenter] calls it off the main thread. */
+    fun earnedStage(): Stage = runCatching { Stage.valueOf(app.growth.growth().earned.name) }.getOrDefault(Stage.BABY)
 
-    private var lastGrowthCheck = 0f
-
-    /** Every few minutes: did the pet just grow? Then it celebrates and shows its new stage. */
-    private fun checkGrowth() {
-        val now = earnedStage()
+    /** The presenter read the earned stage (every few minutes, main thread): did the pet just grow? Then it celebrates. */
+    fun onEarned(now: Stage) {
         if (now <= earned) return
         earned = now
         chooseStage(now)
@@ -284,10 +281,6 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         val maxX = (wa.x + wa.width) - sizeW
         if (x.isNaN()) { x = maxX - 180f; y = groundY }
 
-        if (time - lastGrowthCheck > 180f) {
-            lastGrowthCheck = time
-            checkGrowth()
-        }
         if (time - lastSystemPoll > 2f) {
             lastSystemPoll = time
             area = UserActivity.workArea()
@@ -300,9 +293,8 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
             power = Power.state()
         }
         if (hidden || watching) {
-            // Don't pop up over a movie or a fullscreen app: due reminders wait (no reaction counted) and
-            // come back once you're done.
-            app.engine.active.value.forEach { app.engine.defer(it.key, minutes = 5) }
+            // Don't pop up over a movie or a fullscreen app: the bubble goes away. The ReminderPresenter makes the
+            // due reminders wait (no reaction counted); they come back once you're done.
             if (reminderBubble != null && speech?.text == reminderBubble) speech = null
             reminderBubble = null
             if (hidden) return
@@ -314,8 +306,8 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
         val reminder = currentReminder()
         val escalation = reminder?.let { EscalationPolicy.stage(it.strictness, nowMs - it.dueAt) }
-        if (reminder != null) {
-            showReminder(reminder, escalation!!)
+        if (reminder != null && escalation != null) {
+            showReminder(reminder, escalation)
         } else if (reminderBubble != null) {
             // The reminder was handled elsewhere (water widget, quick add, another device): drop its bubble.
             if (speech?.text == reminderBubble) speech = null
@@ -364,9 +356,10 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         x = x.coerceIn(minX, maxX)
         squash = if (squash > 0.01f) squash * exp(-dt * 8f) else 0f
 
+        val face = transient
         pose = when {
-            transient != null -> transient!!.mood.defaultPose()
-            reminder != null -> reminderPose(reminder.kind, escalation!!)
+            face != null -> face.mood.defaultPose()
+            reminder != null && escalation != null -> reminderPose(reminder.kind, escalation)
             behaviour == Behaviour.SLEEPING -> Mood.SLEEPY.defaultPose()
             behaviour == Behaviour.DRAGGING -> PetPose(Mood.WORRIED, Arms.UP)
             menuOpen -> PetPose(Mood.IDLE, Arms.WAVE)
@@ -394,11 +387,8 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
 
     private fun showReminder(r: ActiveReminder, escalation: Escalation) {
         menuOpen = false
-        // A gentle reminder you didn't answer in 3 minutes steps aside for half an hour instead of staying up.
-        if (r.strictness == Strictness.GENTLE && app.now() - r.dueAt > 3 * 60_000L) {
-            app.engine.defer(r.key, minutes = 30)
-            return
-        }
+        // A gentle reminder you didn't answer in 3 minutes steps aside (the ReminderPresenter defers it for half an hour).
+        if (r.strictness == Strictness.GENTLE && app.now() - r.dueAt > 3 * 60_000L) return
         val line = copyFor(r)
         val text = line.headline + if (escalation == Escalation.FOLLOW) "\nI'll stay with you until it's done." else ""
         val repeating = r.key.startsWith("rule:")
@@ -410,9 +400,6 @@ class PetController(private val app: PebbleApp, private val openQuickAdd: () -> 
         )
         if (speech?.text != text) speech = Speech(text, actions, detail = line.tip)
         reminderBubble = text
-        if (escalation == Escalation.TOAST && toasted.add(r.key + r.dueAt)) {
-            app.ui.notify("Pebble", r.title)
-        }
     }
 
     private fun act(r: ActiveReminder, action: ReminderAction) {

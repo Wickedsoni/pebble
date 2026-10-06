@@ -28,9 +28,12 @@ import dev.pebble.desktop.core.FileLogger
 import dev.pebble.desktop.core.Logger
 import dev.pebble.desktop.core.UiPort
 import dev.pebble.desktop.pet.Mood
+import dev.pebble.desktop.pet.ReminderPresenter
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -148,6 +151,13 @@ class PebbleApp(
 
     /** Every coroutine of the app runs in this scope (or a child of it), so [shutdown] stops them all. */
     private val appScope = CoroutineScope(SupervisorJob() + env.dispatchers.main)
+
+    /**
+     * One thread for slow database reads that must not block the UI: learning and the pet's growth check.
+     * One thread, so they never run at the same time.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val workDispatcher: CoroutineDispatcher = env.dispatchers.io.limitedParallelism(1)
 
     private val _petLines = MutableSharedFlow<PetLine>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val petLines: SharedFlow<PetLine> = _petLines
@@ -399,7 +409,7 @@ class PebbleApp(
                     val n = withContext(env.dispatchers.io) { agenda.scheduleReminders(now()) }
                     if (n > 0) engine.tick()
                 }.onFailure { log.warn(TAG, "calendar reminders failed", it) }
-                runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning failed", it) }
+                learn()
                 requestIndexing() // edited notes and cleared chats have no event of their own
                 delay(10 * 60_000L)
             }
@@ -435,7 +445,21 @@ class PebbleApp(
     fun logMood(score: Int) {
         memory.logMood(score, now())
         bus.publish(PebbleEvent.MoodLogged(score, now()))
-        brain.learn()
+        appScope.launch { learn() }
+    }
+
+    /**
+     * Lets the habit brain learn from what happened ([MemoryEngine.learn]: queries and a few small writes),
+     * on [workDispatcher], not the UI thread. A failure is logged, never thrown, so a click handler cannot crash the app.
+     */
+    suspend fun learn() {
+        try {
+            withContext(workDispatcher) { brain.learn() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn(TAG, "learning failed", e)
+        }
     }
 
     override fun remember(text: String) {
@@ -464,21 +488,24 @@ class PebbleApp(
         engine.active.value.firstOrNull { it.kind == ReminderKind.WATER }
             ?.let { engine.act(it.key, dev.pebble.core.reminders.ReminderAction.DONE) }
         if (before < goalMl && total >= goalMl) {
-            runCatching { brain.learn() }.onFailure { log.warn(TAG, "learning after the water goal failed", it) }
-            val streak = memory.byKey(MemoryEngine.KEY_WATER_STREAK)?.data
-            say(
-                PetLine(
-                    if (streak !=
-                        null
-                    ) {
-                        "Water goal done — $streak days in a row."
-                    } else {
-                        "Water goal done for today."
-                    },
-                    Mood.CELEBRATE,
-                    3_500,
-                ),
-            )
+            // The streak line needs what the brain just learned, so the line waits for it (off the UI thread).
+            appScope.launch {
+                learn()
+                val streak = memory.byKey(MemoryEngine.KEY_WATER_STREAK)?.data
+                say(
+                    PetLine(
+                        if (streak !=
+                            null
+                        ) {
+                            "Water goal done — $streak days in a row."
+                        } else {
+                            "Water goal done for today."
+                        },
+                        Mood.CELEBRATE,
+                        3_500,
+                    ),
+                )
+            }
         }
         return total / GLASS_ML
     }
@@ -685,6 +712,16 @@ class PebbleApp(
 
     /** One-line preview shown under the quick-add field before you press Enter. */
     fun describe(cmd: QuickCommand): String = executor.describe(cmd)
+
+    private var presenterJob: Job? = null
+
+    /**
+     * Runs [presenter] on the app scope (main thread), so [shutdown] stops it. A second call is ignored.
+     */
+    fun startPresenter(presenter: ReminderPresenter) {
+        if (presenterJob != null) return
+        presenterJob = appScope.launch { presenter.run() }
+    }
 
     /** On exit: saves the events still queued (at most 2 s), then stops every coroutine. */
     fun shutdown() {

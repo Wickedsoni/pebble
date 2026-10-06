@@ -22,10 +22,12 @@ import dev.pebble.desktop.app.Page
 import dev.pebble.desktop.app.PebbleWindow
 import dev.pebble.desktop.pet.PetController
 import dev.pebble.desktop.pet.PetWindows
+import dev.pebble.desktop.pet.ReminderPresenter
 import dev.pebble.desktop.platform.Autostart
 import dev.pebble.desktop.platform.GlobalHotkey
 import dev.pebble.desktop.platform.MediaWatcher
 import dev.pebble.desktop.platform.SingleInstance
+import dev.pebble.desktop.platform.UserActivity
 import dev.pebble.desktop.quickadd.QuickAddWindow
 import dev.pebble.desktop.ui.rememberSystemDarkTheme
 import kotlinx.coroutines.delay
@@ -69,6 +71,26 @@ fun main(args: Array<String>) {
             PetController(app, openQuickAdd = { quickAddOpen = true }, openApp = { appOpen = true; page = Page.TODAY })
         }
         LaunchedEffect(Unit) { app.petLines.collect { pet.react(it) } }
+        // Reminders reach you with or without the pet window (hidden: a toast; shown: the bubble). Main thread:
+        // the ReminderEngine is not thread-safe.
+        LaunchedEffect(Unit) {
+            app.startPresenter(
+                ReminderPresenter(
+                    engine = app.engine,
+                    ui = app.ui,
+                    env = app.env,
+                    petVisible = { petVisible },
+                    quiet = {
+                        val fg = UserActivity.foreground()
+                        UserActivity.isFullscreenBusy() || fg.coversScreen || fg.title?.let { MediaWatcher.match(it) } != null
+                    },
+                    readEarned = pet::earnedStage,
+                    onEarned = pet::onEarned,
+                    work = app.workDispatcher,
+                    log = app.log,
+                ),
+            )
+        }
         fun showPage(name: String) {
             page = Page.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Page.TODAY
             appOpen = true
