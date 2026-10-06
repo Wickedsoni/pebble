@@ -37,7 +37,7 @@ class SpeechRecognizer(
     idleMillis: Long = 10 * 60_000L,
     /** Skips re-hashing ~300 MB of speech models that passed before (null: hash every load). */
     private val cache: VerifiedModelCache? = null,
-) {
+) : VoiceInput.Transcriber {
     /** The loaded speech models, freed together. */
     private class AsrEngines(
         /** Dolphin CTC (Hindi and other Eastern languages); null in a Whisper-only package. */
@@ -68,13 +68,13 @@ class SpeechRecognizer(
     /** Status for logs and diagnostics ("ready (dolphin + whisper-base for English, 900 ms load)", …). */
     val status: String get() = loader.status.value.toString()
 
-    val modelDir: Path? get() = loader.dir
+    override val modelDir: Path? get() = loader.dir
 
     /** Start loading (the talk key just went down, so loading overlaps your speech). */
-    fun warmUp() = loader.warmUp()
+    override fun warmUp() = loader.warmUp()
 
     /** Waits for loading, then transcribes [samples] (16 kHz mono). Null: no model, or nothing was said. */
-    suspend fun transcribe(samples: FloatArray): Transcript? = loader.awaitUse { e ->
+    override suspend fun transcribe(samples: FloatArray): Transcript? = loader.awaitUse { e ->
         // The engines stay open until this block ends: an idle unload cannot free them under the decoder.
         val speech = trim(e.vad, AudioPrep.prepare(samples))
         if (speech.size < AudioPrep.SAMPLE_RATE / 4) return@awaitUse null // < 250 ms of speech: nothing to hear

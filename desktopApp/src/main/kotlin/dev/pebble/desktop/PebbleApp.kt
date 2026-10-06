@@ -3,6 +3,7 @@ package dev.pebble.desktop
 import dev.pebble.core.backup.Backup
 import dev.pebble.core.brain.CommandFeedbackRepository
 import dev.pebble.core.brain.CommandRouter
+import dev.pebble.core.brain.Understood
 import dev.pebble.core.db.DatabaseFactory
 import dev.pebble.core.event.EventBus
 import dev.pebble.core.event.EventLogger
@@ -27,8 +28,10 @@ import dev.pebble.desktop.core.FileLogger
 import dev.pebble.desktop.core.Logger
 import dev.pebble.desktop.core.UiPort
 import dev.pebble.desktop.pet.Mood
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -42,6 +45,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
 
 /** Something the pet should say out loud (in its speech bubble), with the face to make. */
@@ -521,6 +525,62 @@ class PebbleApp(
     }
 
     /**
+     * Like [converse] for small talk, but owned by the app, not by Quick Add: the optional chat-model reply
+     * ([reply], up to 6 s) and the turn are finished even when Quick Add closes meanwhile. The pet always says the
+     * answer ([petLines]); [onLine] lets a window that is still open show it too (it runs on the main thread).
+     */
+    fun converseAsync(
+        text: String,
+        via: String,
+        routed: CommandRouter.Routed.Run,
+        retry: (text: String, wrongAction: String) -> Unit,
+        reply: suspend (QuickCommand) -> String? = ::smartReply,
+        onLine: (PetLine?) -> Unit = {},
+    ): Job = appScope.launch {
+        guarded(onLine) {
+            converse(text, via, routed, safeReply(reply, routed.command), retry)
+        }
+    }
+
+    /** [converseChoice] with the same app-owned reply as [converseAsync]. */
+    fun converseChoiceAsync(
+        text: String,
+        via: String,
+        option: CommandRouter.Option,
+        understood: Understood?,
+        reply: suspend (QuickCommand) -> String? = ::smartReply,
+        onLine: (PetLine?) -> Unit = {},
+    ): Job = appScope.launch {
+        guarded(onLine) {
+            converseChoice(text, via, option, understood, safeReply(reply, option.command))
+        }
+    }
+
+    /**
+     * Runs [turn], lets the pet say its line and passes it to [onLine]. A failure is logged and [onLine] gets null,
+     * so a window that waits ("thinking") always resets; cancellation is rethrown.
+     */
+    internal suspend fun guarded(onLine: (PetLine?) -> Unit, turn: suspend () -> PetLine) {
+        val line = try {
+            turn().also { say(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn(TAG, "smart reply turn failed", e)
+            null
+        }
+        onLine(line)
+    }
+
+    private suspend fun safeReply(reply: suspend (QuickCommand) -> String?, cmd: QuickCommand): String? = try {
+        reply(cmd)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null // the canned line answers
+    }
+
+    /**
      * The local chat model (WP C5, ADR 0012): `llama-server` from a signed "chat" pack, or from `PEBBLE_CHAT_DIR`
      * (developers). It runs only while "Smart replies" is on and you chat; it listens only on 127.0.0.1.
      */
@@ -582,7 +642,7 @@ class PebbleApp(
         text: String,
         via: String,
         option: CommandRouter.Option,
-        understood: dev.pebble.core.brain.Understood?,
+        understood: Understood?,
         /** A reply from the chat model ([smartReply]) in place of the canned line. */
         reply: String? = null,
     ): PetLine {
@@ -608,7 +668,10 @@ class PebbleApp(
         val line = executed.line
         val action = run.action ?: return line
         val id = commandFeedback.record(text.trim(), action, run.understood, now(), CommandFeedbackRepository.CONFIRMED)
+        // The pet bubble and Quick Add both show this button: only the first click acts.
+        val clicked = AtomicBoolean(false)
         val notWhatIMeant = dev.pebble.desktop.pet.BubbleAction("Not what I meant") {
+            if (!clicked.compareAndSet(false, true)) return@BubbleAction
             executed.undo?.invoke()
             commandFeedback.markWrong(id)
             requestIndexing()
