@@ -541,8 +541,13 @@ class PebbleApp(
         logFile = DatabaseFactory.defaultDataDir().toPath().resolve("chat-server.log"),
     )
 
+    /** Whether a chat model is installed. Checked on the io thread at start (a pack change waits for a restart), so the UI never checks files. */
+    private val chatInstalled = dev.pebble.desktop.brain.BackgroundFlag { chat.available }.also {
+        appScope.launch(env.dispatchers.io) { it.refresh() }
+    }
+
     /** True when the chat model may answer small talk: the setting is on and a chat model is installed. */
-    fun smartRepliesOn(): Boolean = settings.bool(Keys.SMART_REPLIES, false) && chat.available
+    fun smartRepliesOn(): Boolean = settings.bool(Keys.SMART_REPLIES, false) && chatInstalled.value
 
     /**
      * A chat-model reply to small talk [cmd], or null for the canned line (off, not installed, a low mood, a

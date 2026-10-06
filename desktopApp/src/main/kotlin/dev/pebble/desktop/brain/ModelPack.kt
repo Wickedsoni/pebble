@@ -100,13 +100,7 @@ object ModelPack {
         unlistedFile(dir, r.manifest)?.let { return Result.Invalid("$it is in the folder but not in pack.json") }
         for (e in r.manifest.files) {
             val f = dir.resolve(e.path)
-            val ok = if (cache !=
-                null
-            ) {
-                cache.matches(f, e.sha256)
-            } else {
-                f.exists() && Files.size(f) == e.size && ModelChecksums.sha256(f) == e.sha256
-            }
+            val ok = cache?.matches(f, e.sha256) ?: (f.exists() && Files.size(f) == e.size && ModelChecksums.sha256(f) == e.sha256)
             if (!ok) return Result.Invalid("${e.path} does not match pack.json")
         }
         return r
@@ -115,14 +109,15 @@ object ModelPack {
     /**
      * The first regular file in [dir] that [manifest] does not list (not counting `pack.json` and `pack.sig`), or null.
      * An unlisted file is not covered by the signature, yet a program (the chat server loads DLLs from its own
-     * folder) can use it. Paths compare without case, as the file system does.
+     * folder) can use it. Paths compare without case, as the file system does. The two files that Windows Explorer
+     * adds by itself ([SHELL_FILES]) are ignored: they run nothing, and a pack must not stop because a user opened its folder.
      */
     private fun unlistedFile(dir: Path, manifest: Manifest): String? {
         val listed = manifest.files.mapTo(HashSet()) { it.path.lowercase() } + setOf(MANIFEST, SIGNATURE)
         return Files.walk(dir).use { s ->
             s.filter { Files.isRegularFile(it) }
                 .map { dir.relativize(it).toString().replace('\\', '/') }
-                .filter { it.lowercase() !in listed }
+                .filter { it.lowercase() !in listed && it.substringAfterLast('/').lowercase() !in SHELL_FILES }
                 .findFirst().orElse(null)
         }
     }
@@ -298,6 +293,9 @@ object ModelPack {
     ).generatePrivate(PKCS8EncodedKeySpec(Base64.getDecoder().decode(base64.trim())))
 
     // ---- Helpers ----
+
+    /** Files that Windows Explorer makes in a folder; [verifyInstalled] does not count them as unlisted. */
+    private val SHELL_FILES = setOf("desktop.ini", "thumbs.db")
 
     private const val STAGED = ".staged"
     private const val REMOVE = ".remove"

@@ -1,5 +1,6 @@
 package dev.pebble.desktop
 
+import dev.pebble.desktop.brain.BackgroundFlag
 import dev.pebble.desktop.brain.LazyModel
 import dev.pebble.desktop.brain.LocalChat
 import dev.pebble.desktop.brain.ModelChecksums
@@ -51,6 +52,7 @@ class ModelLoadingHardeningTest {
         verify: (Path) -> Boolean = { true },
         load: (Path) -> Fake = { Fake().also { made += it } },
         fingerprint: (Path) -> String = { "same" },
+        describe: (Fake) -> String = { "" },
     ) = LazyModel(
         name = "fake",
         scope = scope,
@@ -61,6 +63,7 @@ class ModelLoadingHardeningTest {
         clock = { testScheduler.currentTime },
         io = StandardTestDispatcher(testScheduler),
         fingerprint = fingerprint,
+        describe = describe,
         retryBackoffMillis = 5 * 60_000L,
     )
 
@@ -324,6 +327,68 @@ class ModelLoadingHardeningTest {
         assertEquals(listOf("kal", "subah", "7", "baje"), OnnxIntentModel.splitWords("  kal subah 7　baje\n"))
         assertEquals(emptyList(), OnnxIntentModel.splitWords("  　 "))
         assertEquals(listOf("x"), OnnxIntentModel.splitWords("x"))
+    }
+
+    // ---- Review round: chat availability, shell files, describe, fingerprint ----
+
+    @Test
+    fun theAvailabilityFlagDoesNoWorkWhereItIsRead() {
+        var computed = 0
+        val readThread = Thread.currentThread()
+        var computedOn: Thread? = null
+        val flag = BackgroundFlag { computed++; computedOn = Thread.currentThread(); true }
+        assertEquals(false, flag.value, "unknown until refreshed")
+        assertEquals(0, computed, "reading it does no file work")
+        val t = thread { flag.refresh() }
+        t.join()
+        assertEquals(1, computed)
+        assertTrue(computedOn !== readThread)
+        assertEquals(true, flag.value)
+        assertEquals(1, computed, "reading again still does nothing")
+    }
+
+    @Test
+    fun explorerFilesDoNotDisableAPackButOtherFilesDo() {
+        val h = PackHelper()
+        h.stage(h.pack())
+        ModelPack.applyStaged(h.models)
+        val dir = h.models.resolve("intent")
+        dir.resolve("Desktop.INI").writeText("[.ShellClassInfo]")
+        dir.resolve("tokenizer/thumbs.db").writeText("x")
+        assertIs<Result.Ok>(ModelPack.verifyInstalled(dir, "intent", keys = h.keys))
+        dir.resolve("desktop.ini.dll").writeText("MZ")
+        assertIs<Result.Invalid>(ModelPack.verifyInstalled(dir, "intent", keys = h.keys))
+    }
+
+    @Test
+    fun aThrowingDescribeLeavesNoLoadedModelBehind() = runTest {
+        val m = model(describe = { error("describe failed") })
+        m.warmUp()
+        runCurrent()
+        assertEquals(ModelStatus.LoadFailed("describe failed"), m.status.value)
+        assertNull(m.getOrNull())
+        assertTrue(made.single().closed)
+    }
+
+    @Test
+    fun theChatModelFileMatchesWithoutCase() {
+        val h = PackHelper()
+        val src = Files.createTempDirectory(h.root, "chat2")
+        src.resolve("llama-server.exe").writeText("exe")
+        src.resolve("Model.GGUF").writeText("model")
+        ModelPack.sign(src, "chat", "v1", null, "test-key", h.pair.private)
+        assertEquals(src.resolve("Model.GGUF"), LocalChat.filesIn(src)?.model)
+    }
+
+    @Test
+    fun theFingerprintSeesTheManifestNextToTheModelFolder() {
+        val root = Files.createTempDirectory("fp")
+        val dir = Files.createDirectories(root.resolve("intent-v3"))
+        dir.resolve("m.onnx").writeText("w")
+        root.resolve("manifest.json").writeText("{}")
+        val before = LazyModel.filesFingerprint(dir)
+        Files.setLastModifiedTime(root.resolve("manifest.json"), java.nio.file.attribute.FileTime.fromMillis(1_000))
+        assertTrue(before != LazyModel.filesFingerprint(dir))
     }
 
     /** A signed fake pack under a temp folder, for the pack tests. */

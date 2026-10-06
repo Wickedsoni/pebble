@@ -147,15 +147,24 @@ class LazyModel<T : AutoCloseable>(
         }
         if (verified != null) return fail(dir, verified, files)
         val t0 = clock()
-        runCatching { load(dir) }
-            .onSuccess { m ->
+        // describe runs inside the guard: if it throws, the model is freed and no half-ready state is left.
+        runCatching {
+            val m = load(dir)
+            try {
+                m to describe(m)
+            } catch (t: Throwable) {
+                runCatching { m.close() }
+                throw t
+            }
+        }
+            .onSuccess { (m, detail) ->
                 if (!scope.isActive) {
                     runCatching { m.close() } // shut down while loading: nobody would free it
                     return
                 }
                 failure = null
                 model = m
-                _status.value = ModelStatus.Ready(clock() - t0, describe(m))
+                _status.value = ModelStatus.Ready(clock() - t0, detail)
                 watchIdle()
                 onLoadAttempt(dir, _status.value)
             }
@@ -241,11 +250,17 @@ class LazyModel<T : AutoCloseable>(
     override fun toString() = "$name: ${status.value}"
 
     companion object {
-        /** Size and last-modified time of every file in [dir], as one string. A changed file changes it. */
-        fun filesFingerprint(dir: Path): String = Files.walk(dir).use { s ->
-            s.filter { Files.isRegularFile(it) }.sorted().map {
-                "${dir.relativize(it)}:${Files.size(it)}:${Files.getLastModifiedTime(it).toMillis()}"
-            }.toList().joinToString("|")
+        /** Size and last-modified time of every file in [dir] (and of `manifest.json` next to it), as one string. A changed file changes it. */
+        fun filesFingerprint(dir: Path): String {
+            val files = Files.walk(dir).use { s ->
+                s.filter { Files.isRegularFile(it) }.sorted().map {
+                    "${dir.relativize(it)}:${Files.size(it)}:${Files.getLastModifiedTime(it).toMillis()}"
+                }.toList()
+            }
+            // The dev layout checks the files against manifest.json one level up: a change there counts too.
+            val manifest = dir.parent?.resolve("manifest.json")?.takeIf { Files.isRegularFile(it) }
+            val outer = manifest?.let { "manifest.json:${Files.size(it)}:${Files.getLastModifiedTime(it).toMillis()}" }
+            return (files + listOfNotNull(outer)).joinToString("|")
         }
     }
 }
