@@ -220,7 +220,7 @@ Lessons from the merge (for the next stack):
 - **Models:** published as [models-2026.10](https://github.com/Wickedsoni/pebble/releases/tag/models-2026.10). Get them with `python brain/src/pebble_brain/download_models.py` (checks SHA-256 against `brain/models/manifest.json`).
 - **How work lands:** `main` is protected, so every change goes branch → PR → CI (ktlint/Spotless, Ruff, all tests) → squash-merge. See CONTRIBUTING.md.
 - **Releasing:**
-  1. Bump `packageVersion` in `desktopApp/build.gradle.kts`.
+  1. No version bump in the code: the tag sets the version (`release.yml` passes `-PappVersion`; the tag must be `vX.Y.Z`). The default in `desktopApp/build.gradle.kts` (`appVersion`) is for local builds.
   2. Write `docs/releases/vX.Y.Z.md`.
   3. Tag `vX.Y.Z` on main. `release.yml` builds the MSI on GitHub and publishes it (pre-release below 1.0).
 
