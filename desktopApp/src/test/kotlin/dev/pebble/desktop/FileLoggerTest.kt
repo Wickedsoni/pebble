@@ -24,8 +24,23 @@ class FileLoggerTest {
                 "2026-10-04T09:30:15  INFO  app  started",
                 "2026-10-04T09:30:15  WARN  brain  learning failed  java.lang.IllegalStateException: db locked",
             ),
-            Files.readAllLines(file),
+            Files.readAllLines(file).filterNot { it.startsWith("\t") }, // the stack trace lines are tested below
         )
+    }
+
+    @Test
+    fun aWarningKeepsTheStackTraceAndTheRootCause() {
+        val log = FileLogger(file, { at }, { zone })
+        fun deep(n: Int): Nothing = if (n == 0) throw IllegalStateException("db locked") else deep(n - 1)
+        val e = runCatching { deep(40) }.exceptionOrNull()!!
+        log.warn("brain", "wrapped", RuntimeException("outer", e))
+        val lines = Files.readAllLines(file)
+        assertTrue(lines.first().endsWith("java.lang.RuntimeException: outer"))
+        assertTrue(lines.any { it.startsWith("\tat dev.pebble.desktop.FileLoggerTest") }, "the stack is there")
+        assertTrue(lines.any { it.startsWith("Caused by: java.lang.IllegalStateException: db locked") }, "the cause is not cut off")
+        val cause = lines.indexOfFirst { it.startsWith("Caused by") }
+        assertTrue(lines.getOrNull(cause + 1).orEmpty().startsWith("\tat "), "the root cause shows where it happened")
+        assertTrue(lines.size <= 40, "a long trace stays short: ${lines.size}")
     }
 
     @Test

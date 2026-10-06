@@ -2,6 +2,8 @@ package dev.pebble.desktop.app.pages
 
 import androidx.compose.runtime.Immutable
 import dev.pebble.core.search.MemorySearch
+import dev.pebble.desktop.core.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +21,8 @@ data class MemorySearchUiState(
     val results: List<Row>? = null,
     /** The command model is missing, so there is nothing to search with. */
     val noModel: Boolean = false,
+    /** The search failed (database or model error). Text that is ready to show; null when all is well. */
+    val error: String? = null,
 ) {
     @Immutable
     data class Row(val kindLabel: String, val text: String)
@@ -37,6 +41,7 @@ sealed interface MemorySearchEvent {
 class MemorySearchStateHolder(
     private val search: suspend (String) -> List<MemorySearch.Result>?,
     private val scope: CoroutineScope,
+    private val log: Logger = Logger.None,
 ) {
     private val _state = MutableStateFlow(MemorySearchUiState())
     val state: StateFlow<MemorySearchUiState> = _state.asStateFlow()
@@ -49,12 +54,21 @@ class MemorySearchStateHolder(
                 running?.cancel() // a newer question wins
                 _state.update { it.copy(query = query, searching = true) }
                 running = scope.launch {
-                    val hits = search(query)
-                    _state.value = MemorySearchUiState(
-                        query = query,
-                        searching = false,
-                        results = hits?.map { MemorySearchUiState.Row(kindLabel(it.kind), it.text) } ?: emptyList(),
-                        noModel = hits == null,
+                    val outcome = runCatching { search(query) }
+                    outcome.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+                    _state.value = outcome.fold(
+                        onSuccess = { hits ->
+                            MemorySearchUiState(
+                                query = query,
+                                searching = false,
+                                results = hits?.map { MemorySearchUiState.Row(kindLabel(it.kind), it.text) } ?: emptyList(),
+                                noModel = hits == null,
+                            )
+                        },
+                        onFailure = {
+                            log.warn("memory-search", "search failed", it)
+                            MemorySearchUiState(query = query, searching = false, error = "The search did not work. Try again.")
+                        },
                     )
                 }
             }

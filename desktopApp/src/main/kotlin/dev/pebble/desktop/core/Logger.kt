@@ -46,7 +46,32 @@ class FileLogger(
             }
             val at = LocalDateTime.ofInstant(Instant.ofEpochMilli(clock()), zone()).withNano(0)
             val cause = t?.let { "  ${it::class.java.name}: ${it.message}" } ?: ""
-            Files.writeString(file, "$at  $level  $tag  $msg$cause\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND)
+            Files.writeString(
+                file,
+                "$at  $level  $tag  $msg$cause\n${t?.let(::trace).orEmpty()}",
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND,
+            )
         }
+    }
+
+    /**
+     * The stack trace after its first line (already in the entry): the first [TRACE_LINES] lines, and every
+     * "Caused by" line after them with its first [CAUSE_LINES] frames, so the root cause and where it
+     * happened are never cut off.
+     */
+    private fun trace(t: Throwable): String {
+        val kept = StringBuilder()
+        var sinceCause = Int.MAX_VALUE
+        t.stackTraceToString().lines().drop(1).filter { it.isNotBlank() }.forEachIndexed { i, line ->
+            sinceCause = if (line.startsWith("Caused by")) 0 else sinceCause.coerceAtMost(Int.MAX_VALUE - 1) + 1
+            if (i < TRACE_LINES - 1 || sinceCause <= CAUSE_LINES) kept.append(line).append('\n')
+        }
+        return kept.toString()
+    }
+
+    private companion object {
+        const val TRACE_LINES = 15
+        const val CAUSE_LINES = 3
     }
 }

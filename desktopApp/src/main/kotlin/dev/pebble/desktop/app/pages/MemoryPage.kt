@@ -197,7 +197,7 @@ private fun MemoryRow(m: Memory, onForget: () -> Unit) {
 @Composable
 private fun MemorySearchCard(app: PebbleApp, modifier: Modifier) {
     val scope = rememberCoroutineScope()
-    val holder = remember { MemorySearchStateHolder(app::searchMemoryLoading, scope) }
+    val holder = remember { MemorySearchStateHolder(app::searchMemoryLoading, scope, app.log) }
     val state by holder.state.collectAsState()
     MemorySearchContent(state, holder::onEvent, modifier)
 }
@@ -215,6 +215,8 @@ fun MemorySearchContent(state: MemorySearchUiState, onEvent: (MemorySearchEvent)
         val results = state.results
         when {
             state.searching -> Text("Looking for “${state.query}”…", color = c.secondary, fontSize = 12.sp)
+
+            state.error != null -> Text(state.error, color = c.secondary, fontSize = 12.sp)
 
             state.noModel -> Text("Search needs the command model, and it isn't installed.", color = c.secondary, fontSize = 12.sp)
 
@@ -254,7 +256,7 @@ fun MemorySearchContent(state: MemorySearchUiState, onEvent: (MemorySearchEvent)
 @Composable
 private fun TeachCard(app: PebbleApp, modifier: Modifier) {
     val scope = rememberCoroutineScope()
-    val holder = remember { TeachStateHolder(app.teaching, scope) }
+    val holder = remember { TeachStateHolder(app.teaching, scope, app.log) }
     val state by holder.state.collectAsState()
     TeachContent(state, holder::onEvent, modifier)
 }
@@ -279,6 +281,7 @@ fun TeachContent(state: TeachUiState, onEvent: (TeachEvent) -> Unit, modifier: M
         Spacer(Modifier.height(8.dp))
         GlassField("How you say it, e.g. “notes kholo yaar”", Modifier.fillMaxWidth()) { onEvent(TeachEvent.Teach(it)) }
         Spacer(Modifier.height(6.dp))
+        state.error?.let { Text(it, color = c.secondary, fontSize = 12.sp) }
         LazyColumn(Modifier.weight(1f, fill = false)) {
             items(state.taught, key = { it.id }) { row ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {

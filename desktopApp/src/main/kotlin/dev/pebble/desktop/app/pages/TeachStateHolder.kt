@@ -3,6 +3,8 @@ package dev.pebble.desktop.app.pages
 import androidx.compose.runtime.Immutable
 import dev.pebble.core.brain.CommandFeedback
 import dev.pebble.core.brain.CommandRouter
+import dev.pebble.desktop.core.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +32,8 @@ data class TeachUiState(
     val action: String = TeachStateHolder.CHOICES.first(),
     val choices: List<Choice> = TeachStateHolder.CHOICES.map { Choice(it, CommandRouter.labelFor(it)) },
     val taught: List<Row> = emptyList(),
+    /** The last change did not work (database error). Text that is ready to show; null when all is well. */
+    val error: String? = null,
 ) {
     @Immutable
     data class Choice(val action: String, val label: String)
@@ -49,12 +53,16 @@ sealed interface TeachEvent {
 }
 
 /** State holder for "Teach Pebble a command" (docs/UI-PATTERN.md). */
-class TeachStateHolder(private val port: TeachingPort, private val scope: CoroutineScope) {
+class TeachStateHolder(
+    private val port: TeachingPort,
+    private val scope: CoroutineScope,
+    private val log: Logger = Logger.None,
+) {
     private val _state = MutableStateFlow(TeachUiState())
     val state: StateFlow<TeachUiState> = _state.asStateFlow()
 
     init {
-        scope.launch { reload() }
+        scope.launch { attempt("load") { } }
     }
 
     fun onEvent(e: TeachEvent) {
@@ -64,18 +72,25 @@ class TeachStateHolder(private val port: TeachingPort, private val scope: Corout
             is TeachEvent.Teach -> {
                 val phrase = e.phrase.trim().takeIf { it.isNotEmpty() } ?: return
                 val action = _state.value.action
-                scope.launch { port.teach(phrase, action); reload() }
+                scope.launch { attempt("teach") { port.teach(phrase, action) } }
             }
 
-            is TeachEvent.Unteach -> scope.launch { port.unteach(e.id); reload() }
+            is TeachEvent.Unteach -> scope.launch { attempt("unteach") { port.unteach(e.id) } }
 
-            TeachEvent.ForgetAll -> scope.launch { port.forgetAll(); reload() }
+            TeachEvent.ForgetAll -> scope.launch { attempt("forget") { port.forgetAll() } }
         }
     }
 
-    private suspend fun reload() {
-        val rows = port.taught().map { TeachUiState.Row(it.id, it.text, CommandRouter.labelFor(it.chosenAction)) }
-        _state.update { it.copy(taught = rows) }
+    /** Runs [change], then reloads the list. A failure is logged and shown; cancellation is not caught. */
+    private suspend fun attempt(what: String, change: suspend () -> Unit) {
+        val failure = runCatching {
+            change()
+            val rows = port.taught().map { TeachUiState.Row(it.id, it.text, CommandRouter.labelFor(it.chosenAction)) }
+            _state.update { it.copy(taught = rows, error = null) }
+        }.exceptionOrNull() ?: return
+        if (failure is CancellationException) throw failure
+        log.warn("teach", "$what failed", failure)
+        _state.update { it.copy(error = "That did not work. Try again.") }
     }
 
     companion object {
