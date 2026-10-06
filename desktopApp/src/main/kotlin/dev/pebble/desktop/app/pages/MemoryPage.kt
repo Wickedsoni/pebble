@@ -26,10 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -38,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pebble.core.memory.Memory
 import dev.pebble.core.memory.MemoryKind
-import dev.pebble.core.settings.SettingsRepository.Keys
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
@@ -47,7 +44,6 @@ import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
 import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
-import kotlinx.coroutines.launch
 
 /**
  * Everything Pebble has learned or been told, grouped by kind, each deletable. Plus the
@@ -57,16 +53,7 @@ import kotlinx.coroutines.launch
 fun MemoryPage(app: PebbleApp) {
     val c = LocalGlass.current
     LaunchedEffect(Unit) { app.learn() }
-    val scope = rememberCoroutineScope()
     val memories by remember { app.memory.visibleFlow() }.collectAsState(initial = app.memory.visible())
-    var mediaOn by remember { mutableStateOf(app.settings.bool(Keys.MEDIA_TRACKING, false)) }
-    var keepVoice by remember { mutableStateOf(app.settings.bool(Keys.KEEP_VOICE_CORRECTIONS, false)) }
-    var micOn by remember { mutableStateOf(app.settings.bool(Keys.MICROPHONE_ENABLED, true)) }
-    var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
-    var smartOn by remember { mutableStateOf(app.settings.bool(Keys.SMART_REPLIES, false)) }
-    // Checking the chat pack can hash big files: never on the UI thread.
-    LaunchedEffect(Unit) { app.refreshChatInstalled() }
-    val chatInstalled by app.chatInstalled.state.collectAsState()
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         // The right column is full (search + privacy), so the Teach card shares the left column.
@@ -106,74 +93,7 @@ fun MemoryPage(app: PebbleApp) {
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             MemorySearchCard(app, Modifier.fillMaxWidth())
             RecentlyDeletedCard(app, Modifier.fillMaxWidth().weight(1f))
-            // Scrolls: with Smart replies the switches are taller than the card on a small window.
-            GlassCard(Modifier.fillMaxWidth().weight(1f)) {
-                CardLabel("Privacy", PebbleIcons.Shield, c.water)
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("Everything stays on this computer. Nothing is uploaded.", color = c.content, fontSize = 13.sp, lineHeight = 18.sp)
-                    Spacer(Modifier.height(12.dp))
-                    SettingRow("Notice what I watch", mediaOn) {
-                        mediaOn = it
-                        app.settings.set(Keys.MEDIA_TRACKING, it.toString())
-                    }
-                    Text(
-                        "Reads the title of video apps and sites (YouTube, Netflix, Prime Video, VLC…) once a minute. Off by default.",
-                        color = c.secondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Chip("Clear watch history", false) { app.memory.clearMedia(); scope.launch { app.learn() } }
-                    Spacer(Modifier.height(12.dp))
-                    SettingRow("Microphone (talk to Pebble)", micOn) {
-                        micOn = it
-                        app.settings.set(Keys.MICROPHONE_ENABLED, it.toString())
-                    }
-                    Text(
-                        if (micOn) {
-                            "Only while you hold Ctrl+Alt+Space or press 🎤. Speech is understood on this computer."
-                        } else {
-                            "Off: Pebble never opens the microphone."
-                        },
-                        color = c.secondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    SettingRow("Smart replies (chat model)", smartOn) {
-                        smartOn = it
-                        app.settings.set(Keys.SMART_REPLIES, it.toString())
-                        if (!it) app.chat.close()
-                    }
-                    Text(
-                        if (chatInstalled) {
-                            "Small talk is answered by a chat model on this computer, in English for now. It runs as a helper " +
-                                "program that only Pebble can reach (127.0.0.1), and stops after 10 idle minutes. Off by default."
-                        } else {
-                            "Needs the chat pack: About → Model packs. Off by default."
-                        },
-                        color = c.secondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    SettingRow("Keep voice clips I correct", keepVoice) {
-                        keepVoice = it
-                        app.settings.set(Keys.KEEP_VOICE_CORRECTIONS, it.toString())
-                    }
-                    Text(
-                        "When you fix what I heard, I keep that clip and your words, to understand your voice better. " +
-                            "Off by default; the mic is only on while you hold the talk key.",
-                        color = c.secondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                    if (voiceClips > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        Chip("Delete $voiceClips voice clips", false) { app.clearVoiceSamples(); voiceClips = 0 }
-                    }
-                }
-            }
+            PrivacyCard(app, Modifier.fillMaxWidth().weight(1f))
         }
     }
 }
@@ -189,6 +109,76 @@ private fun MemoryRow(m: Memory, onForget: () -> Unit) {
         // Forget button is always there for keyboard/mouse; it just gets quieter when not hovered.
         Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
             IconButton(PebbleIcons.Close, size = if (hovered) 28.dp else 24.dp, onClick = onForget)
+        }
+    }
+}
+
+/** "Privacy": makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
+@Composable
+private fun PrivacyCard(app: PebbleApp, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val holder = remember { PrivacyStateHolder(AppPrivacyPort(app), app.env, scope, app.log) }
+    val state by holder.state.collectAsState()
+    PrivacyContent(state, holder::onEvent, modifier)
+}
+
+/** Stateless: the privacy switches with what each one does. Scrolls: with Smart replies the switches are taller than the card. */
+@Composable
+fun PrivacyContent(state: PrivacyUiState, onEvent: (PrivacyEvent) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalGlass.current
+    GlassCard(modifier) {
+        CardLabel("Privacy", PebbleIcons.Shield, c.water)
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text("Everything stays on this computer. Nothing is uploaded.", color = c.content, fontSize = 13.sp, lineHeight = 18.sp)
+            if (!state.loaded) return@Column
+            Spacer(Modifier.height(12.dp))
+            SettingRow("Notice what I watch", state.mediaOn) { onEvent(PrivacyEvent.SetMedia(it)) }
+            Text(
+                "Reads the title of video apps and sites (YouTube, Netflix, Prime Video, VLC…) once a minute. Off by default.",
+                color = c.secondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Chip("Clear watch history", false) { onEvent(PrivacyEvent.ClearWatchHistory) }
+            Spacer(Modifier.height(12.dp))
+            SettingRow("Microphone (talk to Pebble)", state.micOn) { onEvent(PrivacyEvent.SetMic(it)) }
+            Text(
+                if (state.micOn) {
+                    "Only while you hold Ctrl+Alt+Space or press 🎤. Speech is understood on this computer."
+                } else {
+                    "Off: Pebble never opens the microphone."
+                },
+                color = c.secondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingRow("Smart replies (chat model)", state.smartOn) { onEvent(PrivacyEvent.SetSmartReplies(it)) }
+            Text(
+                if (state.chatInstalled) {
+                    "Small talk is answered by a chat model on this computer, in English for now. It runs as a helper " +
+                        "program that only Pebble can reach (127.0.0.1), and stops after 10 idle minutes. Off by default."
+                } else {
+                    "Needs the chat pack: About → Model packs. Off by default."
+                },
+                color = c.secondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingRow("Keep voice clips I correct", state.keepVoice) { onEvent(PrivacyEvent.SetKeepVoice(it)) }
+            Text(
+                "When you fix what I heard, I keep that clip and your words, to understand your voice better. " +
+                    "Off by default; the mic is only on while you hold the talk key.",
+                color = c.secondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            if (state.voiceClips > 0) {
+                Spacer(Modifier.height(8.dp))
+                Chip("Delete ${state.voiceClips} voice clips", false) { onEvent(PrivacyEvent.DeleteVoiceClips) }
+            }
         }
     }
 }

@@ -63,7 +63,7 @@ fun main(args: Array<String>) {
     val startInBackground = "--background" in args
 
     application {
-        val dark = rememberSystemDarkTheme()
+        val dark = rememberSystemDarkTheme(app.env.dispatchers.io)
         val trayState = rememberTrayState()
 
         var petVisible by remember { mutableStateOf(app.layouts.get(PET)?.visible ?: true) }

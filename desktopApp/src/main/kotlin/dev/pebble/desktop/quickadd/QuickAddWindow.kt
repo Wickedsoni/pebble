@@ -1,6 +1,5 @@
 package dev.pebble.desktop.quickadd
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,11 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,18 +44,20 @@ import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
 import dev.pebble.core.brain.CommandRouter
-import dev.pebble.core.brain.Turn
 import dev.pebble.core.quickadd.QuickCommand
 import dev.pebble.desktop.PebbleApp
 import dev.pebble.desktop.PetLine
+import dev.pebble.desktop.app.pages.ChatStateHolder
+import dev.pebble.desktop.app.pages.ChatUiState
+import dev.pebble.desktop.app.pages.RepositoryConversationPort
 import dev.pebble.desktop.platform.UserActivity
 import dev.pebble.desktop.platform.WindowsEffects
+import dev.pebble.desktop.ui.ChatTurn
 import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.FrostedPanel
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.glassColors
 import dev.pebble.desktop.voice.VoiceInput
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -120,9 +119,10 @@ fun QuickAddWindow(
         // The chat model is writing a reply (Smart replies).
         var thinking by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
-        // The first read happens once, not at every recomposition (a keystroke, a mic level).
-        val firstTurns = remember { app.conversation.recent(30) }
-        val turns by remember { app.conversation.recentFlow(30) }.collectAsState(initial = firstTurns)
+        // The conversation is read once by the holder (off the UI thread), never in composition.
+        val chat =
+            remember { ChatStateHolder(RepositoryConversationPort(app.conversation, app.env), app.env, scope, limit = 30, log = app.log) }
+        val chatState by chat.state.collectAsState()
         // False once this window is gone: a reply that finishes later is then only said by the pet.
         val alive = remember { AtomicBoolean(true) }
         DisposableEffect(Unit) { onDispose { alive.set(false) } }
@@ -266,7 +266,7 @@ fun QuickAddWindow(
             val colors = LocalGlass.current
             FrostedPanel {
                 Column(Modifier.fillMaxSize()) {
-                    Conversation(turns, lastLine, Modifier.weight(1f).fillMaxWidth())
+                    Conversation(chatState, lastLine, Modifier.weight(1f).fillMaxWidth())
                     if (thinking) Text("Pebble is thinking…", color = colors.secondary, fontSize = 11.sp)
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -346,56 +346,37 @@ fun QuickAddWindow(
 
 /** Your recent exchanges with Pebble, newest at the bottom; the last answer keeps its buttons. */
 @Composable
-private fun Conversation(turns: List<Turn>, lastLine: PetLine?, modifier: Modifier) {
+private fun Conversation(chat: ChatUiState, lastLine: PetLine?, modifier: Modifier) {
     val colors = LocalGlass.current
     val list = rememberLazyListState()
-    LaunchedEffect(turns.size) { if (turns.isNotEmpty()) list.scrollToItem(turns.lastIndex) }
-    if (turns.isEmpty()) {
+    // Keyed on the last turn, not on the size: the list stops growing at its limit.
+    LaunchedEffect(chat.scrollKey) { if (chat.rows.isNotEmpty()) list.scrollToItem(chat.rows.lastIndex) }
+    if (chat.rows.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text(
-                "Hi! Tell me what to remember, remind you about, or just chat.\nHold Ctrl+Alt+Space to talk — English, हिंदी or Hinglish.",
-                color = colors.secondary,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
-            )
+            if (chat.loaded) {
+                Text(
+                    "Hi! Tell me what to remember, remind you about, or just chat.\nHold Ctrl+Alt+Space to talk — English, हिंदी or Hinglish.",
+                    color = colors.secondary,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                )
+            }
         }
         return
     }
     LazyColumn(modifier, state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(turns) { t ->
-            Column(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Bubble((if (t.via == "voice") "🎤 " else "") + t.said, mine = true)
-                }
-                Spacer(Modifier.height(4.dp))
-                Bubble(t.reply, mine = false)
-                if (t.did != t.reply) Text("  " + t.did, color = colors.secondary, fontSize = 11.sp)
-                if (t == turns.last()) {
-                    val actions = lastLine?.actions.orEmpty()
-                    if (actions.isNotEmpty()) {
-                        Spacer(Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            actions.forEach { a -> Chip(a.label, false) { a.onClick() } }
-                        }
+        itemsIndexed(chat.rows) { i, row ->
+            ChatTurn(row, bubbleWidth = 480.dp, showTime = false) {
+                val actions = if (i == chat.rows.lastIndex) lastLine?.actions.orEmpty() else emptyList()
+                if (actions.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        actions.forEach { a -> Chip(a.label, false) { a.onClick() } }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun Bubble(text: String, mine: Boolean) {
-    val colors = LocalGlass.current
-    Text(
-        text,
-        color = colors.content,
-        fontSize = 14.sp,
-        lineHeight = 19.sp,
-        modifier = Modifier.widthIn(max = 480.dp)
-            .background(if (mine) colors.accent.copy(alpha = 0.22f) else colors.content.copy(alpha = 0.07f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    )
 }
 
 /** Mic chip + what the voice session is doing. */

@@ -127,6 +127,8 @@ fun AboutPage(app: PebbleApp) {
     }
 }
 
+private const val BACKUP_EXTENSION = ".pebblebackup"
+
 private const val BACKUP_HINT =
     "An encrypted copy of everything (notes, reminders, calendar, memory). If you forget the passphrase, nobody can open it, not even Pebble."
 
@@ -136,7 +138,8 @@ private fun BackupCard(app: PebbleApp, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     val holder = remember { BackupStateHolder(app.backup, scope) }
     val state by holder.state.collectAsState()
-    BackupContent(state, holder::onEvent, modifier)
+    // The day is read at the click, from the clock of the app (not the system clock).
+    BackupContent(state, holder::onEvent, { "pebble-backup-${app.env.today()}$BACKUP_EXTENSION" }, modifier)
 }
 
 /**
@@ -145,7 +148,13 @@ private fun BackupCard(app: PebbleApp, modifier: Modifier) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun BackupContent(state: BackupUiState, onEvent: (BackupEvent) -> Unit, modifier: Modifier = Modifier) {
+fun BackupContent(
+    state: BackupUiState,
+    onEvent: (BackupEvent) -> Unit,
+    /** The suggested file name of a new backup. */
+    saveName: () -> String,
+    modifier: Modifier = Modifier,
+) {
     val c = LocalGlass.current
     var pass by remember { mutableStateOf("") }
     var repeat by remember { mutableStateOf("") }
@@ -159,14 +168,18 @@ fun BackupContent(state: BackupUiState, onEvent: (BackupEvent) -> Unit, modifier
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Chip(if (state.busy) "Working…" else "Back up to a file…", false) {
                 if (!state.busy) {
-                    chooseBackup(save = true)?.let { onEvent(BackupEvent.Export(it, pass.toCharArray(), repeat.toCharArray())) }
+                    chooseFile("Save a Pebble backup", save = true, saveName(), BACKUP_EXTENSION)?.let {
+                        onEvent(BackupEvent.Export(it, pass.toCharArray(), repeat.toCharArray()))
+                    }
                     pass = ""
                     repeat = ""
                 }
             }
             Chip("Restore from a file…", false) {
                 if (!state.busy) {
-                    chooseBackup(save = false)?.let { onEvent(BackupEvent.Restore(it, pass.toCharArray())) }
+                    chooseFile("Restore a Pebble backup", save = false, "*$BACKUP_EXTENSION")?.let {
+                        onEvent(BackupEvent.Restore(it, pass.toCharArray()))
+                    }
                     pass = ""
                     repeat = ""
                 }
@@ -201,17 +214,17 @@ private fun PassphraseField(value: String, onChange: (String) -> Unit, placehold
     }
 }
 
-/** The Windows file dialog for backup files; null if you cancel. */
-private fun chooseBackup(save: Boolean): java.nio.file.Path? {
-    val d = java.awt.FileDialog(
-        null as java.awt.Frame?,
-        if (save) "Save a Pebble backup" else "Restore a Pebble backup",
-        if (save) java.awt.FileDialog.SAVE else java.awt.FileDialog.LOAD,
-    )
-    d.file = if (save) "pebble-backup-${java.time.LocalDate.now()}.pebblebackup" else "*.pebblebackup"
+/**
+ * The Windows file dialog. In save mode [name] is the suggested file name, and [extension] (for example ".zip") is added
+ * when you leave it out. In open mode [name] is the filter (for example "*.zip"). Null if you cancel.
+ */
+private fun chooseFile(title: String, save: Boolean, name: String, extension: String? = null): java.nio.file.Path? {
+    val d = java.awt.FileDialog(null as java.awt.Frame?, title, if (save) java.awt.FileDialog.SAVE else java.awt.FileDialog.LOAD)
+    d.file = name
     d.isVisible = true
     val f = d.file ?: return null
-    return java.nio.file.Path.of(d.directory, if (save && !f.endsWith(".pebblebackup", ignoreCase = true)) "$f.pebblebackup" else f)
+    val fileName = if (save && extension != null && !f.endsWith(extension, ignoreCase = true)) f + extension else f
+    return java.nio.file.Path.of(d.directory, fileName)
 }
 
 /** "Model packs": makes its state holder once, then only draws its state (docs/UI-PATTERN.md). */
@@ -242,7 +255,11 @@ fun ModelPacksContent(state: ModelPacksUiState, onEvent: (ModelPacksEvent) -> Un
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Chip(if (state.busy) "Checking…" else "Install a pack from a file…", false) {
-                if (!state.busy) chooseZip()?.let { onEvent(ModelPacksEvent.Install(it)) }
+                if (!state.busy) {
+                    chooseFile("Install a Pebble model pack", save = false, "*.zip")?.let {
+                        onEvent(ModelPacksEvent.Install(it))
+                    }
+                }
             }
         }
         Text(
@@ -252,13 +269,4 @@ fun ModelPacksContent(state: ModelPacksUiState, onEvent: (ModelPacksEvent) -> Un
             lineHeight = 15.sp,
         )
     }
-}
-
-/** The Windows file dialog, for .zip files; null if you cancel. */
-private fun chooseZip(): java.nio.file.Path? {
-    val d = java.awt.FileDialog(null as java.awt.Frame?, "Install a Pebble model pack", java.awt.FileDialog.LOAD)
-    d.file = "*.zip"
-    d.isVisible = true
-    val f = d.file ?: return null
-    return java.nio.file.Path.of(d.directory, f)
 }
