@@ -134,6 +134,36 @@ class ChangeHistoryTest {
         assertEquals(0, b.history.lostSince(0))
     }
 
+    @Test
+    fun aReplacedValueThatEqualsTheNewValueIsNotKept() {
+        val a = Replica(1)
+        val id = a.notes.add("a", a.now)
+        val uid = a.noteUid(id)
+        // The same value under a newer HLC (two devices make the same change): nothing to keep.
+        val hlc = Hlc(a.now + 5_000, 0, a.device).toString()
+        a.db.journalQueries.recordEntry("note", uid, "text", "\"a\"", hlc)
+        assertEquals(emptyList(), a.rawHistory())
+        a.db.journalQueries.recordEntry("note", uid, "text", "\"b\"", Hlc(a.now + 6_000, 0, a.device).toString())
+        assertEquals(listOf(listOf("note", uid, "text", "\"a\"", "replaced")), a.rawHistory(), "a different value is kept")
+    }
+
+    @Test
+    fun twoDevicesThatArchiveTheSameNoteMakeNoVersion() {
+        val a = Replica(1)
+        val b = Replica(2)
+        val id = a.notes.add("shared", a.now)
+        val uid = a.noteUid(id)
+        b.pullAll(a)
+        a.notes.archive(id, a.now + 10)
+        b.notes.archive(b.notes.recent().single().id, b.now + 20)
+        a.pullAll(b)
+        b.pullAll(a)
+        // Each device keeps its own old value (0) once; the shared new value (1) is never a version.
+        assertEquals(emptyList(), a.rawHistory().filter { it[2] == "archived" && it[3] == "1" })
+        assertEquals(emptyList(), b.rawHistory().filter { it[2] == "archived" && it[3] == "1" })
+        assertTrue(a.history.versions(SyncTable.NOTE, uid).none { it.fields["archived"] == JsonPrimitive(1) })
+    }
+
     // ------------------------------------------------------------------ versions (spec 5)
 
     @Test

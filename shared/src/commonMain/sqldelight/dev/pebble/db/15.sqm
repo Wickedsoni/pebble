@@ -1,0 +1,20 @@
+-- QA round 1 (P2a): three schema fixes. Schema 15 -> 16.
+--
+-- 1. The history trigger kept an old value even when it equals the new value (two devices that archive the same
+--    note). That made a History version that is the same as now. Now a value that does not change is not kept.
+DROP TRIGGER change_journal_keep_history;
+
+CREATE TRIGGER change_journal_keep_history BEFORE INSERT ON change_journal
+BEGIN
+    INSERT OR IGNORE INTO change_history(tbl, uid, field, value, hlc, replaced_by, kept_at, kind)
+    SELECT tbl, uid, field, value, hlc, new.hlc, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 'replaced'
+    FROM change_journal
+    WHERE tbl = new.tbl AND uid = new.uid AND field = new.field AND hlc <> new.hlc AND value <> new.value AND field <> 'deleted_at';
+END;
+
+-- 2. These two indexes repeat the first columns of the UNIQUE index of the same table.
+DROP INDEX IF EXISTS change_journal_row;
+DROP INDEX IF EXISTS change_history_row;
+
+-- 3. The daily roll-up of event_log reads by time only.
+CREATE INDEX event_log_at ON event_log(at_millis);

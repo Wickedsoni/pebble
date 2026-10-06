@@ -1,5 +1,6 @@
 package dev.pebble.core.sync
 
+import app.cash.sqldelight.TransactionCallbacks
 import dev.pebble.core.settings.DeviceIdentity
 import dev.pebble.core.settings.SettingsRepository
 import dev.pebble.db.PebbleDatabase
@@ -34,15 +35,18 @@ class ChangeJournal(private val db: PebbleDatabase) {
 
     /**
      * Writes one journal entry for each of [values] (field to JSON value), all with one new HLC at [wall], and
-     * returns that HLC. Call it in the transaction that then writes the row with this HLC.
+     * returns that HLC. Call it in the transaction that then writes the row with this HLC: [tx] is that transaction (the receiver of
+     * `db.transaction { }`), so a call outside a transaction does not compile and cannot leave orphan entries.
+     * [tx] is only a compile-time marker: the function does not read it. The entries go through the same connection,
+     * and so into the same transaction, because the driver keeps one connection for each thread.
      */
-    fun record(table: SyncTable, uid: String, values: Map<String, JsonElement>, wall: Long): Hlc = db.transactionWithResult {
+    fun record(tx: TransactionCallbacks, table: SyncTable, uid: String, values: Map<String, JsonElement>, wall: Long): Hlc {
         val unknown = values.keys - table.fields.toSet()
         require(unknown.isEmpty()) { "${table.sqlName}: not synced fields $unknown" }
         val last = q.maxHlc().executeAsOne().hlc?.let(Hlc::parse)
         val hlc = HlcClock.send(last, wall, deviceId())
         values.forEach { (field, value) -> q.recordEntry(table.sqlName, uid, field, value.toString(), hlc.toString()) }
-        hlc
+        return hlc
     }
 
     /** True if the journal keeps a delete for [uid]: a tombstone, or a grave of a purged row. */
@@ -75,12 +79,12 @@ class ChangeJournal(private val db: PebbleDatabase) {
                     val differ = table.fields.filter { have?.get(it) != row.values[it] }
                     if (differ.isEmpty()) continue
                     if (have == null) backfilled++ else repaired++
-                    val hlc = record(table, uid, differ.associateWith { row.values.getValue(it) }, wall)
+                    val hlc = record(this, table, uid, differ.associateWith { row.values.getValue(it) }, wall)
                     setHlc(table, uid, hlc)
                 }
                 for ((uid, have) in entries - rows.keys) {
                     if ((have["deleted_at"] ?: JsonNull) == JsonNull) {
-                        record(table, uid, mapOf("deleted_at" to JsonPrimitive(wall)), wall)
+                        record(this, table, uid, mapOf("deleted_at" to JsonPrimitive(wall)), wall)
                         graves++
                     }
                     q.dropAllButGrave(table.sqlName, uid)
@@ -144,7 +148,10 @@ class ChangeJournal(private val db: PebbleDatabase) {
             db.transactionWithResult { merge(checked, wall) }
         } catch (e: Refusal) {
             ApplyResult.Refused(e.reason)
+        } catch (e: RuntimeException) {
+            throw e // a programming error (null, bad state): do not hide it as a refusal
         } catch (e: Exception) {
+            // What is left is a database error (a checked SQLException from the driver, a guard trigger).
             ApplyResult.Refused("the database refused the batch: ${e.message}")
         }
     }
@@ -197,6 +204,15 @@ class ChangeJournal(private val db: PebbleDatabase) {
             if (current == null) {
                 // Not here. If the journal knows the row, this device removed it (a purged tombstone): drop the change.
                 if (local.isNotEmpty() || isLocalOnly(table, uid)) {
+                    dropped++
+                    continue
+                }
+                // A grave (the only entry is a delete) of a row that this device never had: a purged row. Keep the delete,
+                // so that later live entries of this uid are dropped, and insert no row. A new device, or one after a
+                // restore, meets graves. A whole deleted row (a tombstone) is inserted as before.
+                val grave = incoming["deleted_at"]
+                if (incoming.size == 1 && grave != null && grave.value != JsonNull) {
+                    q.recordEntry(table.sqlName, uid, "deleted_at", grave.value.toString(), grave.hlc.toString())
                     dropped++
                     continue
                 }
@@ -256,7 +272,7 @@ class ChangeJournal(private val db: PebbleDatabase) {
         val changed = values.filter { (f, value) -> current[f] != value }
         if (changed.isEmpty()) return@transactionWithResult true
         changed.forEach { (f, value) -> require(table.column(f)?.accepts(value) == true) { "${table.sqlName}.$f: bad value $value" } }
-        val hlc = record(table, uid, changed, wall)
+        val hlc = record(this, table, uid, changed, wall)
         update(table, uid, current + changed, hlc)
         true
     }
@@ -305,9 +321,9 @@ class ChangeJournal(private val db: PebbleDatabase) {
         when (table) {
             SyncTable.NOTE -> db.wellnessQueries.mergeInsertNote(
                 uid = uid,
-                text = f.str("text")!!,
-                createdAt = f.long("created_at")!!,
-                archived = f.long("archived")!!,
+                text = f.reqStr("text"),
+                createdAt = f.reqLong("created_at"),
+                archived = f.reqLong("archived"),
                 deletedAt = f.long("deleted_at"),
                 updatedAt = updatedAt,
                 originDevice = origin,
@@ -315,9 +331,9 @@ class ChangeJournal(private val db: PebbleDatabase) {
 
             SyncTable.ONE_OFF_REMINDER -> db.remindersQueries.mergeInsertOneOff(
                 uid = uid,
-                title = f.str("title")!!,
-                dueAt = f.long("due_at")!!,
-                strictness = f.str("strictness")!!,
+                title = f.reqStr("title"),
+                dueAt = f.reqLong("due_at"),
+                strictness = f.reqStr("strictness"),
                 doneAt = f.long("done_at"),
                 deletedAt = f.long("deleted_at"),
                 updatedAt = updatedAt,
@@ -325,9 +341,9 @@ class ChangeJournal(private val db: PebbleDatabase) {
             )
 
             SyncTable.CALENDAR_EVENT -> db.calendarQueries.mergeInsertEvent(
-                uid = uid, title = f.str("title")!!, notes = f.str("notes"), startAt = f.long("start_at")!!, endAt = f.long("end_at")!!,
-                allDay = f.long("all_day")!!, tz = f.str("tz")!!, rrule = f.str("rrule"), exdates = f.str("exdates"),
-                remindMinutes = f.long("remind_minutes"), visibility = f.str("visibility")!!, ownerDevice = f.str("owner_device"),
+                uid = uid, title = f.reqStr("title"), notes = f.str("notes"), startAt = f.reqLong("start_at"), endAt = f.reqLong("end_at"),
+                allDay = f.reqLong("all_day"), tz = f.reqStr("tz"), rrule = f.str("rrule"), exdates = f.str("exdates"),
+                remindMinutes = f.long("remind_minutes"), visibility = f.reqStr("visibility"), ownerDevice = f.str("owner_device"),
                 deletedAt = f.long("deleted_at"), updatedAt = updatedAt, originDevice = origin,
             )
         }
@@ -337,9 +353,9 @@ class ChangeJournal(private val db: PebbleDatabase) {
         val h = hlc.toString()
         when (table) {
             SyncTable.NOTE -> db.wellnessQueries.mergeUpdateNote(
-                text = f.str("text")!!,
-                createdAt = f.long("created_at")!!,
-                archived = f.long("archived")!!,
+                text = f.reqStr("text"),
+                createdAt = f.reqLong("created_at"),
+                archived = f.reqLong("archived"),
                 deletedAt = f.long("deleted_at"),
                 updatedAt = hlc.wallMillis,
                 hlc = h,
@@ -347,9 +363,9 @@ class ChangeJournal(private val db: PebbleDatabase) {
             )
 
             SyncTable.ONE_OFF_REMINDER -> db.remindersQueries.mergeUpdateOneOff(
-                title = f.str("title")!!,
-                dueAt = f.long("due_at")!!,
-                strictness = f.str("strictness")!!,
+                title = f.reqStr("title"),
+                dueAt = f.reqLong("due_at"),
+                strictness = f.reqStr("strictness"),
                 doneAt = f.long("done_at"),
                 deletedAt = f.long("deleted_at"),
                 updatedAt = hlc.wallMillis,
@@ -358,9 +374,9 @@ class ChangeJournal(private val db: PebbleDatabase) {
             )
 
             SyncTable.CALENDAR_EVENT -> db.calendarQueries.mergeUpdateEvent(
-                title = f.str("title")!!, notes = f.str("notes"), startAt = f.long("start_at")!!, endAt = f.long("end_at")!!,
-                allDay = f.long("all_day")!!, tz = f.str("tz")!!, rrule = f.str("rrule"), exdates = f.str("exdates"),
-                remindMinutes = f.long("remind_minutes"), visibility = f.str("visibility")!!, ownerDevice = f.str("owner_device"),
+                title = f.reqStr("title"), notes = f.str("notes"), startAt = f.reqLong("start_at"), endAt = f.reqLong("end_at"),
+                allDay = f.reqLong("all_day"), tz = f.reqStr("tz"), rrule = f.str("rrule"), exdates = f.str("exdates"),
+                remindMinutes = f.long("remind_minutes"), visibility = f.reqStr("visibility"), ownerDevice = f.str("owner_device"),
                 deletedAt = f.long("deleted_at"), updatedAt = hlc.wallMillis, hlc = h, uid = uid,
             )
         }
@@ -371,6 +387,10 @@ class ChangeJournal(private val db: PebbleDatabase) {
     private fun Map<String, JsonElement>.long(field: String): Long? = (getValue(field) as? JsonPrimitive)?.takeIf {
         !it.isString
     }?.longOrNull
+
+    private fun Map<String, JsonElement>.reqStr(field: String): String = checkNotNull(str(field)) { "synced field $field is not text" }
+
+    private fun Map<String, JsonElement>.reqLong(field: String): Long = checkNotNull(long(field)) { "synced field $field is not a number" }
 
     private class Row(val values: Map<String, JsonElement>, val hlc: String?)
 

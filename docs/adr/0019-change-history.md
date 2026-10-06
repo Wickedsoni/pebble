@@ -38,3 +38,8 @@ The change journal (ADR 0018) keeps only the newest value of each synced field. 
 - **Write history in Kotlin at each call site.** Not selected: a new write path could forget it (ADR 0017).
 - **Keep history in the journal (more rows per field).** Not selected: `changesSince` and the merge read one entry per field; a second kind of row in that table makes every sync query more complex, and history must never sync.
 - **Sync history to peers.** Not selected: the spec keeps it on this device (privacy, and the same 90-day limit as tombstones).
+
+## Revision (QA round 1, schema 16)
+
+- **The same value is not a version.** The trigger `change_journal_keep_history` keeps an old value only if it differs from the new value. Two devices that make the same change (for example, they both archive a note) leave no History version that is equal to the current value. `15.sqm` replaces the trigger.
+- `15.sqm` also drops the indexes `change_journal_row` and `change_history_row`. Each one repeats the first columns of the `UNIQUE` index of its table. It adds `event_log_at` on `event_log(at_millis)` for the daily roll-up.

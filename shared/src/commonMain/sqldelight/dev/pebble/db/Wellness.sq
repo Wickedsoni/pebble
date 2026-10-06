@@ -61,6 +61,10 @@ UPDATE note SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
 archiveNote:
 UPDATE note SET archived = 1, updated_at = :at, hlc = coalesce(:hlc, hlc) WHERE id = :id;
 
+-- The state of a note, to skip a write that changes nothing (QA round 1).
+noteStateById:
+SELECT text, archived, deleted_at FROM note WHERE id = ?;
+
 -- The uid of a note, for its journal entries (null: an older Pebble made it and it has no uid yet).
 noteUid:
 SELECT uid FROM note WHERE id = ?;

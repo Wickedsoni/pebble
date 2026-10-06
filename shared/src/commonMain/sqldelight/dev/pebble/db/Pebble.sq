@@ -26,6 +26,7 @@ CREATE TABLE event_log (
 );
 
 CREATE INDEX event_log_type_at ON event_log(type, at_millis);
+CREATE INDEX event_log_at ON event_log(at_millis);
 
 insertEvent:
 INSERT INTO event_log(type, payload, at_millis) VALUES (?, ?, ?);

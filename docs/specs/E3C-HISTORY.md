@@ -177,3 +177,9 @@ The text in the dialog uses the glossary words: "version", "restore", "restore a
 | 2 | Keep old versions for 90 days? | Yes, the same as deleted items (4.3). |
 | 3 | A "Clear history" button on the Memory page? | Yes (section 6; it asks first). |
 | 4 | What does a restore bring back? | **Everything** in the version, also "done" and "archived". A delete is never undone in place (section 5). |
+
+## 11. Revision (QA round 1, schema 16)
+
+- The trigger `change_journal_keep_history` keeps an old value only if it differs from the new value. Two devices that make the same change leave no History version that equals the current value. `15.sqm` replaces the trigger.
+- `15.sqm` drops the indexes `change_journal_row` and `change_history_row` (each repeats the first columns of the `UNIQUE` index of its table). It adds the index `event_log_at`.
+- A grave of a purged row can come in a batch from a peer. The merge keeps it in the journal and keeps no History for it (see spec E3, section 7.3).

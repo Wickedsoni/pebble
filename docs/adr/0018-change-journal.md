@@ -54,3 +54,10 @@ Facts that we found during the work:
 - **Strict triggers for every write (the spec's first form).** We did not select it. The maintainer decided that an older Pebble must keep working on the same file. With strict triggers, v0.1.2 could not add, edit or delete notes and reminders.
 - **Triggers that write the journal.** We did not select it. A trigger cannot make an HLC, and it cannot tell a merge from a local edit.
 - **A clock object in memory.** We did not select it. Two objects on one database could make the same HLC. The journal's `max(hlc)` in an IMMEDIATE transaction is one clock for all writers.
+
+## Revision (QA round 1, schema 16)
+
+- **A grave is a delete.** A batch can hold a row that has only a `deleted_at` entry: a grave of a purged row. If this device never had the row, `apply` keeps that entry in the journal, inserts no row, and counts the row as `dropped`. Later live entries of this uid are then dropped. Before this rule, such a batch was refused, and a new device, or a device after a restore, could not sync. A live new row that lacks a field is still refused. A whole deleted row (a tombstone with all fields) is still inserted.
+- **`record` needs the caller's transaction.** `record` takes the transaction as its first argument (the receiver of `db.transaction { }`). A call outside a transaction does not compile. If the transaction fails, the entries roll back with it.
+- **`apply` shows programming errors.** It refuses a batch only for a `Refusal` or a database error. Other runtime errors, for example a null where a value must be, go to the caller.
+- A write to a note or a reminder that changes nothing is a no-op: a deleted row, a value that is the same, a second delete (the first `deleted_at` stays), a second Done. The methods return `false`.

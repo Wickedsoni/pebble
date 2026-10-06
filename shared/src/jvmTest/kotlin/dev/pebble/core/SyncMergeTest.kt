@@ -14,6 +14,7 @@ import dev.pebble.core.sync.ChangeJournal
 import dev.pebble.core.sync.Hlc
 import dev.pebble.core.sync.RowChange
 import dev.pebble.core.sync.Stamped
+import dev.pebble.core.sync.SyncTable
 import dev.pebble.core.wellness.NoteRepository
 import dev.pebble.db.PebbleDatabase
 import kotlinx.serialization.json.JsonNull
@@ -198,6 +199,71 @@ class SyncMergeTest {
         val r = b.journal.apply(a.journal.changesSince(null), b.now)
         assertEquals(ApplyResult.Applied(0, 0, emptyList(), dropped = 1), r)
         assertTrue(b.notes.recent().isEmpty())
+    }
+
+    @Test
+    fun aGraveOfAPurgedRowSyncsToANewDeviceAndKeepsLaterEntriesOut() {
+        val a = Replica(1)
+        val id = a.notes.add("gone", a.now)
+        a.notes.add("stays", a.now + 1)
+        a.notes.delete(id, a.now + 2)
+        a.notes.purgeTombstones(before = a.now + 3) // only the grave of "gone" stays on A
+        val graveOnly = a.journal.changesSince(null).rows.single { it.fields.keys == setOf("deleted_at") }
+
+        val b = Replica(2)
+        assertTrue(b.pullAll(a) > 0) // the whole batch is applied, not refused
+        assertEquals(listOf("stays"), b.notes.recent().map { it.text }, "B never shows the purged note")
+        assertTrue(b.journal.isDeleted(SyncTable.NOTE, graveOnly.uid), "B has the grave")
+        assertEquals(emptyList(), b.journal.verify())
+
+        // A later live entry of the same uid (a device that was offline) is dropped on B.
+        val live = RowChange(
+            "note",
+            graveOnly.uid,
+            mapOf(
+                "text" to Stamped(JsonPrimitive("gone, edited"), Hlc(a.now + 9_000, 0, a.device).toString()),
+                "created_at" to Stamped(JsonPrimitive(1), Hlc(a.now + 9_000, 0, a.device).toString()),
+                "archived" to Stamped(JsonPrimitive(0), Hlc(a.now + 9_000, 0, a.device).toString()),
+                "deleted_at" to Stamped(JsonNull, Hlc(a.now + 9_000, 0, a.device).toString()),
+            ),
+        )
+        val r = b.journal.apply(ChangeBatch(a.journal.epoch(), listOf(live), a.journal.changesSince(null).next), b.now)
+        assertEquals(ApplyResult.Applied(0, 0, emptyList(), dropped = 1), r)
+        assertEquals(listOf("stays"), b.notes.recent().map { it.text })
+    }
+
+    @Test
+    fun aGraveRelaysFromAThroughBToCAndReconcileDoesNotRecordItAgain() {
+        val a = Replica(1)
+        val id = a.notes.add("gone", a.now)
+        a.notes.add("stays", a.now + 1)
+        a.notes.delete(id, a.now + 2)
+        a.notes.purgeTombstones(before = a.now + 3)
+        val graveUid = a.journal.changesSince(null).rows.single { it.fields.keys == setOf("deleted_at") }.uid
+
+        val b = Replica(2)
+        b.pullAll(a)
+        val c = Replica(3)
+        c.pullAll(b)
+
+        assertEquals(0, b.journal.reconcile(b.now + 10).graves, "B holds a grave without a row; reconcile adds no new one")
+        assertEquals(0, c.journal.reconcile(c.now + 10).graves)
+        assertTrue(c.journal.isDeleted(SyncTable.NOTE, graveUid), "the grave reached C through B")
+        assertEquals(listOf("stays"), c.notes.recent().map { it.text })
+        assertEquals(emptyList(), b.journal.verify())
+        assertEquals(emptyList(), c.journal.verify())
+    }
+
+    @Test
+    fun aNewRowThatIsLiveAndIncompleteIsStillRefused() {
+        val a = Replica(1)
+        val b = Replica(2)
+        a.notes.add("x", a.now)
+        val row = a.journal.changesSince(null).rows.single()
+        val cut = RowChange(row.table, row.uid, row.fields - "archived")
+        assertTrue(
+            b.journal.apply(ChangeBatch(a.journal.epoch(), listOf(cut), a.journal.changesSince(null).next), b.now) is ApplyResult.Refused,
+        )
     }
 
     @Test

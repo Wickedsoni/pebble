@@ -9,7 +9,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 
 ### Start here (6 Oct 2026, after "edit a note" and per-item history delete)
 - **Retrain warning:** the dev/train split is now a hash of the sentence (QA round 1, P11), and the random stream changed. The next retrain sees a new corpus and new dev numbers. Do not compare its dev metrics with the old ones.
-- **State:** A1 … E4, C4, E3a, E3b, all of **E3c** (#51–#54), "edit a note" (#55) and "delete old versions of one item" (#56) are on `main`. Schema version 15; the next migration file is `15.sqm`.
+- **State:** A1 … E4, C4, E3a, E3b, all of **E3c** (#51–#54), "edit a note" (#55) and "delete old versions of one item" (#56) are on `main`. Schema version 16 (QA round 1, P2a: grave rule, same-value history rule, `15.sqm`); the next migration file is `16.sqm`.
 - **Next: milestone F.** F0 needs an Opus spec and a security review first (CLAUDE.md rule 9): do not start code without an approved spec.
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
 - **CI (5 Oct):** `ConvergenceTest` runs 60 sequences on a PR and the full 300 on a push to `main` or with "Run workflow". The PR Kotlin job takes about 6 to 7 min.

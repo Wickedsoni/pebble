@@ -1,5 +1,6 @@
 package dev.pebble.core.reminders
 
+import app.cash.sqldelight.TransactionCallbacks
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import dev.pebble.core.sync.ChangeJournal
@@ -61,6 +62,7 @@ class ReminderRepository(private val db: PebbleDatabase, private val journal: Ch
         val time = at ?: journal.now()
         val uid = ChangeJournal.newUid()
         val hlc = journal.record(
+            this,
             SyncTable.ONE_OFF_REMINDER,
             uid,
             mapOf(
@@ -78,11 +80,15 @@ class ReminderRepository(private val db: PebbleDatabase, private val journal: Ch
 
     /**
      * Removes a reminder from view (used to undo one Pebble created by mistake). The row stays as a tombstone
-     * (`deleted_at`) so that sync can tell other devices (WP E1); [purgeTombstones] removes it later.
+     * (`deleted_at`) so that sync can tell other devices (WP E1); [purgeTombstones] removes it later. A reminder that
+     * is deleted already keeps its first `deleted_at`: returns false and writes nothing.
      */
-    fun deleteOneOff(id: Long, at: Long? = null) = db.transaction {
+    fun deleteOneOff(id: Long, at: Long? = null): Boolean = db.transactionWithResult {
+        val state = q.oneOffStateById(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        if (state.deleted_at != null) return@transactionWithResult false
         val time = at ?: journal.now()
-        q.deleteOneOff(at = time, hlc = record(id, mapOf("deleted_at" to v(time)), time), id = id)
+        q.deleteOneOff(at = time, hlc = record(this, id, mapOf("deleted_at" to v(time)), time), id = id)
+        true
     }
 
     /** Removes tombstones older than [before], and their journal entries except the graves. Returns how many. */
@@ -128,22 +134,30 @@ class ReminderRepository(private val db: PebbleDatabase, private val journal: Ch
     /** The event [eventUid] changed or was deleted: its reminders that did not fire yet become tombstones. */
     fun deletePendingLinked(eventUid: String, at: Long) = q.deletePendingLinked(at, eventUid)
 
-    fun markOneOffDone(id: Long, at: Long) = db.transaction {
-        q.markOneOffDone(at = at, hlc = record(id, mapOf("done_at" to v(at)), at), id = id)
+    /** Marks reminder [id] done. Returns false, and writes nothing, if it is gone, deleted or done already. */
+    fun markOneOffDone(id: Long, at: Long): Boolean = db.transactionWithResult {
+        val state = q.oneOffStateById(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        if (state.deleted_at != null || state.done_at != null) return@transactionWithResult false
+        q.markOneOffDone(at = at, hlc = record(this, id, mapOf("done_at" to v(at)), at), id = id)
+        true
     }
 
-    fun rescheduleOneOff(id: Long, dueAt: Long, at: Long? = null) = db.transaction {
+    /** Moves reminder [id] to [dueAt]. Returns false, and writes nothing, if it is gone or deleted, or is due then already. */
+    fun rescheduleOneOff(id: Long, dueAt: Long, at: Long? = null): Boolean = db.transactionWithResult {
+        val state = q.oneOffStateById(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        if (state.deleted_at != null || state.due_at == dueAt) return@transactionWithResult false
         val time = at ?: journal.now()
-        q.rescheduleOneOff(dueAt = dueAt, at = time, hlc = record(id, mapOf("due_at" to v(dueAt)), time), id = id)
+        q.rescheduleOneOff(dueAt = dueAt, at = time, hlc = record(this, id, mapOf("due_at" to v(dueAt)), time), id = id)
+        true
     }
 
     /**
      * The HLC of the journal entries for [values] of reminder [id], or null if it is not synced: an event made it,
      * or it has no uid yet (reconcile records it).
      */
-    private fun record(id: Long, values: Map<String, JsonElement>, at: Long): String? {
+    private fun record(tx: TransactionCallbacks, id: Long, values: Map<String, JsonElement>, at: Long): String? {
         val info = q.oneOffSyncInfo(id).executeAsOneOrNull() ?: return null
         val uid = info.uid?.takeIf { info.event_uid == null } ?: return null
-        return journal.record(SyncTable.ONE_OFF_REMINDER, uid, values, at).toString()
+        return journal.record(tx, SyncTable.ONE_OFF_REMINDER, uid, values, at).toString()
     }
 }
