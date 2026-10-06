@@ -13,24 +13,34 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.io.File
+import java.sql.DriverManager
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.random.Random
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** State of disabled rules and deleted one-offs must not outlive them; `upcoming` must respect the active window. */
 class ReminderEnginePruneTest {
+    @AfterTest
+    fun deleteTheDatabase() = listOf("", "-wal", "-shm").forEach { File(dbFile.path + it).delete() }
+
     private val minute = 60_000L
     private val day = 24 * 60 * minute
-    private val repo = ReminderRepository(DatabaseFactory.inMemory()).apply { seedDefaults() }
+    private val dbFile = File.createTempFile("pebble-prune", ".db").apply { delete() }
+    private val repo = ReminderRepository(DatabaseFactory.create(dbFile)).apply { seedDefaults() }
 
     /** Starts at 12:00 on a day boundary; the local minute of day follows the clock (UTC). */
     private var now = 20_000 * day + 12 * 60 * minute
     private val bus = EventBus()
 
-    private fun engine(nudge: NudgePolicy? = null) =
-        ReminderEngine(repo, bus, clock = { now }, minuteOfDay = { (it / minute % 1440).toInt() }, nudge = nudge)
+    private fun engine(nudge: NudgePolicy? = null, minuteOfDay: (Long) -> Int = { (it / minute % 1440).toInt() }) =
+        ReminderEngine(repo, bus, clock = { now }, minuteOfDay = minuteOfDay, nudge = nudge)
 
     private fun ReminderEngine.advance(minutes: Int) {
         now += minutes * minute
@@ -95,5 +105,28 @@ class ReminderEnginePruneTest {
     fun upcomingKeepsADueTimeInsideTheWindow() {
         val e = engine() // 12:00
         assertEquals(now + 60 * minute, e.upcoming().first { it.key == "rule:water" }.dueAt)
+    }
+
+    @Test
+    fun upcomingFindsTheWindowStartAcrossAClockChange() {
+        val london = ZoneId.of("Europe/London") // 29 Mar 2026 01:00 UTC: the clocks go from 01:00 to 02:00
+        now = ZonedDateTime.of(2026, 3, 28, 22, 50, 0, 0, london).toInstant().toEpochMilli() // window 08:00-23:00
+        val e = engine(minuteOfDay = { Instant.ofEpochMilli(it).atZone(london).let { t -> t.hour * 60 + t.minute } })
+        val expected = ZonedDateTime.of(2026, 3, 29, 8, 0, 0, 0, london).toInstant().toEpochMilli()
+        assertEquals(expected, e.upcoming().first { it.key == "rule:water" }.dueAt, "08:00 local, not 09:00")
+    }
+
+    @Test
+    fun upcomingKeepsADueTimeInsideAWindowThatCrossesMidnight() {
+        DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}").use { c ->
+            c.createStatement().use {
+                it.execute("UPDATE reminder_rule SET active_from_minute = 1320, active_to_minute = 360 WHERE id = 'water'")
+            }
+        }
+        now = 20_000 * day + (23 * 60 + 30) * minute // 23:30, window 22:00-06:00
+        val e = engine()
+        assertEquals(now + 60 * minute, e.upcoming().first { it.key == "rule:water" }.dueAt, "00:30 is inside the window")
+        now = 20_000 * day + (5 * 60 + 30) * minute // 05:30: due 06:30, after the window closes
+        assertEquals(20_000 * day + 22 * 60 * minute, engine().upcoming().first { it.key == "rule:water" }.dueAt)
     }
 }

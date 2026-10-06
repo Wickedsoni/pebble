@@ -142,4 +142,15 @@ class MemorySearchTest {
         assertNull(MemorySearch.topicOf("read my shopping list"))
         assertNull(MemorySearch.topicOf("what's this about"), "a topic made only of stop words is no topic")
     }
+
+    @Test
+    fun aStaleIndexDoesNotHideAGoodHitBehindDeletedCandidates() {
+        val gone = listOf("dentist visit tuesday one", "dentist visit tuesday two", "dentist visit tuesday three")
+            .map { notes.add(it, 1) }
+        notes.add("dentist visit", 1)
+        search.reconcile()
+        gone.forEach { notes.delete(it, 2) } // the index is now stale: its 3 best candidates are gone
+
+        assertEquals(listOf("dentist visit"), search.search("dentist visit tuesday", limit = 1).map { it.text })
+    }
 }

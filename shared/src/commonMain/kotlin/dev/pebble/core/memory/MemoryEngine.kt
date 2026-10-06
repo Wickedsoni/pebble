@@ -174,10 +174,14 @@ class MemoryEngine(
     // ------------------------------------------------------------------ mood
 
     private fun learnMood(now: Long) {
+        learnMoodWeek(now)
+        learnMoodWater(now)
+    }
+
+    private fun learnMoodWeek(now: Long) {
         val week = memory.moodSince(now - 7 * DAY)
         if (week.size < 3) {
             memory.dropDerived(KEY_MOOD_WEEK)
-            memory.dropDerived(KEY_MOOD_WATER)
             return
         }
         val avg = week.map { it.score }.average()
@@ -194,8 +198,10 @@ class MemoryEngine(
             ((avg * 10).roundToInt() / 10.0).toString(),
             now,
         )
+    }
 
-        // Does hitting the water goal line up with better days?
+    /** Does hitting the water goal line up with better days? Uses the last 30 days, so a quiet week keeps it. */
+    private fun learnMoodWater(now: Long) {
         val goal = waterGoalMl()
         val month = memory.moodSince(now - 30 * DAY).groupBy { dayOf(it.atMillis) }.mapValues { (_, m) -> m.map { it.score }.average() }
         val water = db.wellnessQueries.waterLogSince(now - 30 * DAY).executeAsList()

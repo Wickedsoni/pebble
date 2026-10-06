@@ -63,6 +63,8 @@ class NudgePolicy(
     private val store: NudgeStore,
     private val quietHours: () -> Set<Int> = { emptySet() },
     private val random: Random = Random.Default,
+    /** Monte-Carlo draws for each logged propensity; tests change it to show that it never changes the choice. */
+    private val propensityDraws: Int = PROPENSITY_DRAWS,
 ) {
     private val beliefs: MutableMap<String, Pair<Double, Double>> = store.load().toMutableMap()
 
@@ -135,10 +137,10 @@ class NudgePolicy(
 
     /**
      * Probability Thompson sampling picks [arm] here (Monte-Carlo), logged for offline evaluation (IPS).
-     * With [PROPENSITY_DRAWS] draws the standard error is at most 0.011 (200 draws gave 0.035, too noisy for 1/p weights).
+     * With [PROPENSITY_DRAWS] draws (the default of [propensityDraws]) the standard error is at most 0.011 (200 draws gave 0.035, too noisy for 1/p weights).
      * The draws use their own random source, so they never change which arm [choose] picks.
      */
-    private fun propensity(ctx: NudgeContext, arm: NudgeArm, draws: Int = PROPENSITY_DRAWS): Double {
+    private fun propensity(ctx: NudgeContext, arm: NudgeArm, draws: Int = propensityDraws): Double {
         val b = NudgeArm.entries.associateWith { belief(ctx, it) }
         var wins = 0
         repeat(draws) {

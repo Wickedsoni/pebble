@@ -80,7 +80,23 @@ class MemorySearch(
         val queryWords = words(query)
         val asked = query.trim().lowercase()
         val keep = (limit * CANDIDATES_PER_RESULT).coerceAtLeast(1)
-        val top = ArrayList<Candidate>(keep + 1) // best first
+        val first = scan(version, qv, queryWords, asked, limit, keep)
+        // The cut can drop a good hit when the index is stale: a candidate that ranked high with its old text may be
+        // gone or changed. Then too few hits are left, so scan again with no cut. Rare, and the answer stays right.
+        return if (first.hits.size < limit && first.stale &&
+            first.cut
+        ) {
+            scan(version, qv, queryWords, asked, limit, Int.MAX_VALUE).hits
+        } else {
+            first.hits
+        }
+    }
+
+    private class Scan(val hits: List<Result>, val stale: Boolean, val cut: Boolean)
+
+    private fun scan(version: String, qv: Embedding, queryWords: Set<String>, asked: String, limit: Int, keep: Int): Scan {
+        val top = ArrayList<Candidate>(minOf(keep, 1024) + 1) // best first
+        var cut = false
         // The mapper does the work row by row, so only the few best candidates stay in memory, not every vector.
         q.vectorsForSearch(version) { kind, refId, text, vec ->
             val v = Embedding(VectorCodec.decode(vec))
@@ -94,31 +110,46 @@ class MemorySearch(
                     if (top.size < keep ||
                         pre > top.last().preScore
                     ) {
-                        offer(top, keep, Candidate(kind, refId, lower, meaning, pre), text, asked)
+                        if (offer(top, keep, Candidate(kind, refId, lower, meaning, pre), text, asked)) cut = true
+                    } else {
+                        cut = true
                     }
+                } else {
+                    cut = true
                 }
             }
         }.executeAsList()
-        if (top.isEmpty()) return emptyList()
+        if (top.isEmpty()) return Scan(emptyList(), stale = false, cut = cut)
         val current = currentTexts(top)
-        return top.mapNotNull { c ->
-            val text = current[c.kind to c.refId] ?: return@mapNotNull null // deleted or forgotten since it was indexed
+        var stale = false
+        val hits = top.mapNotNull { c ->
+            val text = current[c.kind to c.refId]
+            if (text == null || text.lowercase() != c.lowerText) stale = true
+            text ?: return@mapNotNull null // deleted or forgotten since it was indexed
             if (text.trim().lowercase() == asked) return@mapNotNull null // the question itself, said earlier
             Result(c.kind, c.refId, text, MEANING * c.meaning + WORDS * sharedWords(queryWords, text))
         }.filter { it.score >= MIN_SCORE }.sortedByDescending { it.score }.distinctBy { it.text.lowercase() }.take(limit)
+        return Scan(hits, stale, cut)
     }
 
-    /** Adds [c] to [top] (best first, at most [keep]) unless it is the question itself or a worse copy of a text already there. */
-    private fun offer(top: MutableList<Candidate>, keep: Int, c: Candidate, text: String, asked: String) {
-        if (text.trim().lowercase() == asked) return
+    /**
+     * Adds [c] to [top] (best first, at most [keep]) unless it is the question itself or a worse copy of a text already there.
+     * Returns true if a candidate was cut because [top] was full.
+     */
+    private fun offer(top: MutableList<Candidate>, keep: Int, c: Candidate, text: String, asked: String): Boolean {
+        if (text.trim().lowercase() == asked) return false
         val same = top.indexOfFirst { it.lowerText == c.lowerText }
         if (same >= 0) {
-            if (top[same].preScore >= c.preScore) return
+            if (top[same].preScore >= c.preScore) return false
             top.removeAt(same)
         }
         val at = top.indexOfFirst { it.preScore < c.preScore }.let { if (it < 0) top.size else it }
         top.add(at, c)
-        if (top.size > keep) top.removeAt(top.lastIndex)
+        if (top.size > keep) {
+            top.removeAt(top.lastIndex)
+            return true // a candidate was cut
+        }
+        return false
     }
 
     /** The current text of each candidate, read from its source table; a deleted or forgotten item is missing. */

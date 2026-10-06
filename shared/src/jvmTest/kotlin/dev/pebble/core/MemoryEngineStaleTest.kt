@@ -51,16 +51,19 @@ class MemoryEngineStaleTest {
     }
 
     @Test
-    fun moodMemoriesGoWhenTheWeekHasTooFewEntries() {
+    fun theMoodWeekGoesOnAQuietWeekButTheMonthlyWaterLinkStays() {
         for (d in 4..6) water.log(2000, at(d, 12))
         for (d in 4..6) memory.logMood(5, at(d, 20))
         for (d in 7..9) memory.logMood(2, at(d, 20))
         engine.learn()
         assertNotNull(memory.byKey(KEY_MOOD_WEEK))
         assertNotNull(memory.byKey(KEY_MOOD_WATER))
-        now += 25 * day // the month still holds the entries, the week holds none
+        now += 12 * day // the month still holds the entries, the week holds none
         engine.learn()
         assertNull(memory.byKey(KEY_MOOD_WEEK))
+        assertNotNull(memory.byKey(KEY_MOOD_WATER), "the water link uses 30 days, not the week")
+        now += 30 * day // now the month is empty too
+        engine.learn()
         assertNull(memory.byKey(KEY_MOOD_WATER))
     }
 

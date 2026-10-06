@@ -134,12 +134,13 @@ class NudgePolicyTest {
 
     @Test
     fun theChosenArmDoesNotDependOnHowTheLoggedPropensityIsEstimated() {
-        // The same seed gives the same decisions, one after the other (golden values).
+        // The same seed gives the same decisions, one after the other (golden values), with any draw count.
         val ctx = NudgeContext.of(ReminderKind.STRETCH, 10, busy = false)
-        val arms = NudgePolicy(InMemoryNudgeStore(), random = Random(42)).let { p -> List(12) { p.choose(ctx).arm } }
-        val again = NudgePolicy(InMemoryNudgeStore(), random = Random(42)).let { p -> List(12) { p.choose(ctx).arm } }
-        assertEquals(arms, again)
-        assertEquals(GOLDEN_ARMS, arms)
+        fun arms(draws: Int) =
+            NudgePolicy(InMemoryNudgeStore(), random = Random(42), propensityDraws = draws).let { p -> List(12) { p.choose(ctx).arm } }
+        assertEquals(GOLDEN_ARMS, arms(NudgePolicy.PROPENSITY_DRAWS))
+        assertEquals(GOLDEN_ARMS, arms(200), "fewer draws: the same arms")
+        assertEquals(GOLDEN_ARMS, arms(5_000), "more draws: the same arms")
     }
 
     private companion object {
