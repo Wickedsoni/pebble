@@ -6,6 +6,7 @@ import dev.pebble.db.PebbleDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlin.coroutines.CoroutineContext
 
 /** One exchange: what you said ([via] "typed" or "voice"), what Pebble did, and what it replied. */
 data class Turn(val atMillis: Long, val said: String, val via: String, val did: String, val reply: String)
@@ -20,8 +21,9 @@ class ConversationRepository(private val db: PebbleDatabase) {
 
     fun recent(limit: Long = 50): List<Turn> = q.recentTurns(limit).executeAsList().map(::toTurn)
 
-    fun recentFlow(limit: Long = 200): Flow<List<Turn>> =
-        q.recentTurns(limit).asFlow().mapToList(Dispatchers.Default).map { rows -> rows.map(::toTurn) }
+    /** The newest [limit] turns, again after each change. The query runs on [context]. */
+    fun recentFlow(limit: Long = 200, context: CoroutineContext = Dispatchers.Default): Flow<List<Turn>> =
+        q.recentTurns(limit).asFlow().mapToList(context).map { rows -> rows.map(::toTurn) }
 
     fun clear() {
         q.clearTurns()

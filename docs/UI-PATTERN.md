@@ -69,9 +69,9 @@ Test these items for each page:
 | Today | "Agenda" card done (WP E2: `AgendaStateHolder`); the rest of the page to do |
 | Notes | Done (WP E3c-3: `NotesStateHolder`); "History" dialog (`HistoryStateHolder`) |
 | Water | To do |
-| Chat | To do |
-| Memory | Search card done (WP C2: `MemorySearchStateHolder`); "Teach Pebble a command" card done (WP C3: `TeachStateHolder`); "Recently deleted" card done (WP E3c-2: `RecentlyDeletedStateHolder`); the rest of the page to do |
-| Companion | To do |
+| Chat | Done (QA W4-B: `ChatStateHolder`; Quick Add uses it too; "Clear conversation" asks first) |
+| Memory | Search card done (WP C2: `MemorySearchStateHolder`); "Teach Pebble a command" card done (WP C3: `TeachStateHolder`); "Recently deleted" card done (WP E3c-2: `RecentlyDeletedStateHolder`); "Privacy" card done (QA W4-B: `PrivacyStateHolder`); the rest of the page to do |
+| Companion | Done (QA W4-B: `CompanionStateHolder`; the growth is counted off the UI thread) |
 | About | "Model packs" card done (WP D2: `ModelPacksStateHolder`); "Backup" card done (WP E4: `BackupStateHolder`); the rest is fixed text |
 
 Change one page in each PR. Update this table in the same PR.

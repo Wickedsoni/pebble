@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,11 +47,37 @@ import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.Toggle
 import dev.pebble.desktop.ui.pressable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Choose the companion, see its growth, background and behaviour. The growth is counted by [CompanionStateHolder]
+ * off the UI thread; it counts again when the earned stage changes.
+ */
 @Composable
 fun CompanionPage(
     pet: PetController,
+    petVisible: Boolean,
+    onPetVisible: (Boolean) -> Unit,
+    autostart: Boolean,
+    onAutostart: (Boolean) -> Unit,
+    scene: Scene,
+    onScene: (Scene) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    // The page gets only the pet, not the app, so there is no AppEnv here: the count runs on the shared IO pool.
+    val holder = remember { CompanionStateHolder({ withContext(Dispatchers.IO) { pet.growth() } }, scope) }
+    val state by holder.state.collectAsState()
+    LaunchedEffect(pet.earned) { holder.onEvent(CompanionEvent.Refresh) }
+    CompanionContent(pet, state, petVisible, onPetVisible, autostart, onAutostart, scene, onScene)
+}
+
+/** Stateless apart from the pet: it draws [state] and the choices of [pet]. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CompanionContent(
+    pet: PetController,
+    state: CompanionUiState,
     petVisible: Boolean,
     onPetVisible: (Boolean) -> Unit,
     autostart: Boolean,
@@ -97,9 +127,11 @@ fun CompanionPage(
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                val growth = remember(pet.earned) { pet.growth() }
-                val next = growth.next
-                if (next == null) {
+                val growth = state.growth
+                val next = growth?.next
+                if (growth == null) {
+                    Text("Counting what you did…", color = c.secondary, fontSize = 13.sp)
+                } else if (next == null) {
                     Text("Legendary! Every stage unlocked. 🏆", color = c.content, fontSize = 13.sp)
                 } else {
                     Text("To grow into ${next.label}:", color = c.content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.pebble.desktop.platform.SystemTheme
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
@@ -79,14 +79,14 @@ fun glassColors(dark: Boolean) = if (dark) {
 
 val LocalGlass = compositionLocalOf { glassColors(dark = false) }
 
-/** Follows the Windows light/dark app setting. Polled rarely — a registry read every 30 s is negligible. */
+/** Follows the Windows light/dark app setting. The registry read runs on [io]. Polled rarely — a registry read every 30 s is negligible. */
 @Composable
-fun rememberSystemDarkTheme(): Boolean {
+fun rememberSystemDarkTheme(io: CoroutineDispatcher): Boolean {
     var dark by remember { mutableStateOf(SystemTheme.isDark()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000)
-            dark = withContext(Dispatchers.IO) { SystemTheme.isDark() }
+            dark = withContext(io) { SystemTheme.isDark() }
         }
     }
     return dark
