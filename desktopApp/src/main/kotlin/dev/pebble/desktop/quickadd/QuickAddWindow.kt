@@ -58,13 +58,15 @@ import dev.pebble.desktop.ui.FrostedPanel
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.glassColors
 import dev.pebble.desktop.voice.VoiceInput
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val SIZE = DpSize(660.dp, 480.dp)
 
@@ -118,20 +120,30 @@ fun QuickAddWindow(
         // The chat model is writing a reply (Smart replies).
         var thinking by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
-        val turns by remember { app.conversation.recentFlow(30) }.collectAsState(initial = app.conversation.recent(30))
+        // The first read happens once, not at every recomposition (a keystroke, a mic level).
+        val firstTurns = remember { app.conversation.recent(30) }
+        val turns by remember { app.conversation.recentFlow(30) }.collectAsState(initial = firstTurns)
+        // False once this window is gone: a reply that finishes later is then only said by the pet.
+        val alive = remember { AtomicBoolean(true) }
+        DisposableEffect(Unit) { onDispose { alive.set(false) } }
+        val debounce = remember { arrayOfNulls<Job>(1) }
+        var submitting by remember { mutableStateOf(false) }
         val voice = app.voice
         val voiceState by voice.state.collectAsState()
         DisposableEffect(Unit) { onDispose { voice.cancel() } }
         val focus = remember { FocusRequester() }
         var routed by remember { mutableStateOf<CommandRouter.Routed?>(null) }
+        // The text that [routed] was made for: Enter must not run the route of an older text.
+        var routedFor by remember { mutableStateOf<String?>(null) }
 
-        fun answered(line: PetLine) {
+        fun answered(line: PetLine, pet: Boolean = true) {
             lastLine = line
-            onPet(line)
+            if (pet) onPet(line)
             text = ""
             heard = null
             activeRetry = null
             routed = null
+            routedFor = null
             focus.requestFocus()
         }
 
@@ -142,20 +154,13 @@ fun QuickAddWindow(
             if (heard != null) app.noteVoiceCorrection(text)
             if (r.command is QuickCommand.Chitchat && app.smartRepliesOn()) {
                 // Smart replies (WP C5): ask the chat model off the UI thread; it falls back to the canned line.
-                val said = text
-                val v = via()
+                // App-owned (not this window's scope): closing Quick Add must not drop the answer.
                 thinking = true
-                scope.launch {
-                    val reply = try {
-                        app.smartReply(r.command)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null // the canned line answers
-                    } finally {
+                app.converseAsync(text, via(), r, { t, a -> onRetry(QuickAddRetry(t, a)) }) { line ->
+                    if (alive.get()) {
                         thinking = false
+                        if (line != null) answered(line, pet = false)
                     }
-                    answered(app.converse(said, v, r, reply) { t, a -> onRetry(QuickAddRetry(t, a)) })
                 }
                 return
             }
@@ -167,20 +172,12 @@ fun QuickAddWindow(
             if (heard != null) app.noteVoiceCorrection(text)
             val ask = routed as? CommandRouter.Routed.Ask
             if (option.command is QuickCommand.Chitchat && app.smartRepliesOn()) {
-                val said = text
-                val v = via()
                 thinking = true
-                scope.launch {
-                    val reply = try {
-                        app.smartReply(option.command)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null // the canned line answers
-                    } finally {
+                app.converseChoiceAsync(text, via(), option, ask?.understood) { line ->
+                    if (alive.get()) {
                         thinking = false
+                        if (line != null) answered(line, pet = false)
                     }
-                    answered(app.converseChoice(said, v, option, ask?.understood, reply))
                 }
                 return
             }
@@ -194,12 +191,16 @@ fun QuickAddWindow(
 
         // Route as you type: rules are instant; the model (~5 ms) runs off the UI thread, debounced.
         LaunchedEffect(text) {
+            debounce[0] = currentCoroutineContext()[Job]
             if (text.isBlank()) {
                 routed = null
+                routedFor = null
                 return@LaunchedEffect
             }
             delay(120)
-            routed = withContext(Dispatchers.Default) { route(text) }
+            val typed = text
+            routed = withContext(app.env.dispatchers.default) { route(typed) }
+            routedFor = typed
         }
 
         // Voice: show what was heard, then just do it when Pebble is sure (it asks when it isn't).
@@ -208,8 +209,9 @@ fun QuickAddWindow(
             voice.reset()
             text = heardNow
             heard = heardNow
-            val r = withContext(Dispatchers.Default) { route(heardNow) }
+            val r = withContext(app.env.dispatchers.default) { route(heardNow) }
             routed = r
+            routedFor = heardNow
             if (r is CommandRouter.Routed.Run) {
                 delay(400) // a beat to see your words before Pebble answers
                 if (text == heardNow) run(r)
@@ -217,13 +219,31 @@ fun QuickAddWindow(
         }
 
         fun submit() {
-            when (val r = routed ?: route(text)) {
-                is CommandRouter.Routed.Run -> run(r)
+            if (submitting) return
+            submitting = true
+            debounce[0]?.cancel() // Enter came inside the debounce: route here, once
+            val typed = text
+            scope.launch {
+                try {
+                    val r = freshRoute(routed, routedFor, typed) ?: withContext(app.env.dispatchers.default) { route(typed) }
+                    if (text != typed) return@launch // edited while routing
+                    when (r) {
+                        is CommandRouter.Routed.Run -> run(r)
 
-                is CommandRouter.Routed.Ask -> Unit
+                        is CommandRouter.Routed.Ask -> {
+                            routed = r
+                            routedFor = typed
+                        }
 
-                // pick one of the choices
-                null -> Unit
+                        // nothing to run: drop a preview made for an older text
+                        null -> {
+                            routed = null
+                            routedFor = typed
+                        }
+                    }
+                } finally {
+                    submitting = false
+                }
             }
         }
 
@@ -409,3 +429,6 @@ private fun VoiceBar(state: VoiceInput.State, allowed: Boolean, onMic: () -> Uni
         Text(note, color = if (state is VoiceInput.State.Failed) colors.accent else colors.secondary, fontSize = 11.sp)
     }
 }
+
+/** The route of [typed] when [routed] was made for exactly that text; else null (route again). */
+internal fun <T> freshRoute(routed: T?, routedFor: String?, typed: String): T? = routed.takeIf { routedFor == typed }
