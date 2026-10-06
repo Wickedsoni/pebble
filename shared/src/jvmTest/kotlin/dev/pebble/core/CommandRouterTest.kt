@@ -260,4 +260,69 @@ class CommandRouterTest {
         assertEquals(QuickCommand.ShowNotes, route("read my shopping list"), "no topic named: the latest notes, as before")
         assertEquals(QuickCommand.ShowNotes, route("meri notes dikhao"))
     }
+
+    @Test
+    fun aReminderTitleKeepsItsInnerWords() {
+        val text = "remind me to pick up the kids at school tomorrow evening at five"
+        val tags = List(9) { "O" } + listOf("B-date", "B-timeofday", "O", "B-time")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        assertEquals(QuickCommand.RemindAt("Pick up the kids at school", 17, 0, 1, false), r.command)
+    }
+
+    @Test
+    fun aNumberInTheTitleIsNotATime() {
+        val text = "remind me to buy 3 apples tomorrow"
+        val tags = List(6) { "O" } + listOf("B-date")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Ask
+        assertEquals("What time Tomorrow: “Buy 3 apples”?", r.question)
+    }
+
+    @Test
+    fun aVerbDoIsNotTwoOClock() {
+        val text = "remind me to do homework tomorrow"
+        val tags = List(5) { "O" } + listOf("B-date")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text)
+        assertIs<Routed.Ask>(r)
+        val hinglish = "kal yaad dila do"
+        val h = CommandRouter({ model(hinglish to u(hinglish, listOf("B-date", "O", "O", "O"), "calendar_set" to 0.9f)) }).route(hinglish)
+        assertIs<Routed.Ask>(h)
+    }
+
+    @Test
+    fun aDurationWordAwayFromTheTimeIsNotARelativeReminder() {
+        val text = "remind me about the 30 minute standup at 4"
+        val tags = List(7) { "O" } + listOf("O", "B-time")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        assertIs<QuickCommand.RemindAt>(r.command)
+        assertEquals(4, r.command.hour)
+    }
+
+    @Test
+    fun framingWordsGoFromAnyPositionButInnerWordsStay() {
+        val ping = "ping me in 15 mins to take the clothes off the line"
+        val pingTags = listOf("O", "O", "O", "B-time", "I-time", "O", "O", "O", "O", "O", "O", "O")
+        val r = CommandRouter({ model(ping to u(ping, pingTags, "calendar_set" to 0.9f)) }).route(ping) as Routed.Run
+        assertEquals(QuickCommand.RemindIn("Take the clothes off the line", 15), r.command)
+
+        val hey = "hey pebble remind me to call mom tomorrow evening at five"
+        val heyTags = List(6) { "O" } + listOf("O", "B-date", "B-timeofday", "O", "B-time")
+        val h = CommandRouter({ model(hey to u(hey, heyTags, "calendar_set" to 0.9f)) }).route(hey) as Routed.Run
+        assertEquals(QuickCommand.RemindAt("Call mom", 17, 0, 1, false), h.command)
+    }
+
+    @Test
+    fun keBaadSetsARelativeReminder() {
+        val text = "10 minute ke baad chai banane ki yaad dilana"
+        val tags = listOf("B-time", "I-time", "I-time", "I-time", "O", "O", "O", "O", "O")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        assertEquals(10, (r.command as QuickCommand.RemindIn).minutes)
+    }
+
+    @Test
+    fun aNameLikeWillStaysAtTheEndOfATitle() {
+        val text = "remind me to call will at five"
+        val tags = List(5) { "O" } + listOf("B-time")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        assertEquals("Call will", (r.command as QuickCommand.RemindAt).title)
+    }
 }

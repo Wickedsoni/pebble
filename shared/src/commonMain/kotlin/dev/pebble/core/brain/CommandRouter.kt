@@ -72,8 +72,6 @@ class CommandRouter(
         }
     }
 
-    // Null for a reminder whose time we couldn't read.
-
     /**
      * Always asks: the choices for [input] without [exclude] — used after "Not what I meant", where
      * [exclude] is what Pebble wrongly did. Saving as a note is always offered (unless excluded).
@@ -113,6 +111,7 @@ class CommandRouter(
         else -> QuickCommand.Unsupported(text, intent)
     }
 
+    /** The reminder the model meant; null for a reminder whose time we couldn't read. */
     private fun reminder(u: Understood, text: String, intent: String): QuickCommand? {
         val slots = u.slots()
         val slotText = listOfNotNull(slots["date"], slots["timeofday"], slots["time"]).joinToString(" ")
@@ -144,19 +143,42 @@ class CommandRouter(
     }
 
     /**
-     * The reminder text: every word except time/date words and reminder filler, so slot words like
-     * the person ("mummy") stay in. Never the whole sentence: if nothing is left, a plain label.
+     * The reminder text. Time and date words go wherever they stand, and so does a number next to one ("at 5").
+     * Framing filler ("remind me to", "yaad dila do") goes only from the start and the end, so inner words stay:
+     * "pick up the kids at school" keeps its "up" and "at". Hindi particles ("ko", "ki"…) always go. Slot words
+     * like the person ("mummy") stay in. Never the whole sentence: if nothing is left, a plain label.
      */
     private fun reminderTitle(u: Understood, text: String, intent: String = u.top.intent): String {
-        val timeTags = setOf("time", "date", "timeofday")
-        val kept = u.words.zip(u.tags).filter { (w, t) ->
-            val kind = t.removePrefix("B-").removePrefix("I-")
-            (t == "O" || kind !in timeTags) &&
-                w.lowercase().trim(',', '.', '?', '!') !in filler &&
-                HinglishTime.numberOf(w.lowercase()) == null
-        }.map { it.first }
-        val title = kept.joinToString(" ").trim()
+        val words = u.words.zip(u.tags).map { (w, t) ->
+            TitleWord(w, w.lowercase().trim(',', '.', '?', '!'), t.removePrefix("B-").removePrefix("I-"))
+        }
+        fun isTimeWord(i: Int) = words[i].tag in timeTags || words[i].low in timeWords
+        val kept = words.indices.filter { i ->
+            val weakCue = i > 0 && words[i - 1].low in HinglishTime.weakClockCues && (i == words.lastIndex || isTimeWord(i + 1))
+            val nextToTime = weakCue ||
+                (i > 0 && (isTimeWord(i - 1) || words[i - 1].low in HinglishTime.strongClockCues)) ||
+                (i < words.lastIndex && (isTimeWord(i + 1) || words[i + 1].low in HinglishTime.strongClockCues))
+            !isTimeWord(i) && words[i].low !in particles && !(HinglishTime.numberOf(words[i].low) != null && nextToTime)
+        }.map { words[it] }
+        val trimmed = withoutFramingPhrases(kept).dropWhile {
+            it.low in filler || it.low in leadingFiller
+        }.dropLastWhile { it.low in filler }
+        val title = trimmed.joinToString(" ") { it.text }.trim()
         return title.ifBlank { if (intent == "alarm_set") "Wake up" else "Reminder" }.replaceFirstChar(Char::uppercase)
+    }
+
+    /** One word of a reminder sentence: as written, lower case without end punctuation, and its slot kind. */
+    private class TitleWord(val text: String, val low: String, val tag: String)
+
+    /** [words] without any "remind me (to)" / "yaad dila do" / "reminder laga do" run, wherever it stands. */
+    private fun withoutFramingPhrases(words: List<TitleWord>): List<TitleWord> {
+        val out = ArrayList<TitleWord>()
+        var i = 0
+        while (i < words.size) {
+            val phrase = framingPhrases.firstOrNull { p -> p.indices.all { words.getOrNull(i + it)?.low == p[it] } }
+            if (phrase != null) i += phrase.size else out += words[i++]
+        }
+        return out
     }
 
     private fun askWhen(text: String, u: Understood): Routed.Ask {
@@ -226,16 +248,35 @@ class CommandRouter(
             else -> "Something else"
         }
 
-        /** Words that frame a reminder rather than describe it, in all three scripts. */
+        private val timeTags = setOf("time", "date", "timeofday")
+
+        /** Hindi particles: never part of a title, wherever they stand. */
+        private val particles = setOf("ki", "ka", "ke", "ko", "की", "का", "के", "को")
+
+        /** Phrases that frame a reminder, removed wherever they stand. Longest first. */
+        private val framingPhrases = listOf(
+            listOf("remind", "me", "to"), listOf("remind", "me"), listOf("remind", "to"),
+            listOf("yaad", "dila", "do"), listOf("yaad", "dila", "dena"), listOf("yaad", "dilana"), listOf("yaad", "dilaana"),
+            listOf("yaad", "dila"), listOf("reminder", "laga", "do"), listOf("reminder", "lagao"), listOf("reminder", "laga"),
+            listOf("याद", "दिला", "दो"), listOf("याद", "दिला", "देना"), listOf("याद", "दिलाना"), listOf("याद", "दिला"),
+            listOf("रिमाइंडर", "लगा", "दो"), listOf("रिमाइंडर", "लगाओ"), listOf("रिमाइंडर", "लगा"),
+        )
+
+        /** Polite openers, removed only at the start: "will" and "ping" can be names at the end ("call will"). */
+        private val leadingFiller = setOf("can", "could", "would", "will", "you", "hey", "pebble", "ping", "kindly")
+
+        /** Words that frame a reminder rather than describe it, in all three scripts. Removed only at the start or end. */
         private val filler = setOf(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
             "around", "approximately", "by", "pls", "plz", "dont", "lagbhag", "लगभग",
-            "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "dila", "do", "karo", "kar", "ki", "ka", "ke", "ko",
-            "reminder", "laga", "lagao", "set", "utha",
-            "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "की", "का", "के", "को", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",
-            // Time words the model may leave untagged — they belong to the time, never the title.
+            "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "do", "karo", "kar", "laga", "lagao", "utha", "in",
+            "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",
+        )
+
+        /** Time words the model may leave untagged. They belong to the time, never the title, wherever they stand. */
+        private val timeWords = setOf(
             "baje", "bje", "o'clock", "oclock", "am", "pm", "subah", "shaam", "sham", "raat", "dopahar", "kal", "aaj", "parso",
-            "today", "tomorrow", "tonight", "morning", "evening", "night", "afternoon", "min", "mins", "minute", "minutes", "baad", "in",
+            "today", "tomorrow", "tonight", "morning", "evening", "night", "afternoon", "min", "mins", "minute", "minutes", "baad",
             "बजे", "सुबह", "शाम", "रात", "दोपहर", "कल", "आज", "परसों", "मिनट", "बाद", "घंटे",
         )
     }

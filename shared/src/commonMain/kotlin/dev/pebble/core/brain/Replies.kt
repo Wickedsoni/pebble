@@ -16,9 +16,11 @@ enum class Script {
             "sunao", "batao", "chalo", "mein", "ka", "ki", "ke", "ko", "se", "koi", "kuch", "kholo", "khol", "paani", "pani",
         )
 
+        private val nonLatinLetterRx = Regex("""[^a-z]+""")
+
         fun detect(text: String): Script = when {
             text.any { it in 'ऀ'..'ॿ' } -> HI_DEVA
-            text.lowercase().split(Regex("""[^a-z]+""")).count { it in hinglishMarkers } >= 1 -> HI_ROMAN
+            text.lowercase().split(nonLatinLetterRx).count { it in hinglishMarkers } >= 1 -> HI_ROMAN
             else -> EN
         }
     }
@@ -41,9 +43,12 @@ object Replies {
         "मन नहीं", "मन नही", "दिल नहीं लग", "थक गया हूं", "थक गई हूं", "थक गया हूँ", "थक गई हूँ",
     )
 
+    private val nonLetterOrSpaceRx = Regex("""[^\p{L}\p{M}\s]""")
+    private val nonLetterRx = Regex("""[^\p{L}\p{M}]+""")
+
     /** Words that signal a low mood, in all three scripts. */
     fun isLowMood(text: String): Boolean {
-        val t = " " + text.lowercase().replace(Regex("""[^\p{L}\p{M}\s]"""), " ") + " "
+        val t = " " + text.lowercase().replace(nonLetterOrSpaceRx, " ") + " "
         return lowMoodWords.any { w -> if (w.contains(' ') || w.any { it in 'ऀ'..'ॿ' }) w in t else " $w " in t }
     }
 
@@ -273,7 +278,7 @@ object Replies {
      */
     fun chitchat(text: String, intent: String, mood: String? = null, random: Random = Random): String {
         val s = Script.detect(text)
-        val words = text.lowercase().split(Regex("""[^\p{L}\p{M}]+""")).filter { it.isNotEmpty() }.toSet()
+        val words = text.lowercase().split(nonLetterRx).filter { it.isNotEmpty() }.toSet()
         val pool = when {
             intent == LOW_MOOD || mood == "low" || isLowMood(text) -> caring
             intent == "general_joke" -> jokes

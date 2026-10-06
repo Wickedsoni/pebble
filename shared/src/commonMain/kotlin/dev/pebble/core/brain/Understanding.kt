@@ -33,7 +33,7 @@ data class Understood(
      * never summed: each stays its own guess, or 47 small leftovers would add up to false confidence.
      */
     val actions: List<ActionGuess> by lazy {
-        guesses.groupBy { PebbleActions.fromMassive(it.intent).let { a -> if (a == PebbleActions.OTHER) "other:${it.intent}" else a } }
+        guesses.groupBy { actionGroupOf(it.intent) }
             .map { (_, gs) ->
                 val best = gs.maxBy { it.confidence }
                 ActionGuess(PebbleActions.fromMassive(best.intent), gs.sumOf { it.confidence.toDouble() }.toFloat(), best.intent)
@@ -62,6 +62,13 @@ data class Understood(
         return out
     }
 }
+
+/**
+ * The key that groups intents into one action: the Pebble action of [intent], or `other:<intent>` for the intents
+ * that map to "other" (music, weather, news…), so each of those stays its own group and never adds up.
+ */
+internal fun actionGroupOf(intent: String): String =
+    PebbleActions.fromMassive(intent).let { if (it == PebbleActions.OTHER) "other:$intent" else it }
 
 /** Anything that can read a command: the local ONNX model on desktop, a stub in tests. */
 fun interface Understanding {

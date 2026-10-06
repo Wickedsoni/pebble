@@ -65,18 +65,18 @@ object ChatSafety {
 
     /** The reply made safe to show, or null to use the canned line. */
     fun clean(raw: String, ctx: ReplyContext): String? {
-        var t = raw.replace(Regex("""(?s)<think>.*?</think>"""), "")
-            .replace(Regex("""^\s*(pebble|assistant)\s*:\s*""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""[*_#`>]"""), "")
-            .replace(Regex("""\s+"""), " ")
+        var t = raw.replace(thinkRx, "")
+            .replace(speakerPrefixRx, "")
+            .replace(markdownRx, "")
+            .replace(whitespaceRx, " ")
             .trim().trim('"', '“', '”')
         if (t.isEmpty() || t.contains("<think>")) return null
         // At most two sentences, then at most MAX_CHARS (cut at a word).
-        val sentences = Regex("""[^.!?।]+[.!?।]*""").findAll(t).map { it.value.trim() }.filter { it.isNotEmpty() }.toList()
+        val sentences = sentenceRx.findAll(t).map { it.value.trim() }.filter { it.isNotEmpty() }.toList()
         t = sentences.take(2).joinToString(" ")
         if (t.length > MAX_CHARS) t = t.take(MAX_CHARS).substringBeforeLast(' ') + "…"
         val lower = t.lowercase()
-        if (Regex("""https?://|www\.""").containsMatchIn(lower)) return null
+        if (linkRx.containsMatchIn(lower)) return null
         if (claimsAction.containsMatchIn(lower)) return null // the model cannot act; a claim would be a lie
         if (crisis.containsMatchIn(lower) || unsafe.containsMatchIn(lower) || advice.containsMatchIn(lower) ||
             rude.containsMatchIn(lower)
@@ -98,6 +98,12 @@ object ChatSafety {
     const val MAX_CHARS = 220
 
     private val wordRx = Regex("""[\p{L}\p{M}\p{N}]+""")
+    private val thinkRx = Regex("""(?s)<think>.*?</think>""")
+    private val speakerPrefixRx = Regex("""^\s*(pebble|assistant)\s*:\s*""", RegexOption.IGNORE_CASE)
+    private val markdownRx = Regex("""[*_#`>]""")
+    private val whitespaceRx = Regex("""\s+""")
+    private val sentenceRx = Regex("""[^.!?।]+[.!?।]*""")
+    private val linkRx = Regex("""https?://|www\.""")
 
     /** Most of the reply's words are the user's own words. */
     private fun echoes(reply: String, user: String): Boolean {
