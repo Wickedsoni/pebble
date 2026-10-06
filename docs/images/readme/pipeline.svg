@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="t d">
+  <title id="t">How Pebble understands you</title>
+  <desc id="d">Voice or typed text goes through rules, the e5 encoder, the intent, slot and mood heads with your personal layer, then a calibrated decision to act or ask. What you do next becomes training data.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10131B"/><stop offset="1" stop-color="#181C27"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#D97757"/><stop offset="0.5" stop-color="#E2B84A"/><stop offset="1" stop-color="#7FE0E8"/>
+    </linearGradient>
+    <linearGradient id="loop" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#7FE0E8"/><stop offset="1" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="3"/></filter>
+    <clipPath id="card"><rect width="1200" height="400" rx="24"/></clipPath>
+  </defs>
+  <style>
+    .f { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .h { font-size: 16px; font-weight: 700; fill: #F4F5F9; }
+    .s { font-size: 12.5px; fill: #A9B0BB; }
+    .box { fill: #FFFFFF; fill-opacity: .05; stroke: #FFFFFF; stroke-opacity: .13; }
+    .wire { fill: none; stroke: url(#edge); stroke-width: 2; stroke-dasharray: 5 6; animation: flow 1.2s linear infinite; }
+    .back { fill: none; stroke: url(#loop); stroke-width: 2; stroke-dasharray: 5 6; animation: flow 1.6s linear infinite reverse; }
+    @keyframes flow { to { stroke-dashoffset: -22; } }
+    .n { opacity: 0; animation: pop .6s cubic-bezier(.2,.8,.2,1) forwards; }
+    @keyframes pop { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .bl { animation: breathe 8s ease-in-out infinite alternate; }
+    @keyframes breathe { to { transform: translateX(160px); } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } .n { opacity: 1; } }
+  </style>
+
+  <g clip-path="url(#card)">
+    <rect width="1200" height="400" fill="url(#bg)"/>
+    <g filter="url(#blur)" opacity=".35">
+      <circle class="bl" cx="200" cy="380" r="160" fill="#8B7CF6"/>
+      <circle cx="1050" cy="40" r="170" fill="#2FB6C4"/>
+    </g>
+  </g>
+  <rect x=".5" y=".5" width="1199" height="399" rx="24" fill="none" stroke="#FFFFFF" stroke-opacity=".08"/>
+
+  <g class="f">
+    <text x="40" y="52" font-size="13" font-weight="700" letter-spacing="2.5" fill="#7FE0E8">HOW IT WORKS</text>
+    <text x="40" y="80" font-size="22" font-weight="700" fill="#F4F5F9">From a messy sentence to an action, on your CPU</text>
+
+    <!-- wires -->
+    <path class="wire" d="M200 140 C 215 140, 215 185, 232 185"/>
+    <path class="wire" d="M200 230 C 215 230, 215 185, 232 185"/>
+    <path class="wire" d="M392 185 H422"/>
+    <path class="wire" d="M582 185 H612"/>
+    <path class="wire" d="M772 185 H802"/>
+    <path class="wire" d="M962 185 H992"/>
+    <path id="lp" class="back" d="M1077 240 V320 H692 V240"/>
+
+    <!-- moving data -->
+    <g filter="url(#glow)">
+      <circle r="5" fill="#E2B84A"><animateMotion dur="3.2s" repeatCount="indefinite" path="M200 140 C 215 140, 215 185, 232 185 H1077"/></circle>
+      <circle r="5" fill="#F3A27F"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite" path="M200 230 C 215 230, 215 185, 232 185 H1077"/></circle>
+      <circle r="4" fill="#C4B5FD"><animateMotion dur="2.4s" begin=".8s" repeatCount="indefinite" path="M1077 240 V320 H692 V240"/></circle>
+    </g>
+
+    <!-- input -->
+    <g class="n" style="animation-delay:.05s">
+      <rect class="box" x="40" y="108" width="160" height="66" rx="14"/>
+      <rect x="40" y="108" width="4" height="66" rx="2" fill="#8AB4FF"/>
+      <text class="h" x="58" y="134">Voice</text>
+      <text class="s" x="58" y="156">hold key · VAD · Whisper</text>
+    </g>
+    <g class="n" style="animation-delay:.15s">
+      <rect class="box" x="40" y="197" width="160" height="66" rx="14"/>
+      <rect x="40" y="197" width="4" height="66" rx="2" fill="#F3A27F"/>
+      <text class="h" x="58" y="223">Typed</text>
+      <text class="s" x="58" y="245">any script, mixed freely</text>
+    </g>
+
+    <g class="n" style="animation-delay:.3s">
+      <rect class="box" x="232" y="130" width="160" height="110" rx="14"/>
+      <text x="252" y="160" font-size="11" font-weight="700" letter-spacing="1.5" fill="#E2B84A">1 · RULES</text>
+      <text class="h" x="252" y="184">Exact syntax</text>
+      <text class="s" x="252" y="206">Hinglish times, dates</text>
+      <text class="s" x="252" y="224">weekdays in 3 scripts</text>
+    </g>
+    <g class="n" style="animation-delay:.45s">
+      <rect class="box" x="422" y="130" width="160" height="110" rx="14"/>
+      <text x="442" y="160" font-size="11" font-weight="700" letter-spacing="1.5" fill="#E2B84A">2 · ENCODER</text>
+      <text class="h" x="442" y="184">e5-small, int8</text>
+      <text class="s" x="442" y="206">31 MB ONNX model</text>
+      <text class="s" x="442" y="224">about 5 ms on a CPU</text>
+    </g>
+    <g class="n" style="animation-delay:.6s">
+      <rect class="box" x="612" y="130" width="160" height="110" rx="14"/>
+      <text x="632" y="160" font-size="11" font-weight="700" letter-spacing="1.5" fill="#7FE0E8">3 · HEADS + YOU</text>
+      <text class="h" x="632" y="184">Intent · slots</text>
+      <text class="s" x="632" y="206">mood · embedding</text>
+      <text class="s" x="632" y="224">+ your personal layer</text>
+    </g>
+    <g class="n" style="animation-delay:.75s">
+      <rect class="box" x="802" y="130" width="160" height="110" rx="14"/>
+      <text x="822" y="160" font-size="11" font-weight="700" letter-spacing="1.5" fill="#7FE0E8">4 · DECIDE</text>
+      <text class="h" x="822" y="184">Act, or ask</text>
+      <text class="s" x="822" y="206">calibrated confidence</text>
+      <text class="s" x="822" y="224">“Did you mean…?”</text>
+    </g>
+    <g class="n" style="animation-delay:.9s">
+      <rect x="992" y="130" width="170" height="110" rx="14" fill="#7FE0E8" fill-opacity=".09" stroke="#7FE0E8" stroke-opacity=".45"/>
+      <text x="1012" y="160" font-size="11" font-weight="700" letter-spacing="1.5" fill="#7FE0E8">5 · ACT</text>
+      <text class="h" x="1012" y="184">Note, reminder,</text>
+      <text class="h" x="1012" y="204">event, water…</text>
+      <text class="s" x="1012" y="224">reply in your script</text>
+    </g>
+
+    <g class="n" style="animation-delay:1.1s">
+      <rect x="742" y="304" width="286" height="32" rx="16" fill="#221F31" stroke="#C4B5FD" stroke-opacity=".4"/>
+      <text x="885" y="325" text-anchor="middle" font-size="13" font-weight="600" fill="#DDD6FE">“Not what I meant” · teach · pick → learns</text>
+    </g>
+    <text x="40" y="372" class="s">No network call at any step. Models load on demand and unload after 10 idle minutes.</text>
+  </g>
+</svg>

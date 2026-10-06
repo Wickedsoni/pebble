@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="150" viewBox="0 0 1200 150" role="img" aria-labelledby="t d">
+  <title id="t">Pebble in numbers</title>
+  <desc id="d">31 MB command model. About 5 ms per command. More than 380 automated tests. 19 architecture decision records. Zero bytes sent to a server.</desc>
+  <defs>
+    <linearGradient id="num" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F3A27F"/><stop offset=".5" stop-color="#E2B84A"/><stop offset="1" stop-color="#7FE0E8"/>
+    </linearGradient>
+    <linearGradient id="num2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7FE0E8"/><stop offset="1" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1F2B"/><stop offset="1" stop-color="#12151D"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#FFFFFF" stop-opacity=".09"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="c1"><rect x="0" y="5" width="1200" height="140" rx="20"/></clipPath>
+  </defs>
+  <style>
+    .f { font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .n { font-size: 42px; font-weight: 800; letter-spacing: -1px; }
+    .l { font-size: 14px; fill: #A9B0BB; }
+    .c { opacity: 0; animation: up .7s cubic-bezier(.2,.8,.2,1) forwards; }
+    @keyframes up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    .sh { animation: sweep 5s ease-in-out 1.2s infinite; }
+    @keyframes sweep { from { transform: translateX(-300px); } 40%, to { transform: translateX(1300px); } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } .c { opacity: 1; } }
+  </style>
+  <rect x="0" y="5" width="1200" height="140" rx="20" fill="url(#card)" stroke="#FFFFFF" stroke-opacity=".08"/>
+  <g clip-path="url(#c1)"><rect class="sh" x="0" y="5" width="240" height="140" fill="url(#shine)"/></g>
+  <g stroke="#FFFFFF" stroke-opacity=".08"><path d="M240 35V115M480 35V115M720 35V115M960 35V115"/></g>
+  <g class="f" text-anchor="middle">
+    <g class="c" style="animation-delay:.05s"><text class="n" x="120" y="80" fill="url(#num)">31 MB</text><text class="l" x="120" y="108">command model, int8</text></g>
+    <g class="c" style="animation-delay:.2s"><text class="n" x="360" y="80" fill="url(#num)">~5 ms</text><text class="l" x="360" y="108">per command on a CPU</text></g>
+    <g class="c" style="animation-delay:.35s"><text class="n" x="600" y="80" fill="url(#num)">380+</text><text class="l" x="600" y="108">automated tests in CI</text></g>
+    <g class="c" style="animation-delay:.5s"><text class="n" x="840" y="80" fill="url(#num2)">19</text><text class="l" x="840" y="108">architecture decisions (ADRs)</text></g>
+    <g class="c" style="animation-delay:.65s"><text class="n" x="1080" y="80" fill="url(#num2)">0 bytes</text><text class="l" x="1080" y="108">sent to any server</text></g>
+  </g>
+</svg>

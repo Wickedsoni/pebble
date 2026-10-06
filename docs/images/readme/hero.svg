@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="t d">
+  <title id="t">Pebble</title>
+  <desc id="d">Pebble, a desktop pet for Windows that understands English, Hindi and Hinglish. Its AI runs on your laptop.</desc>
+  <defs>
+    <clipPath id="card"><rect width="1200" height="420" rx="28"/></clipPath>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0D0F15"/>
+      <stop offset="1" stop-color="#161A24"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0" spreadMethod="reflect">
+      <stop offset="0" stop-color="#F3A27F"/>
+      <stop offset="0.35" stop-color="#E2B84A"/>
+      <stop offset="0.7" stop-color="#7FE0E8"/>
+      <stop offset="1" stop-color="#C4B5FD"/>
+      <animateTransform attributeName="gradientTransform" type="translate" values="0 0;1 0;0 0" dur="10s" repeatCount="indefinite"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EE916E"/>
+      <stop offset="1" stop-color="#CC6845"/>
+    </linearGradient>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="glow"><stop offset="0" stop-color="#7FE0E8"/><stop offset="1" stop-color="#7FE0E8" stop-opacity="0"/></radialGradient>
+  </defs>
+  <style>
+    .f { font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, 'Nirmala UI', sans-serif; }
+    .a1 { animation: drift1 16s ease-in-out infinite alternate; }
+    .a2 { animation: drift2 19s ease-in-out infinite alternate; }
+    .a3 { animation: drift3 22s ease-in-out infinite alternate; }
+    @keyframes drift1 { to { transform: translate(180px, 60px); } }
+    @keyframes drift2 { to { transform: translate(-220px, -40px); } }
+    @keyframes drift3 { to { transform: translate(120px, -90px); } }
+    .rise { opacity: 0; animation: rise 0.9s cubic-bezier(.2,.8,.2,1) forwards; }
+    .r2 { animation-delay: .25s; } .r3 { animation-delay: .5s; } .r4 { animation-delay: .75s; }
+    .r5 { animation-delay: .9s; } .r6 { animation-delay: 1.05s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .pet { animation: bob 2.6s ease-in-out infinite; }
+    @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    .shadow { transform-box: fill-box; transform-origin: center; animation: shadow 2.6s ease-in-out infinite; }
+    @keyframes shadow { 0%,100% { transform: scaleX(1); opacity: .45; } 50% { transform: scaleX(.8); opacity: .25; } }
+    .eye { transform-box: fill-box; transform-origin: center; animation: blink 4.2s infinite; }
+    @keyframes blink { 0%,92%,100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+    .tip { transform-box: fill-box; transform-origin: center; animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.5); } }
+    .say { opacity: 0; animation: say 12s infinite; }
+    .s2 { animation-delay: 4s; } .s3 { animation-delay: 8s; }
+    @keyframes say { 0% { opacity: 0; transform: translateY(6px); } 3%,27% { opacity: 1; transform: none; } 30%,100% { opacity: 0; } }
+    .spark { animation: spark 6s linear infinite; }
+    @keyframes spark { from { transform: translateY(0); opacity: 0; } 15% { opacity: .9; } to { transform: translateY(-260px); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } .rise, .say.s1 { opacity: 1; } }
+  </style>
+
+  <g clip-path="url(#card)">
+    <rect width="1200" height="420" fill="url(#bg)"/>
+    <g filter="url(#blur)" opacity="0.55">
+      <circle class="a1" cx="180" cy="80" r="190" fill="#8B7CF6"/>
+      <circle class="a2" cx="980" cy="120" r="210" fill="#2FB6C4"/>
+      <circle class="a3" cx="640" cy="440" r="200" fill="#D97757"/>
+    </g>
+    <!-- faint grid -->
+    <g stroke="#FFFFFF" stroke-opacity="0.035">
+      <path d="M0 105H1200M0 210H1200M0 315H1200M150 0V420M300 0V420M450 0V420M600 0V420M750 0V420M900 0V420M1050 0V420"/>
+    </g>
+    <g fill="#FFFFFF">
+      <circle class="spark" cx="760" cy="420" r="2" style="animation-delay:0s"/>
+      <circle class="spark" cx="1080" cy="430" r="1.5" style="animation-delay:1.5s"/>
+      <circle class="spark" cx="860" cy="425" r="2.5" style="animation-delay:3s"/>
+      <circle class="spark" cx="1000" cy="440" r="1.5" style="animation-delay:4.5s"/>
+      <circle class="spark" cx="700" cy="430" r="1.5" style="animation-delay:2.2s"/>
+    </g>
+  </g>
+  <rect x="0.5" y="0.5" width="1199" height="419" rx="28" fill="none" stroke="#FFFFFF" stroke-opacity="0.08"/>
+
+  <!-- text -->
+  <g class="f">
+    <text class="rise" x="72" y="92" font-size="15" font-weight="600" letter-spacing="3" fill="#7FE0E8">LOCAL-FIRST DESKTOP COMPANION</text>
+    <text class="rise r2" x="66" y="190" font-size="104" font-weight="800" letter-spacing="-3" fill="url(#title)">Pebble</text>
+    <text class="rise r3" x="72" y="240" font-size="25" font-weight="500" fill="#EEF0F5">A desktop pet for Windows that understands</text>
+    <text class="rise r3" x="72" y="274" font-size="25" font-weight="500" fill="#EEF0F5">English, हिंदी and Hinglish.</text>
+    <text class="rise r4" x="72" y="312" font-size="18" fill="#9BA4AE">Its AI runs on your laptop. No cloud. No account. No telemetry.</text>
+    <g class="rise r5" font-size="14" font-weight="600">
+      <rect x="72" y="342" width="148" height="34" rx="17" fill="url(#chip)" stroke="#FFFFFF" stroke-opacity="0.14"/>
+      <circle cx="92" cy="359" r="5" fill="#8FAE8A"/>
+      <text x="104" y="364" fill="#E9ECF2">100% offline AI</text>
+      <rect x="232" y="342" width="168" height="34" rx="17" fill="url(#chip)" stroke="#FFFFFF" stroke-opacity="0.14"/>
+      <circle cx="252" cy="359" r="5" fill="#E2B84A"/>
+      <text x="264" y="364" fill="#E9ECF2">31 MB · ~5 ms brain</text>
+      <rect x="412" y="342" width="180" height="34" rx="17" fill="url(#chip)" stroke="#FFFFFF" stroke-opacity="0.14"/>
+      <circle cx="432" cy="359" r="5" fill="#8AB4FF"/>
+      <text x="444" y="364" fill="#E9ECF2">Push-to-talk voice</text>
+    </g>
+  </g>
+
+  <!-- speech bubble -->
+  <g class="f rise r6">
+    <rect x="740" y="64" width="388" height="58" rx="18" fill="#FFFFFF" fill-opacity="0.09" stroke="#FFFFFF" stroke-opacity="0.18"/>
+    <path d="M928 121 L944 140 L952 121 Z" fill="#FFFFFF" fill-opacity="0.09"/>
+    <g font-size="17" fill="#F1F2FB">
+      <text class="say s1" x="762" y="99">“kal shaam 7 baje mummy ko call”</text>
+      <text class="say s2" x="762" y="99">“शुक्रवार को चार बजे मीटिंग है”</text>
+      <text class="say s3" x="762" y="99">“remind me abt the viva tmrw 10am”</text>
+    </g>
+  </g>
+
+  <!-- the pet -->
+  <ellipse class="shadow" cx="940" cy="352" rx="96" ry="10" fill="#000000" filter="url(#soft)"/>
+  <g class="pet">
+    <circle cx="940" cy="168" r="30" fill="url(#glow)" opacity="0.5"/>
+    <path d="M936 222 L944 172" stroke="#4A4E5A" stroke-width="5" stroke-linecap="round"/>
+    <circle class="tip" cx="945" cy="168" r="8" fill="#7FE0E8"/>
+    <rect x="842" y="230" width="18" height="34" rx="7" fill="#C4643F"/>
+    <rect x="1020" y="230" width="18" height="34" rx="7" fill="#C4643F"/>
+    <g fill="#C4643F">
+      <rect x="872" y="300" width="18" height="44" rx="6"/>
+      <rect x="912" y="300" width="18" height="44" rx="6"/>
+      <rect x="952" y="300" width="18" height="44" rx="6"/>
+      <rect x="992" y="300" width="18" height="44" rx="6"/>
+    </g>
+    <rect x="852" y="212" width="176" height="104" rx="22" fill="url(#body)"/>
+    <rect x="852" y="212" width="176" height="40" rx="22" fill="#FFFFFF" opacity="0.08"/>
+    <rect class="eye" x="904" y="246" width="15" height="26" rx="6" fill="#262A33"/>
+    <rect class="eye" x="961" y="246" width="15" height="26" rx="6" fill="#262A33"/>
+    <ellipse cx="884" cy="284" rx="12" ry="6" fill="#F9B8A0" opacity="0.5"/>
+    <ellipse cx="996" cy="284" rx="12" ry="6" fill="#F9B8A0" opacity="0.5"/>
+  </g>
+</svg>

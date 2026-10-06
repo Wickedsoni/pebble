@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="t d">
+  <title id="t">Pebble's journey</title>
+  <desc id="d">Done: foundations, v0.1.2 with voice, a solid engineering base, a smarter brain, your data with calendar, sync engine, history and backup. Now: QA round 1. Next: release 0.3.0 and desktop quality. Later: family circle and home hub.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10131B"/><stop offset="1" stop-color="#181C27"/>
+    </linearGradient>
+    <linearGradient id="done" x1="80" y1="0" x2="820" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D97757"/><stop offset=".55" stop-color="#E2B84A"/><stop offset="1" stop-color="#7FE0E8"/>
+    </linearGradient>
+    <filter id="g" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
+    <clipPath id="card"><rect width="1200" height="320" rx="24"/></clipPath>
+  </defs>
+  <style>
+    .f { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .t { font-size: 15px; font-weight: 700; fill: #F4F5F9; }
+    .s { font-size: 12.5px; fill: #A9B0BB; }
+    .k { font-size: 10.5px; font-weight: 700; letter-spacing: 1.5px; }
+    .line { stroke-dasharray: 740; stroke-dashoffset: 740; animation: draw 2.4s cubic-bezier(.4,0,.2,1) .2s forwards; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    .fut { stroke-dasharray: 4 8; animation: flow 1.4s linear infinite; }
+    @keyframes flow { to { stroke-dashoffset: -24; } }
+    .m { opacity: 0; animation: in .5s ease-out forwards; }
+    @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .now { transform-box: fill-box; transform-origin: center; animation: ping 1.8s ease-out infinite; }
+    @keyframes ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } .line { stroke-dashoffset: 0; } .m { opacity: 1; } }
+  </style>
+  <g clip-path="url(#card)">
+    <rect width="1200" height="320" fill="url(#bg)"/>
+    <circle cx="820" cy="160" r="150" fill="#2FB6C4" opacity=".22" filter="url(#blur)"/>
+  </g>
+  <rect x=".5" y=".5" width="1199" height="319" rx="24" fill="none" stroke="#FFFFFF" stroke-opacity=".08"/>
+
+  <path class="fut" d="M820 160 H1116" stroke="#8A8F98" stroke-width="3" fill="none"/>
+  <path d="M80 160 H820" stroke="url(#done)" stroke-width="7" stroke-opacity=".35" filter="url(#g)" class="line" fill="none"/>
+  <path d="M80 160 H820" stroke="url(#done)" stroke-width="4" stroke-linecap="round" class="line" fill="none"/>
+
+  <g class="f">
+    <!-- 1 -->
+    <g class="m" style="animation-delay:.3s">
+      <circle cx="80" cy="160" r="9" fill="#D97757"/>
+      <text class="k" x="80" y="64" text-anchor="middle" fill="#F3A27F">DONE · v0.1</text>
+      <text class="t" x="80" y="88" text-anchor="middle">Foundations</text>
+      <text class="s" x="80" y="108" text-anchor="middle">pet, rules, command</text>
+      <text class="s" x="80" y="124" text-anchor="middle">model, learning loop</text>
+    </g>
+    <!-- 2 -->
+    <g class="m" style="animation-delay:.6s">
+      <circle cx="228" cy="160" r="9" fill="#DD8A50"/>
+      <text class="k" x="228" y="204" text-anchor="middle" fill="#F3A27F">DONE · v0.1.2</text>
+      <text class="t" x="228" y="228" text-anchor="middle">Voice + calm nudges</text>
+      <text class="s" x="228" y="248" text-anchor="middle">push-to-talk, growth,</text>
+      <text class="s" x="228" y="264" text-anchor="middle">first public release</text>
+    </g>
+    <!-- 3 -->
+    <g class="m" style="animation-delay:.9s">
+      <circle cx="376" cy="160" r="9" fill="#E0A04A"/>
+      <text class="k" x="376" y="64" text-anchor="middle" fill="#E2B84A">DONE · A1–B7</text>
+      <text class="t" x="376" y="88" text-anchor="middle">Solid base</text>
+      <text class="s" x="376" y="108" text-anchor="middle">CI gates, app scope,</text>
+      <text class="s" x="376" y="124" text-anchor="middle">off-UI-thread writes</text>
+    </g>
+    <!-- 4 -->
+    <g class="m" style="animation-delay:1.2s">
+      <circle cx="524" cy="160" r="9" fill="#E2B84A"/>
+      <text class="k" x="524" y="204" text-anchor="middle" fill="#E2B84A">DONE · C1–C5, D2</text>
+      <text class="t" x="524" y="228" text-anchor="middle">Smarter brain</text>
+      <text class="s" x="524" y="248" text-anchor="middle">search by meaning, it</text>
+      <text class="s" x="524" y="264" text-anchor="middle">learns you, local chat</text>
+    </g>
+    <!-- 5 -->
+    <g class="m" style="animation-delay:1.5s">
+      <circle cx="672" cy="160" r="9" fill="#A9CF9A"/>
+      <text class="k" x="672" y="64" text-anchor="middle" fill="#A9CF9A">DONE · E1–E4</text>
+      <text class="t" x="672" y="88" text-anchor="middle">Your data</text>
+      <text class="s" x="672" y="108" text-anchor="middle">calendar, sync engine,</text>
+      <text class="s" x="672" y="124" text-anchor="middle">history, backup</text>
+    </g>
+    <!-- 6 now -->
+    <g class="m" style="animation-delay:1.9s">
+      <circle class="now" cx="820" cy="160" r="10" fill="#7FE0E8"/>
+      <circle cx="820" cy="160" r="10" fill="#7FE0E8"/>
+      <circle cx="820" cy="160" r="4" fill="#10131B"/>
+      <text class="k" x="820" y="204" text-anchor="middle" fill="#7FE0E8">NOW</text>
+      <text class="t" x="820" y="228" text-anchor="middle">QA round 1</text>
+      <text class="s" x="820" y="248" text-anchor="middle">red/blue review,</text>
+      <text class="s" x="820" y="264" text-anchor="middle">fixes merged</text>
+    </g>
+    <!-- 7 -->
+    <g class="m" style="animation-delay:2.2s">
+      <circle cx="968" cy="160" r="9" fill="#10131B" stroke="#C4B5FD" stroke-width="2.5"/>
+      <text class="k" x="968" y="64" text-anchor="middle" fill="#C4B5FD">NEXT · G–K</text>
+      <text class="t" x="968" y="88" text-anchor="middle">v0.3.0 + polish</text>
+      <text class="s" x="968" y="108" text-anchor="middle">keyboard, a11y,</text>
+      <text class="s" x="968" y="124" text-anchor="middle">speed, privacy</text>
+    </g>
+    <!-- 8 -->
+    <g class="m" style="animation-delay:2.5s">
+      <circle cx="1116" cy="160" r="9" fill="#10131B" stroke="#8AB4FF" stroke-width="2.5"/>
+      <text class="k" x="1116" y="204" text-anchor="middle" fill="#8AB4FF">LATER · F</text>
+      <text class="t" x="1116" y="228" text-anchor="middle">Family circle</text>
+      <text class="s" x="1116" y="248" text-anchor="middle">pair devices, P2P</text>
+      <text class="s" x="1116" y="264" text-anchor="middle">sync, home hub</text>
+    </g>
+  </g>
+</svg>
