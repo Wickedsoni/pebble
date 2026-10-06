@@ -1,10 +1,14 @@
 package dev.pebble.desktop.platform
 
+import com.sun.jna.Native
 import com.sun.jna.platform.win32.Advapi32Util
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinBase
+import com.sun.jna.platform.win32.WinError
 import com.sun.jna.platform.win32.WinNT
 import com.sun.jna.platform.win32.WinReg.HKEY_CURRENT_USER
+import com.sun.jna.win32.StdCallLibrary
+import com.sun.jna.win32.W32APIOptions
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.channels.FileLock
@@ -57,8 +61,8 @@ object SingleInstance {
     private var event: WinNT.HANDLE? = null
     private val isWindows = System.getProperty("os.name").startsWith("Windows")
 
-    /** `WaitForSingleObject` result for "time ran out" (0x102, winerror.h WAIT_TIMEOUT). */
-    private const val WAIT_TIMEOUT = 0x102
+    /** `AllowSetForegroundWindow` argument: any process may take the foreground (winuser.h `ASFW_ANY`). */
+    private const val ASFW_ANY = -1
 
     /**
      * The name of the show event. `Local\` = this Windows session only. The data folder is part of the name,
@@ -92,6 +96,9 @@ object SingleInstance {
             val k = Kernel32.INSTANCE
             val h = k.OpenEvent(WinNT.EVENT_MODIFY_STATE, false, eventName(dataDir)) ?: return false
             try {
+                // This launch has the foreground (the user just started it). Pass that right on, so Windows lets
+                // the first Pebble bring its window to the front instead of only flashing it in the taskbar.
+                runCatching { User32Ext.INSTANCE.AllowSetForegroundWindow(ASFW_ANY) }
                 k.SetEvent(h)
             } finally {
                 k.CloseHandle(h)
@@ -104,12 +111,13 @@ object SingleInstance {
      * move to the UI thread there. Returns null when there is no event. Stop the result at exit.
      */
     fun listen(onShow: () -> Unit): ShowSignalWaiter? {
-        val h = event ?: return null
+        // Take the handle: the waiter closes it at its end, so a second listen() must not wait on it.
+        val h = synchronized(this) { event.also { event = null } } ?: return null
         val waiter = ShowSignalWaiter(
             await = { ms ->
                 when (Kernel32.INSTANCE.WaitForSingleObject(h, ms)) {
                     WinBase.WAIT_OBJECT_0 -> SignalWait.SIGNALED
-                    WAIT_TIMEOUT -> SignalWait.TIMEOUT
+                    WinError.WAIT_TIMEOUT -> SignalWait.TIMEOUT
                     else -> SignalWait.FAILED
                 }
             },
@@ -119,5 +127,14 @@ object SingleInstance {
         )
         waiter.start()
         return waiter
+    }
+}
+
+@Suppress("FunctionName")
+private interface User32Ext : StdCallLibrary {
+    fun AllowSetForegroundWindow(processId: Int): Boolean
+
+    companion object {
+        val INSTANCE: User32Ext = Native.load("user32", User32Ext::class.java, W32APIOptions.DEFAULT_OPTIONS)
     }
 }

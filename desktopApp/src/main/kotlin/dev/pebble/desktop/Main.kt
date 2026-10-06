@@ -99,6 +99,9 @@ fun main(args: Array<String>) {
                 ),
             )
         }
+        // Grows at each "show Pebble" signal: the window restores and raises itself, also when it is open already.
+        var raise by remember { mutableStateOf(0) }
+
         fun showPage(name: String) {
             page = Page.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Page.TODAY
             appOpen = true
@@ -116,8 +119,17 @@ fun main(args: Array<String>) {
             )
             // A second launch (Start menu, shortcut) sets a Win32 event; then this window opens. After bindUi, so
             // the signal is not lost. The waiter runs on its own thread: move to the Swing thread to open the page.
-            SingleInstance.listen { SwingUtilities.invokeLater { app.ui.openPage("today") } }
-                ?.let { waiter -> Runtime.getRuntime().addShutdownHook(Thread({ waiter.stop() }, "pebble-show-signal-stop")) }
+            // An open window keeps its page; a closed one opens on Today.
+            SingleInstance.listen {
+                SwingUtilities.invokeLater {
+                    if (!appOpen) page = Page.TODAY
+                    appOpen = true
+                    raise++
+                }
+            }?.let { waiter ->
+                // Fails only when the JVM is already stopping; the waiter is a daemon thread, so that is safe.
+                runCatching { Runtime.getRuntime().addShutdownHook(Thread({ waiter.stop() }, "pebble-show-signal-stop")) }
+            }
         }
         LaunchedEffect(Unit) {
             GlobalHotkey(
@@ -188,6 +200,7 @@ fun main(args: Array<String>) {
         PebbleWindow(
             app, pet,
             visible = appOpen && !quitting,
+            raise = raise,
             page = page,
             onPage = { page = it },
             dark = dark,

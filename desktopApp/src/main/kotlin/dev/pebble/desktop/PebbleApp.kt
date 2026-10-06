@@ -368,7 +368,10 @@ class PebbleApp(
     suspend fun searchMemoryLoading(query: String, limit: Int = 5): List<dev.pebble.core.search.MemorySearch.Result>? =
         withContext(env.dispatchers.io) {
             if (model.modelDir == null || model.embedLoading(query) == null) return@withContext null
-            runCatching { memorySearch.reconcile() }.onFailure { log.warn(TAG, "memory search indexing failed", it) }
+            runCatching { memorySearch.reconcile() }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                log.warn(TAG, "memory search indexing failed", it)
+            }
             memorySearch.search(dev.pebble.core.search.MemorySearch.topicOf(query) ?: query, limit)
         }
 

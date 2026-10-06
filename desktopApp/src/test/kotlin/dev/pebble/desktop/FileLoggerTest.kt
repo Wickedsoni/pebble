@@ -38,6 +38,8 @@ class FileLoggerTest {
         assertTrue(lines.first().endsWith("java.lang.RuntimeException: outer"))
         assertTrue(lines.any { it.startsWith("\tat dev.pebble.desktop.FileLoggerTest") }, "the stack is there")
         assertTrue(lines.any { it.startsWith("Caused by: java.lang.IllegalStateException: db locked") }, "the cause is not cut off")
+        val cause = lines.indexOfFirst { it.startsWith("Caused by") }
+        assertTrue(lines.getOrNull(cause + 1).orEmpty().startsWith("\tat "), "the root cause shows where it happened")
         assertTrue(lines.size <= 40, "a long trace stays short: ${lines.size}")
     }
 

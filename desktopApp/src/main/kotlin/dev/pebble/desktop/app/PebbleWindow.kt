@@ -89,6 +89,7 @@ fun PebbleWindow(
     app: PebbleApp,
     pet: PetController,
     visible: Boolean,
+    raise: Int,
     page: Page,
     onPage: (Page) -> Unit,
     dark: Boolean,
@@ -111,7 +112,13 @@ fun PebbleWindow(
             WindowsEffects.roundCorners(window)
             WindowsEffects.setDarkMode(window, dark)
         }
-        LaunchedEffect(visible) { if (visible) { window.toFront(); window.requestFocus() } }
+        LaunchedEffect(visible, raise) {
+            if (visible) {
+                state.isMinimized = false
+                window.toFront()
+                window.requestFocus()
+            }
+        }
 
         // Build the backdrop once per open/theme/size, off the UI thread.
         val density = LocalDensity.current
