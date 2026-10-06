@@ -235,8 +235,11 @@ fun QuickAddWindow(
                             routedFor = typed
                         }
 
-                        // pick one of the choices
-                        null -> Unit
+                        // nothing to run: drop a preview made for an older text
+                        null -> {
+                            routed = null
+                            routedFor = typed
+                        }
                     }
                 } finally {
                     submitting = false
