@@ -120,7 +120,8 @@ fun QuickAddWindow(
         var thinking by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         // The conversation is read once by the holder (off the UI thread), never in composition.
-        val chat = remember { ChatStateHolder(RepositoryConversationPort(app.conversation, app.env), app.env, scope, limit = 30) }
+        val chat =
+            remember { ChatStateHolder(RepositoryConversationPort(app.conversation, app.env), app.env, scope, limit = 30, log = app.log) }
         val chatState by chat.state.collectAsState()
         // False once this window is gone: a reply that finishes later is then only said by the pet.
         val alive = remember { AtomicBoolean(true) }

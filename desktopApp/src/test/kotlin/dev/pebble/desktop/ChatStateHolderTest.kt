@@ -9,6 +9,7 @@ import dev.pebble.desktop.app.pages.ConversationPort
 import dev.pebble.desktop.app.pages.RepositoryConversationPort
 import dev.pebble.desktop.core.AppEnv
 import dev.pebble.desktop.core.DispatcherProvider
+import dev.pebble.desktop.core.Logger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,6 +18,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -61,11 +63,13 @@ class ChatStateHolderTest {
         val turns = MutableStateFlow(initial)
         var subscriptions = 0
         var clears = 0
+        var failClear = false
 
         override fun recent(limit: Long): Flow<List<Turn>> = turns.onStart { subscriptions++ }
 
         override suspend fun clear() {
             clears++
+            if (failClear) error("database is locked")
             turns.value = emptyList()
         }
     }
@@ -152,6 +156,41 @@ class ChatStateHolderTest {
         assertEquals(1, port.clears)
         assertTrue(h.state.value.rows.isEmpty())
         assertFalse(h.state.value.confirmClear)
+    }
+
+    @Test
+    fun aFailedClearIsLoggedKeepsTheTurnsAndTheScopeAlive() = runTest {
+        val port = FakePort(listOf(turn(1))).apply { failClear = true }
+        val warnings = mutableListOf<String>()
+        val log = object : Logger {
+            override fun info(tag: String, msg: String) = Unit
+
+            override fun warn(tag: String, msg: String, t: Throwable?) {
+                warnings += msg
+            }
+        }
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = CoroutineScope(SupervisorJob() + dispatcher).also { scopes += it }
+        val h = ChatStateHolder(port, AppEnv(clock, { zone }, TestDispatchers(dispatcher)), scope, log = log)
+        advanceUntilIdle()
+        h.onEvent(ChatEvent.AskClear)
+        h.onEvent(ChatEvent.ConfirmClear)
+        advanceUntilIdle()
+        assertEquals(1, warnings.size)
+        assertFalse(h.state.value.confirmClear)
+        assertEquals(1, h.state.value.rows.size)
+        assertTrue(scope.isActive)
+    }
+
+    @Test
+    fun aSecondClickOnDeleteItDoesNotClearTwice() = runTest {
+        val port = FakePort(listOf(turn(1)))
+        val h = holder(port)
+        advanceUntilIdle()
+        h.onEvent(ChatEvent.AskClear)
+        h.onEvent(ChatEvent.ConfirmClear)
+        assertFalse(h.state.value.confirmClear.also { advanceUntilIdle() })
+        assertEquals(1, port.clears)
     }
 
     @Test

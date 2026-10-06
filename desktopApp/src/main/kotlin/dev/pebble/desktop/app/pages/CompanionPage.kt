@@ -34,6 +34,7 @@ import dev.pebble.desktop.app.CardLabel
 import dev.pebble.desktop.app.GlassCard
 import dev.pebble.desktop.app.PebbleIcons
 import dev.pebble.desktop.app.Scene
+import dev.pebble.desktop.core.Logger
 import dev.pebble.desktop.pet.Character
 import dev.pebble.desktop.pet.Mood
 import dev.pebble.desktop.pet.PetController
@@ -47,7 +48,7 @@ import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
 import dev.pebble.desktop.ui.Toggle
 import dev.pebble.desktop.ui.pressable
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 /**
@@ -62,11 +63,12 @@ fun CompanionPage(
     autostart: Boolean,
     onAutostart: (Boolean) -> Unit,
     scene: Scene,
+    io: CoroutineDispatcher,
+    log: Logger,
     onScene: (Scene) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    // The page gets only the pet, not the app, so there is no AppEnv here: the count runs on the shared IO pool.
-    val holder = remember { CompanionStateHolder({ withContext(Dispatchers.IO) { pet.growth() } }, scope) }
+    val holder = remember { CompanionStateHolder({ withContext(io) { pet.growth() } }, scope, log) }
     val state by holder.state.collectAsState()
     LaunchedEffect(pet.earned) { holder.onEvent(CompanionEvent.Refresh) }
     CompanionContent(pet, state, petVisible, onPetVisible, autostart, onAutostart, scene, onScene)

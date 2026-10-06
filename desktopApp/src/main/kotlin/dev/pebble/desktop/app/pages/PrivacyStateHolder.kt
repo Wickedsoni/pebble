@@ -30,7 +30,7 @@ interface PrivacyPort {
     fun closeChat()
 
     /** Checks the chat pack on disk. This can hash big files. */
-    fun chatInstalled(): Boolean
+    suspend fun chatInstalled(): Boolean
 }
 
 /** The real settings, memory and chat of [app]. */
@@ -52,7 +52,7 @@ class AppPrivacyPort(private val app: PebbleApp) : PrivacyPort {
 
     override fun closeChat() = app.chat.close()
 
-    override fun chatInstalled(): Boolean {
+    override suspend fun chatInstalled(): Boolean {
         app.chatInstalled.refresh()
         return app.chatInstalled.value
     }
@@ -101,61 +101,90 @@ class PrivacyStateHolder(
     private val _state = MutableStateFlow(PrivacyUiState())
     val state: StateFlow<PrivacyUiState> = _state.asStateFlow()
 
+    /** One thread for the writes, so two quick toggles are saved in the order you made them. */
+    private val writer = env.dispatchers.io.limitedParallelism(1)
+
     init {
         scope.launch {
-            val first = io {
+            // A read that fails gives the default, so the switches always appear.
+            val flags = withContext(env.dispatchers.io) {
                 PrivacyUiState(
                     loaded = true,
-                    mediaOn = port.flag(Keys.MEDIA_TRACKING, false),
-                    micOn = port.flag(Keys.MICROPHONE_ENABLED, true),
-                    smartOn = port.flag(Keys.SMART_REPLIES, false),
-                    keepVoice = port.flag(Keys.KEEP_VOICE_CORRECTIONS, false),
-                    voiceClips = port.voiceClipCount(),
-                    chatInstalled = port.chatInstalled(),
+                    mediaOn = read { port.flag(Keys.MEDIA_TRACKING, false) } ?: false,
+                    micOn = read { port.flag(Keys.MICROPHONE_ENABLED, true) } ?: true,
+                    smartOn = read { port.flag(Keys.SMART_REPLIES, false) } ?: false,
+                    keepVoice = read { port.flag(Keys.KEEP_VOICE_CORRECTIONS, false) } ?: false,
+                    voiceClips = read { port.voiceClipCount() } ?: 0,
                 )
             }
-            if (first != null) _state.value = first
+            _state.update { flags.copy(chatInstalled = it.chatInstalled) }
+        }
+        // Checking the chat pack can hash a big file: it must not hold back the switches.
+        scope.launch {
+            val installed = withContext(env.dispatchers.io) { read { port.chatInstalled() } } ?: false
+            _state.update { it.copy(chatInstalled = installed) }
         }
     }
 
     fun onEvent(e: PrivacyEvent) {
         when (e) {
-            is PrivacyEvent.SetMedia -> set(Keys.MEDIA_TRACKING, e.on) { copy(mediaOn = e.on) }
+            is PrivacyEvent.SetMedia -> set(Keys.MEDIA_TRACKING, e.on, { mediaOn }) { copy(mediaOn = it) }
 
-            is PrivacyEvent.SetMic -> set(Keys.MICROPHONE_ENABLED, e.on) { copy(micOn = e.on) }
+            is PrivacyEvent.SetMic -> set(Keys.MICROPHONE_ENABLED, e.on, { micOn }) { copy(micOn = it) }
 
-            is PrivacyEvent.SetKeepVoice -> set(Keys.KEEP_VOICE_CORRECTIONS, e.on) { copy(keepVoice = e.on) }
+            is PrivacyEvent.SetKeepVoice -> set(Keys.KEEP_VOICE_CORRECTIONS, e.on, { keepVoice }) { copy(keepVoice = it) }
 
-            is PrivacyEvent.SetSmartReplies -> set(Keys.SMART_REPLIES, e.on, { if (!e.on) port.closeChat() }) { copy(smartOn = e.on) }
+            is PrivacyEvent.SetSmartReplies -> set(Keys.SMART_REPLIES, e.on, { smartOn }, { if (!e.on) port.closeChat() }) {
+                copy(smartOn = it)
+            }
 
-            PrivacyEvent.ClearWatchHistory -> scope.launch { io { port.clearWatchHistory() } }
+            PrivacyEvent.ClearWatchHistory -> scope.launch { write { port.clearWatchHistory() } }
 
             PrivacyEvent.DeleteVoiceClips -> scope.launch {
-                io { port.deleteVoiceClips() }
-                _state.update { it.copy(voiceClips = 0) }
+                if (write { port.deleteVoiceClips() }) _state.update { it.copy(voiceClips = 0) }
             }
         }
     }
 
-    private fun set(key: String, on: Boolean, after: () -> Unit = {}, change: PrivacyUiState.() -> PrivacyUiState) {
-        _state.update { it.change() }
+    /**
+     * The switch changes at once. If the write fails, it goes back to what it was. [finally] runs after the write,
+     * also when the write failed (turning Smart replies off must stop the helper program in any case).
+     */
+    private fun set(
+        key: String,
+        on: Boolean,
+        current: PrivacyUiState.() -> Boolean,
+        finally: () -> Unit = {},
+        change: PrivacyUiState.(Boolean) -> PrivacyUiState,
+    ) {
+        val before = _state.value.current()
+        _state.update { it.change(on) }
         scope.launch {
-            io {
-                port.setFlag(key, on)
-                after()
-            }
+            val saved = write { port.setFlag(key, on) }
+            if (!saved) _state.update { it.change(before) }
+            write(finally)
         }
     }
 
-    /** Runs [work] on the IO dispatcher. A failure is logged and gives null: a click must not crash the app. */
-    private suspend fun <T> io(work: suspend () -> T): T? = withContext(env.dispatchers.io) {
+    private inline fun <T> read(work: () -> T): T? = try {
+        work()
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log.warn("Privacy", "privacy card read failed", e)
+        null
+    }
+
+    /** Runs [work] on the writer thread. A failure is logged and gives false: a click must not crash the app. */
+    private suspend fun write(work: suspend () -> Unit): Boolean = withContext(writer) {
         try {
             work()
+            true
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e
         } catch (e: Exception) {
             log.warn("Privacy", "privacy card action failed", e)
-            null
+            false
         }
     }
 }

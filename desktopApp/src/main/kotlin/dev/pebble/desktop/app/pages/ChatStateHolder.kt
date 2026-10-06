@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import dev.pebble.core.brain.ConversationRepository
 import dev.pebble.core.brain.Turn
 import dev.pebble.desktop.core.AppEnv
+import dev.pebble.desktop.core.Logger
 import dev.pebble.desktop.ui.ChatRow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -12,11 +13,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Where the conversation comes from. [recent] is subscribed one time for each state holder. */
 interface ConversationPort {
@@ -67,6 +68,7 @@ class ChatStateHolder(
     private val env: AppEnv,
     private val scope: CoroutineScope,
     limit: Long = 500,
+    private val log: Logger = Logger.None,
 ) {
     private val confirmClear = MutableStateFlow(false)
 
@@ -80,11 +82,18 @@ class ChatStateHolder(
 
             ChatEvent.CancelClear -> confirmClear.value = false
 
-            ChatEvent.ConfirmClear -> scope.launch {
-                try {
-                    port.clear()
-                } finally {
-                    confirmClear.update { false }
+            ChatEvent.ConfirmClear -> {
+                // Close the question first: a second click must not start a second clear.
+                confirmClear.value = false
+                scope.launch {
+                    try {
+                        port.clear()
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (x: Exception) {
+                        // A failed clear must not cancel the scope of the page.
+                        log.warn("Chat", "clearing the conversation failed", x)
+                    }
                 }
             }
         }

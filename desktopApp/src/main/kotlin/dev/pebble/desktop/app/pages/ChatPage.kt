@@ -30,7 +30,7 @@ import dev.pebble.desktop.ui.LocalGlass
 @Composable
 fun ChatPage(app: PebbleApp) {
     val scope = rememberCoroutineScope()
-    val holder = remember { ChatStateHolder(RepositoryConversationPort(app.conversation, app.env), app.env, scope) }
+    val holder = remember { ChatStateHolder(RepositoryConversationPort(app.conversation, app.env), app.env, scope, log = app.log) }
     val state by holder.state.collectAsState()
     ChatContent(state, holder::onEvent)
 }

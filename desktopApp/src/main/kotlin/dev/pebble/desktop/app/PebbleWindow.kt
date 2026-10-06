@@ -164,7 +164,16 @@ fun PebbleWindow(
 
                                 Page.CALENDAR -> CalendarPage(app)
 
-                                Page.COMPANION -> CompanionPage(pet, petVisible, onPetVisible, autostart, onAutostart, scene) {
+                                Page.COMPANION -> CompanionPage(
+                                    pet,
+                                    petVisible,
+                                    onPetVisible,
+                                    autostart,
+                                    onAutostart,
+                                    scene,
+                                    app.env.dispatchers.io,
+                                    app.log,
+                                ) {
                                     scene = it
                                     app.settings.set(dev.pebble.core.settings.SettingsRepository.Keys.APP_SCENE, it.name)
                                 }

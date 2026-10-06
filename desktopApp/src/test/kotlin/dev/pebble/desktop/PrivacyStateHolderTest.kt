@@ -7,6 +7,7 @@ import dev.pebble.desktop.app.pages.PrivacyStateHolder
 import dev.pebble.desktop.core.AppEnv
 import dev.pebble.desktop.core.DispatcherProvider
 import dev.pebble.desktop.core.Logger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,6 +56,7 @@ class PrivacyStateHolderTest {
         override fun voiceClipCount() = clips
 
         override fun deleteVoiceClips() {
+            if (failDelete) error("disk full")
             clips = 0
         }
 
@@ -66,7 +68,13 @@ class PrivacyStateHolderTest {
             chatClosed++
         }
 
-        override fun chatInstalled() = true
+        var chatGate = CompletableDeferred<Unit>().apply { complete(Unit) }
+        var failDelete = false
+
+        override suspend fun chatInstalled(): Boolean {
+            chatGate.await()
+            return true
+        }
     }
 
     private class Lines : Logger {
@@ -170,5 +178,53 @@ class PrivacyStateHolderTest {
         h.onEvent(PrivacyEvent.SetMedia(true))
         advanceUntilIdle()
         assertEquals(1, log.warnings.size)
+        // The switch goes back to what it was: it must not show a value that was not saved.
+        assertFalse(h.state.value.mediaOn)
+    }
+
+    @Test
+    fun smartRepliesOffStillStopsTheChatHelperWhenTheWriteFails() = runTest {
+        val port = FakePort().apply { flags[Keys.SMART_REPLIES] = true }
+        val h = holder(port)
+        advanceUntilIdle()
+        port.failOnSet = true
+        h.onEvent(PrivacyEvent.SetSmartReplies(false))
+        advanceUntilIdle()
+        assertEquals(1, port.chatClosed)
+        assertTrue(h.state.value.smartOn)
+    }
+
+    @Test
+    fun theSwitchesAppearWhileTheChatPackIsStillBeingChecked() = runTest {
+        val port = FakePort().apply { chatGate = CompletableDeferred() }
+        val h = holder(port)
+        advanceUntilIdle()
+        assertTrue(h.state.value.loaded)
+        assertFalse(h.state.value.chatInstalled)
+        port.chatGate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(h.state.value.chatInstalled)
+    }
+
+    @Test
+    fun twoQuickTogglesAreSavedInOrder() = runTest {
+        val port = FakePort()
+        val h = holder(port)
+        advanceUntilIdle()
+        h.onEvent(PrivacyEvent.SetMedia(true))
+        h.onEvent(PrivacyEvent.SetMedia(false))
+        advanceUntilIdle()
+        assertEquals(false, port.flags[Keys.MEDIA_TRACKING])
+        assertFalse(h.state.value.mediaOn)
+    }
+
+    @Test
+    fun theVoiceClipCountStaysWhenTheDeleteFails() = runTest {
+        val port = FakePort().apply { clips = 4; failDelete = true }
+        val h = holder(port)
+        advanceUntilIdle()
+        h.onEvent(PrivacyEvent.DeleteVoiceClips)
+        advanceUntilIdle()
+        assertEquals(4, h.state.value.voiceClips)
     }
 }
