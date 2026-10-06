@@ -29,7 +29,7 @@ import kotlin.math.exp
  */
 class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseable {
     private val tokenizer: HuggingFaceTokenizer
-    private val env = OrtEnvironment.getEnvironment()
+    private val env = NativeLibs.configureOrt().let { OrtEnvironment.getEnvironment() }
     private val session: OrtSession
     private val intents: List<String>
     private val tags: List<String>

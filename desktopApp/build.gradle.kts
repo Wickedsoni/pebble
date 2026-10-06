@@ -1,4 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -105,6 +108,91 @@ tasks.register<JavaExec>("sceneGallery") {
     args(layout.buildDirectory.file("scene-gallery.png").get().asFile.absolutePath)
 }
 
+// Native libraries (QA R4-2, R4-9). ONNX Runtime and sherpa-onnx copy their DLLs from the jar into a new %TEMP% folder at
+// each run, and Windows cannot delete a loaded DLL, so the folders pile up. The app ships the DLLs unpacked in
+// <resources>/natives/{ort,sherpa} and `NativeLibs` points the libraries there (system properties `onnxruntime.native.path`
+// and `sherpa_onnx.native.path`, checked in the pinned sources). The packaged jars lose every non-Windows native and
+// the DLLs that the unpacked copy replaces. The packaged app and `run` use the slim jars; tests use the original jars.
+val runtimeJars = configurations.runtimeClasspath.map { cfg -> cfg.files.filter { it.name.endsWith(".jar") } }
+
+/** "onnxruntime-1.30.0.jar" matches "onnxruntime"; "onnxruntime-extensions-1.0.jar" does not. */
+fun isJarOf(file: File, prefix: String) = Regex("""${Regex.escape(prefix)}-v?\d.*\.jar""").matches(file.name)
+
+fun jarNamed(prefix: String): Provider<File> = runtimeJars.map { jars -> jars.single { isJarOf(it, prefix) } }
+
+val stageNatives by tasks.registering(Sync::class) {
+    group = "pebble"
+    description = "Unpacks the win-x64 DLLs of ONNX Runtime and sherpa-onnx into the app resources (natives/ort, natives/sherpa)"
+    into(layout.buildDirectory.dir("model-resources/common/natives"))
+    from(zipTree(jarNamed("onnxruntime"))) {
+        include("ai/onnxruntime/native/win-x64/*.dll")
+        eachFile { path = "ort/$name" }
+        includeEmptyDirs = false
+    }
+    from(zipTree(jarNamed("sherpa-onnx-native-lib-win-x64"))) {
+        include("sherpa-onnx/native/win-x64/*.dll")
+        eachFile { path = "sherpa/$name" }
+        includeEmptyDirs = false
+    }
+}
+
+/** Keeps every entry except those that [drop] names. Class files and resources stay as they are. */
+abstract class SlimJarTask : DefaultTask() {
+    @get:InputFile
+    abstract val source: RegularFileProperty
+
+    @get:Input
+    abstract val dropPrefixes: ListProperty<String>
+
+    @get:Input
+    abstract val keepPrefixes: ListProperty<String>
+
+    @get:OutputFile
+    abstract val target: RegularFileProperty
+
+    @TaskAction
+    fun slim() {
+        val out = target.get().asFile
+        out.parentFile.mkdirs()
+        ZipFile(source.get().asFile).use { zip ->
+            ZipOutputStream(out.outputStream().buffered()).use { zos ->
+                for (e in zip.entries()) {
+                    val dropped = dropPrefixes.get().any { e.name.startsWith(it) } && keepPrefixes.get().none { e.name.startsWith(it) }
+                    if (dropped) continue
+                    val copy = ZipEntry(e.name).apply { time = e.time }
+                    zos.putNextEntry(copy)
+                    if (!e.isDirectory) zip.getInputStream(e).use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+            }
+        }
+    }
+}
+
+fun slimJar(taskName: String, prefix: String, drop: List<String>, keep: List<String>) =
+    tasks.register<SlimJarTask>(taskName) {
+        source.set(layout.file(jarNamed(prefix)))
+        dropPrefixes.set(drop)
+        keepPrefixes.set(keep)
+        target.set(layout.buildDirectory.file("slim-libs/$prefix.jar"))
+    }
+
+// Original -> slim jar. Anything not listed here ships as it is.
+val slimJars = listOf(
+    // The win-x64 DLLs are in natives/ort (stageNatives); the jar keeps the Java classes.
+    slimJar("slimOnnxRuntimeJar", "onnxruntime", listOf("ai/onnxruntime/native/"), emptyList()),
+    slimJar("slimSherpaNativeJar", "sherpa-onnx-native-lib-win-x64", listOf("sherpa-onnx/native/"), emptyList()),
+    // DJL tokenizers: keep Windows (and the properties file that names the platforms).
+    slimJar("slimTokenizersJar", "tokenizers", listOf("native/lib/"), listOf("native/lib/win-x86_64/", "native/lib/tokenizers.properties")),
+    slimJar("slimSqliteJar", "sqlite-jdbc", listOf("org/sqlite/native/"), listOf("org/sqlite/native/Windows/x86_64/")),
+)
+// A lazy filter keeps the build dependencies of the configuration (for example :shared:jvmJar).
+// No script references inside the lambda: the configuration cache cannot store them. Keep the names in step with slimJars.
+val packagedLibs = configurations.runtimeClasspath.get().filter { j ->
+    j.name.endsWith(".jar") &&
+        !Regex("""(onnxruntime|sherpa-onnx-native-lib-win-x64|tokenizers|sqlite-jdbc)-v?\d.*\.jar""").matches(j.name)
+}
+
 // Models ship inside the installer. brain/models/manifest.json lists every model ("intent", "asr") and its
 // files, e.g. "intent-v2-pruned/tokenizer/tokenizer.json"; each is copied to models/<name>/ with the first
 // folder dropped (→ models/intent/tokenizer/tokenizer.json). Model files are gitignored: on a fresh clone
@@ -133,15 +221,19 @@ val stageModel by tasks.registering(Sync::class) {
         }
     }
 }
-tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(stageModel) }
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(stageModel, stageNatives) }
 // Compose's packaging tasks don't track the *contents* of app resources, so a new model alone would
 // leave them "up-to-date" with the old one inside. Make the staged model a real input.
 tasks.matching { it.name.startsWith("createDistributable") || it.name.startsWith("package") }
-    .configureEach { inputs.files(stageModel).withPropertyName("bundledModel") }
+    .configureEach { inputs.files(stageModel, stageNatives).withPropertyName("bundledModel") }
 
 compose.desktop {
     application {
         mainClass = "dev.pebble.desktop.MainKt"
+        // The packaged app gets the slim jars; see "Native libraries" above.
+        disableDefaultConfiguration()
+        fromFiles(tasks.named("jar"), packagedLibs, slimJars.map { it.flatMap { t -> t.target } })
+        mainJar.set(tasks.named<Jar>("jar").flatMap { it.archiveFile })
 
         // Lean runtime for an always-on background app: one GC thread, a small heap that gets
         // returned to the OS when idle, and no JIT warm-up storms. Software rendering keeps the
