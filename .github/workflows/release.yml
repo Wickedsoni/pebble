@@ -1,11 +1,11 @@
 name: Release
 
-# Push a tag like v0.1.0 on main: builds the Windows installers with the models named in
+# Push a tag like v0.1.0 (digits only: the MSI version has no suffix) on main: builds the Windows installers with the models named in
 # brain/models/manifest.json (downloaded from GitHub Releases, SHA-256 verified) and publishes them:
 # Pebble-x.y.z.msi (all models) and Pebble-lite-x.y.z.msi (no speech models; voice as a signed pack).
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
   contents: write
@@ -13,11 +13,24 @@ permissions:
 jobs:
   installer:
     runs-on: windows-latest
+    timeout-minutes: 90
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Version from the tag
+        # The tag is the only source of the version: v0.2.0 gives Pebble-0.2.0.msi and jpackage.app-version 0.2.0.
+        # MSI limits: major <= 255, minor <= 255, build <= 65535 (same check in desktopApp/build.gradle.kts).
+        # The tagged commit must be on main. This runs first, so a bad tag fails before the models and tests.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "Tag '$GITHUB_REF_NAME' is not vX.Y.Z"; exit 1; }
+          (( BASH_REMATCH[1] <= 255 && BASH_REMATCH[2] <= 255 && BASH_REMATCH[3] <= 65535 )) || { echo "Version $version is over the MSI limits (255.255.65535)"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "Tag $GITHUB_REF_NAME is not on main"; exit 1; }
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -25,11 +38,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Fetch models (checksums verified)
         run: python brain/src/pebble_brain/download_models.py
+      - name: Format check and tests
+        # A release runs the same gate as a pull request (the model tests run: the models are downloaded above).
+        env:
+          PEBBLE_CONVERGENCE_SEQUENCES: "300"
+        run: ./gradlew spotlessCheck :shared:jvmTest :desktopApp:test --console=plain
       - name: Build installers (full, then lite without the speech models)
         run: |
-          ./gradlew :desktopApp:packageMsi --console=plain
+          ./gradlew :desktopApp:packageMsi "-PappVersion=$APP_VERSION" --console=plain
+          [ -f "desktopApp/build/compose/binaries/main/msi/Pebble-$APP_VERSION.msi" ] || { echo "MSI version does not match the tag"; ls desktopApp/build/compose/binaries/main/msi; exit 1; }
           mkdir -p dist && mv desktopApp/build/compose/binaries/main/msi/*.msi dist/
-          ./gradlew :desktopApp:packageMsi -Pflavor=lite --console=plain
+          ./gradlew :desktopApp:packageMsi -Pflavor=lite "-PappVersion=$APP_VERSION" --console=plain
           for f in desktopApp/build/compose/binaries/main/msi/*.msi; do mv "$f" "dist/$(basename "$f" | sed 's/^Pebble-/Pebble-lite-/')"; done
           ls -l dist
       - name: Checksums
@@ -45,6 +64,6 @@ jobs:
           notes="docs/releases/${tag}.md"
           [ -f "$notes" ] || notes=/dev/null
           pre=""
-          [[ "$tag" == v0.* || "$tag" == *-* ]] && pre="--prerelease"
+          [[ "$tag" == v0.* ]] && pre="--prerelease"  # tags are vX.Y.Z only; below 1.0 is a pre-release
           gh release create "$tag" dist/* \
             --title "Pebble ${tag#v}" --notes-file "$notes" $pre

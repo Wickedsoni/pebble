@@ -23,6 +23,7 @@ from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from .evaluate import EVAL_SET, pebble_eval
 from .intent_model import MOODS, Predictor, encode_words
+from .pebble_data import EVAL_FILES
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -101,7 +102,7 @@ def export(ckpt: pathlib.Path) -> None:
     # parity.json: what the int8 model says for every eval sentence, so Kotlin can prove it reads
     # commands identically (OnnxParityTest): token ids, intent, confidence, slot tags, mood.
     parity = []
-    for name in ("pebble_commands_v0.jsonl", "pebble_commands_v1.jsonl", "mood_v1.jsonl"):
+    for name in EVAL_FILES:
         path = ROOT / "eval" / name
         for line in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
             if not line.strip():

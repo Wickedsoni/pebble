@@ -7,8 +7,13 @@
   .\tools\test\ui-smoke.ps1          # Pebble must be running; don't touch the keyboard for ~40 s
 
 .NOTES
-  Test entries carry the marker "zzpebbletest" and are deleted at the end. Needs Python 3 on PATH
-  (for SQLite). Voice isn't covered here (no microphone input); VoiceCommandEvalTest covers that path.
+  This script drives the running, installed Pebble, so it writes to your real database. It removes only
+  what it made: notes and reminders with the marker "zzpebbletest" become tombstones (deleted_at, like the
+  app's own delete; the daily job purges them after 90 days), and it deletes only the conversation turns and
+  feedback rows whose text is one of the test commands. Nothing else is touched. To keep a database fully
+  clean, close Pebble, make a copy (VACUUM INTO), and run a second Pebble against that copy.
+  Needs Python 3 on PATH (for SQLite). Voice isn't covered here (no microphone input);
+  VoiceCommandEvalTest covers that path.
 #>
 $ErrorActionPreference = "Stop"
 if (-not (Get-Process Pebble -ErrorAction SilentlyContinue)) { throw "Start Pebble first." }
@@ -42,15 +47,17 @@ if mode == 'count':
 elif mode == 'check':
     since = int(sys.argv[3])
     turns = q('select said, via, did, reply from conversation_turn where id > ? order by id', since)
-    notes = q("select text from note where text like '%zzpebbletest%'")
-    rem = q("select title, due_at from one_off_reminder where title like '%zzpebbletest%' and done_at is null")
+    notes = q("select text from note where text like '%zzpebbletest%' and deleted_at is null")
+    rem = q("select title, due_at from one_off_reminder where title like '%zzpebbletest%' and done_at is null and deleted_at is null")
     print(json.dumps({'turns': turns, 'notes': notes, 'reminders': rem}, ensure_ascii=False))
 elif mode == 'clean':
-    since = int(sys.argv[3])
-    c.execute("delete from note where text like '%zzpebbletest%'")
-    c.execute("delete from one_off_reminder where title like '%zzpebbletest%'")
-    c.execute('delete from conversation_turn where id > ?', (since,))
-    c.execute('delete from command_feedback where at_millis >= ?', (int(sys.argv[4]),))
+    since = int(sys.argv[3]); start = int(sys.argv[4]); said = json.load(open(sys.argv[5], encoding='utf-8-sig')); now = int(sys.argv[6])
+    marks = ','.join('?' * len(said))
+    # Tombstones, not DELETEs (the app's rule: every read adds deleted_at IS NULL, and the journal keeps its entries).
+    c.execute("update note set deleted_at = ?, updated_at = ? where text like '%zzpebbletest%' and deleted_at is null", (now, now))
+    c.execute("update one_off_reminder set deleted_at = ?, updated_at = ? where title like '%zzpebbletest%' and deleted_at is null", (now, now))
+    c.execute(f'delete from conversation_turn where id > ? and said in ({marks})', (since, *said))
+    c.execute(f'delete from command_feedback where at_millis >= ? and text in ({marks})', (start, *said))
     c.commit(); print('cleaned')
 "@
 $pyFile = Join-Path $env:TEMP "pebble-smoke.py"; Set-Content -Path $pyFile -Value $py -Encoding utf8
@@ -80,6 +87,11 @@ foreach ($t in $r.turns) { if (-not $t.reply) { $fail += "no reply for '$($t.sai
 
 Write-Host "`nConversation as Pebble saved it:"
 $r.turns | ForEach-Object { Write-Host ("  you ({0}): {1}`n  pebble:   {2}   [{3}]" -f $_.via, $_.said, $_.reply, $_.did) }
-python $pyFile $db clean $lastId $startMs | Out-Null
+# A JSON argument is mangled by native-call quoting in Windows PowerShell, so pass the command list by file.
+$saidFile = Join-Path $env:TEMP "pebble-smoke-said.json"
+ConvertTo-Json -InputObject @($commands) | Set-Content -Path $saidFile -Encoding utf8
+$nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+python $pyFile $db clean $lastId $startMs $saidFile $nowMs | Out-Null
+Remove-Item $saidFile -ErrorAction SilentlyContinue
 if ($fail) { Write-Host "`nFAILED:" -ForegroundColor Red; $fail | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }; exit 1 }
 Write-Host "`nPASSED: every command was answered, the note and reminder were saved, replies vary. Test data removed." -ForegroundColor Green

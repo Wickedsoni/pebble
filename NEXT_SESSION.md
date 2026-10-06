@@ -8,6 +8,7 @@ Public repo: https://github.com/Wickedsoni/pebble · latest release: **v0.1.2** 
 **This file is current on `main`** (the PR stack was merged on 5 Oct 2026).
 
 ### Start here (6 Oct 2026, after "edit a note" and per-item history delete)
+- **Retrain warning:** the dev/train split is now a hash of the sentence (QA round 1, P11), and the random stream changed. The next retrain sees a new corpus and new dev numbers. Do not compare its dev metrics with the old ones.
 - **State:** A1 … E4, C4, E3a, E3b, all of **E3c** (#51–#54), "edit a note" (#55) and "delete old versions of one item" (#56) are on `main`. Schema version 15; the next migration file is `15.sqm`.
 - **Next: milestone F.** F0 needs an Opus spec and a security review first (CLAUDE.md rule 9): do not start code without an approved spec.
 - **Optional, suggested:** a small performance WP. Outside a transaction, each query opens a new SQLite connection (about 2 ms on this laptop, more on CI). Measure the app's queries, then keep connections open per thread (check the memory cost first). It would also make CI faster.
@@ -220,7 +221,7 @@ Lessons from the merge (for the next stack):
 - **Models:** published as [models-2026.10](https://github.com/Wickedsoni/pebble/releases/tag/models-2026.10). Get them with `python brain/src/pebble_brain/download_models.py` (checks SHA-256 against `brain/models/manifest.json`).
 - **How work lands:** `main` is protected, so every change goes branch → PR → CI (ktlint/Spotless, Ruff, all tests) → squash-merge. See CONTRIBUTING.md.
 - **Releasing:**
-  1. Bump `packageVersion` in `desktopApp/build.gradle.kts`.
+  1. No version bump in the code: the tag sets the version (`release.yml` passes `-PappVersion`; the tag must be `vX.Y.Z`). The default in `desktopApp/build.gradle.kts` (`appVersion`) is for local builds.
   2. Write `docs/releases/vX.Y.Z.md`.
   3. Tag `vX.Y.Z` on main. `release.yml` builds the MSI on GitHub and publishes it (pre-release below 1.0).
 

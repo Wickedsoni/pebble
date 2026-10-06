@@ -21,6 +21,8 @@ import urllib.request
 import zipfile
 
 MODELS = pathlib.Path(__file__).resolve().parents[2] / "models"
+#: Seconds without data before a download stops (a stalled connection must not hang a CI job).
+TIMEOUT_SECONDS = 60
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -46,7 +48,7 @@ def fetch(entry: dict, root: pathlib.Path = MODELS) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         zpath = pathlib.Path(tmp) / "model.zip"
         print(f"{name}: downloading {dl['url']}")
-        with urllib.request.urlopen(dl["url"]) as r, zpath.open("wb") as out:
+        with urllib.request.urlopen(dl["url"], timeout=TIMEOUT_SECONDS) as r, zpath.open("wb") as out:
             shutil.copyfileobj(r, out)
         if sha256(zpath) != dl["sha256"]:
             raise SystemExit(f"{name}: download checksum mismatch — refusing to use it")

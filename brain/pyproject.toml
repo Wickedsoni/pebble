@@ -39,7 +39,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pebble_brain"]
 
-# Lint + format, enforced in CI:  uvx ruff check .  /  uvx ruff format --check .
+# Lint + format, enforced in CI:  uvx ruff@0.16.10 check .  /  uvx ruff@0.16.10 format --check .
 [tool.ruff]
 line-length = 130
 target-version = "py311"
