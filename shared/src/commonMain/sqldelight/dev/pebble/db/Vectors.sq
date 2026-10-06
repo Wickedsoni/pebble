@@ -27,6 +27,10 @@ SELECT kind, ref_id, text, model_version FROM vector_item;
 vectorsOfVersion:
 SELECT kind, ref_id, vec FROM vector_item WHERE model_version = ?;
 
+-- Search: the indexed text and vector of every item of one model (the search keeps only the best few).
+vectorsForSearch:
+SELECT kind, ref_id, text, vec FROM vector_item WHERE model_version = ?;
+
 vectorCount:
 SELECT count(*) FROM vector_item;
 
@@ -39,3 +43,11 @@ SELECT id, text FROM memory WHERE kind = 'FACT' AND hidden = 0;
 
 sourceSaid:
 SELECT id, said FROM conversation_turn;
+
+-- The same sources, only for the ids of the best hits, in one query (search reads each hit back from here).
+sourcesByIds:
+SELECT 'note' AS kind, id, text FROM note WHERE deleted_at IS NULL AND id IN :noteIds
+UNION ALL
+SELECT 'fact', id, text FROM memory WHERE kind = 'FACT' AND hidden = 0 AND id IN :factIds
+UNION ALL
+SELECT 'said', id, said FROM conversation_turn WHERE id IN :saidIds;

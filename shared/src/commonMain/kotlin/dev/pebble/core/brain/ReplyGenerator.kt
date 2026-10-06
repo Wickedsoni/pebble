@@ -1,5 +1,7 @@
 package dev.pebble.core.brain
 
+import kotlinx.coroutines.CancellationException
+
 /** What a reply writer gets: the line, its script, the mood reading, the last turns and what Pebble knows. */
 data class ReplyContext(
     val userText: String,
@@ -17,9 +19,24 @@ fun interface ReplyGenerator {
     suspend fun reply(ctx: ReplyContext): String?
 }
 
-/** Asks each writer in order and returns the first reply. The canned [Replies] stay outside, as the final fallback. */
+/**
+ * Asks each writer in order and returns the first reply. A writer that fails is skipped; a cancelled caller is not
+ * (the [CancellationException] goes on, so no writer is asked after the scope is gone). The canned [Replies] stay
+ * outside, as the final fallback.
+ */
 class ReplyChain(private val writers: List<ReplyGenerator>) : ReplyGenerator {
-    override suspend fun reply(ctx: ReplyContext): String? = writers.firstNotNullOfOrNull { runCatching { it.reply(ctx) }.getOrNull() }
+    override suspend fun reply(ctx: ReplyContext): String? {
+        for (writer in writers) {
+            try {
+                writer.reply(ctx)?.let { return it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // this writer failed: the next one answers
+            }
+        }
+        return null
+    }
 }
 
 /**

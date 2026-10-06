@@ -80,4 +80,20 @@ class ChatSafetyTest {
         assertEquals("hi!", ReplyChain(listOf(broken, silent, ok)).reply(ctx("hello")))
         assertNull(ReplyChain(listOf(silent)).reply(ctx("hello")))
     }
+
+    @Test
+    fun theChainStopsWhenTheCallerIsCancelled() = runBlocking {
+        var asked = 0
+        val cancelling = ReplyGenerator {
+            asked++
+            throw kotlinx.coroutines.CancellationException("scope cancelled")
+        }
+        val next = ReplyGenerator {
+            asked++
+            "should never be asked"
+        }
+        val failure = runCatching { ReplyChain(listOf(cancelling, next)).reply(ctx("hello")) }.exceptionOrNull()
+        assertTrue(failure is kotlinx.coroutines.CancellationException, "cancellation must reach the caller, got $failure")
+        assertEquals(1, asked, "the writers after a cancellation are not asked")
+    }
 }

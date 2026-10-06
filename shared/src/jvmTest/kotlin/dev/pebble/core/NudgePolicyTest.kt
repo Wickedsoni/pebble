@@ -117,4 +117,35 @@ class NudgePolicyTest {
         assertTrue(policy.expected(ctx).getValue(NudgeArm.NOW) > before, "done within 15 minutes raises NOW")
         assertTrue(store.data.isNotEmpty())
     }
+
+    @Test
+    fun loggedPropensityIsCloseToTheTruePickRate() {
+        // Fresh beliefs, so no arm is near 0 or 1 (where any estimate looks good).
+        val ctx = NudgeContext.of(ReminderKind.WATER, 13, busy = false)
+        var worst = 0.0
+        for (seed in 1..20) {
+            val policy = NudgePolicy(InMemoryNudgeStore(), random = Random(seed))
+            val truth = NudgePolicy(InMemoryNudgeStore(), random = Random(1000 + seed)).probabilities(ctx, draws = 100_000)
+            val choice = policy.choose(ctx)
+            worst = maxOf(worst, kotlin.math.abs(choice.propensity - truth.getValue(choice.arm)))
+        }
+        assertTrue(worst < 0.05, "2,000 draws: standard error is about 0.011, worst of 20 was $worst")
+    }
+
+    @Test
+    fun theChosenArmDoesNotDependOnHowTheLoggedPropensityIsEstimated() {
+        // The same seed gives the same decisions, one after the other (golden values).
+        val ctx = NudgeContext.of(ReminderKind.STRETCH, 10, busy = false)
+        val arms = NudgePolicy(InMemoryNudgeStore(), random = Random(42)).let { p -> List(12) { p.choose(ctx).arm } }
+        val again = NudgePolicy(InMemoryNudgeStore(), random = Random(42)).let { p -> List(12) { p.choose(ctx).arm } }
+        assertEquals(arms, again)
+        assertEquals(GOLDEN_ARMS, arms)
+    }
+
+    private companion object {
+        val GOLDEN_ARMS = listOf(
+            NudgeArm.WAIT_10, NudgeArm.NOW, NudgeArm.NOW, NudgeArm.WAIT_30, NudgeArm.WAIT_10, NudgeArm.NOW,
+            NudgeArm.WAIT_10, NudgeArm.NOW, NudgeArm.NOW, NudgeArm.NOW, NudgeArm.NOW, NudgeArm.NOW,
+        )
+    }
 }
