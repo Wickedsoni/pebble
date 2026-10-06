@@ -37,6 +37,8 @@ class ChangeJournal(private val db: PebbleDatabase) {
      * Writes one journal entry for each of [values] (field to JSON value), all with one new HLC at [wall], and
      * returns that HLC. Call it in the transaction that then writes the row with this HLC: [tx] is that transaction (the receiver of
      * `db.transaction { }`), so a call outside a transaction does not compile and cannot leave orphan entries.
+     * [tx] is only a compile-time marker: the function does not read it. The entries go through the same connection,
+     * and so into the same transaction, because the driver keeps one connection for each thread.
      */
     fun record(tx: TransactionCallbacks, table: SyncTable, uid: String, values: Map<String, JsonElement>, wall: Long): Hlc {
         val unknown = values.keys - table.fields.toSet()

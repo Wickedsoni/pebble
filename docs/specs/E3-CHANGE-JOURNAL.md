@@ -222,6 +222,12 @@ The guard triggers also check the merge. A field that wins, but whose column has
 
 The merge builds SQL only from the names in `SyncSchema`. It binds all values as parameters. A name from a peer is never put into SQL text.
 
+**Revision (QA round 1, schema 16).** These rules change the text above:
+- A batch row that has only a `deleted_at` entry is a grave of a purged row. If this device has no row for it, `apply` keeps the entry in the journal, inserts no row, and counts the row as `dropped`. Later live entries of this uid are dropped (see the rule "purged" above). Such a batch is not refused. The check "a row that is new here does not have all synced fields" applies only to a live row. A whole deleted row (a tombstone with all fields) is inserted as before.
+- `apply` refuses a batch only for a `Refusal` or a database error. Other runtime errors go to the caller.
+- `ChangeJournal.record` takes the caller's transaction as its first argument. It does not compile outside `db.transaction { }`.
+- A write that changes nothing (a deleted row, the same value, a second delete) writes no entry and returns `false`.
+
 ### 7.4 Effects in the app
 
 - `ReminderEngine` reads `pendingOneOffs` at each tick. A remote `done_at` or `deleted_at` thus stops the reminder.
