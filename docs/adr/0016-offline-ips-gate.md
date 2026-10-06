@@ -47,3 +47,9 @@ Only 9 of them have a known outcome. The other 33 had an app stop or start befor
 - **Doubly robust estimate.** We did not select it. It needs a reward model per context. With fewer than 100 decisions, that model has no value.
 - **Replay of a learning policy.** We did not select it. It needs a log from a uniform random policy. Pebble never runs one, because a random nudge is bad for the user.
 - **Count reactions through `EventHistory`.** We did not select it. The daily counts do not keep the pair of a decision and its reaction.
+
+## Revision (QA round 1)
+
+- The logged propensity now comes from 2 000 Monte-Carlo draws (before: 200). With 200 draws the standard error was about 0.035. That is too noisy for the weights 1/p. With 2 000 draws it is at most 0.011.
+- The draws use a separate random source. Thus the draw count does not change which arm the policy selects (test: `theChosenArmDoesNotDependOnHowTheLoggedPropensityIsEstimated`).
+- Decisions logged before this change have the noisier propensity. The evaluator uses them as they are.

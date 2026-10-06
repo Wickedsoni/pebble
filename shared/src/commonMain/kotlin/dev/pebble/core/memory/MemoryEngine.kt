@@ -128,13 +128,13 @@ class MemoryEngine(
         // One sample per (day, hour), even if the app restarted mid-hour and logged twice.
         val active = events<PebbleEvent.ActiveHour>("active_hour", since).distinctBy { dayOf(it.atMillis) to it.hour }
         val days = active.map { dayOf(it.atMillis) }.distinct().size
-        if (days < 3) return
+        if (days < 3) return memory.dropDerived(KEY_ACTIVE)
         val hours = active.groupingBy { it.hour }.eachCount().filterValues { it >= days * 0.5 }.keys.sorted()
         if (hours.isEmpty()) return memory.dropDerived(KEY_ACTIVE)
         memory.putDerived(
             MemoryKind.HABIT,
             KEY_ACTIVE,
-            "You're usually at your computer from ${formatHour(hours.first())} to ${formatHour((hours.last() + 1) % 24)}.",
+            "You're usually at your computer ${describeRun(hours)}.",
             hours.joinToString(","),
             now,
         )
@@ -174,8 +174,16 @@ class MemoryEngine(
     // ------------------------------------------------------------------ mood
 
     private fun learnMood(now: Long) {
+        learnMoodWeek(now)
+        learnMoodWater(now)
+    }
+
+    private fun learnMoodWeek(now: Long) {
         val week = memory.moodSince(now - 7 * DAY)
-        if (week.size < 3) return
+        if (week.size < 3) {
+            memory.dropDerived(KEY_MOOD_WEEK)
+            return
+        }
         val avg = week.map { it.score }.average()
         val word = when {
             avg >= 4.3 -> "great"
@@ -190,8 +198,10 @@ class MemoryEngine(
             ((avg * 10).roundToInt() / 10.0).toString(),
             now,
         )
+    }
 
-        // Does hitting the water goal line up with better days?
+    /** Does hitting the water goal line up with better days? Uses the last 30 days, so a quiet week keeps it. */
+    private fun learnMoodWater(now: Long) {
         val goal = waterGoalMl()
         val month = memory.moodSince(now - 30 * DAY).groupBy { dayOf(it.atMillis) }.mapValues { (_, m) -> m.map { it.score }.average() }
         val water = db.wellnessQueries.waterLogSince(now - 30 * DAY).executeAsList()
@@ -199,6 +209,8 @@ class MemoryEngine(
         val (hit, missed) = month.entries.partition { (water[it.key] ?: 0) >= goal }
         if (hit.size >= 3 && missed.size >= 3 && hit.map { it.value }.average() - missed.map { it.value }.average() >= 0.5) {
             memory.putDerived(MemoryKind.MOOD, KEY_MOOD_WATER, "You feel better on days you hit your water goal.", null, now)
+        } else {
+            memory.dropDerived(KEY_MOOD_WATER)
         }
     }
 
@@ -252,6 +264,27 @@ class MemoryEngine(
             h < 12 -> "$h AM"
             h == 12 -> "12 PM"
             else -> "${h - 12} PM"
+        }
+
+        /**
+         * The longest run of neighbouring [hours] (0-23, sorted, not empty) on a day that wraps at midnight, as words:
+         * "from 9 AM to 11 AM", "from 11 PM to 2 AM". A tie goes to the earlier start; a full day is "around the clock".
+         */
+        internal fun describeRun(hours: List<Int>): String {
+            val set = hours.toSet()
+            if (set.size == 24) return "around the clock"
+            var bestStart = -1
+            var bestLength = 0
+            for (start in hours) {
+                if ((start + 23) % 24 in set) continue // not the start of a run
+                var length = 0
+                while ((start + length) % 24 in set) length++
+                if (length > bestLength) {
+                    bestStart = start
+                    bestLength = length
+                }
+            }
+            return "from ${formatHour(bestStart)} to ${formatHour((bestStart + bestLength) % 24)}"
         }
 
         fun listHours(hours: List<Int>) = joinWords(hours.map(::formatHour))

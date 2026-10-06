@@ -63,7 +63,13 @@ class NudgePolicy(
     private val store: NudgeStore,
     private val quietHours: () -> Set<Int> = { emptySet() },
     private val random: Random = Random.Default,
+    /** Monte-Carlo draws for each logged propensity; tests change it to show that it never changes the choice. */
+    private val propensityDraws: Int = PROPENSITY_DRAWS,
 ) {
+    init {
+        require(propensityDraws > 0) { "propensityDraws must be positive, got $propensityDraws" }
+    }
+
     private val beliefs: MutableMap<String, Pair<Double, Double>> = store.load().toMutableMap()
 
     data class Choice(val arm: NudgeArm, val propensity: Double)
@@ -133,53 +139,63 @@ class NudgePolicy(
         return wins.mapValues { (_, n) -> n.toDouble() / draws }
     }
 
-    /** Probability Thompson sampling picks [arm] here (Monte-Carlo), logged for offline evaluation (IPS). */
-    private fun propensity(ctx: NudgeContext, arm: NudgeArm, draws: Int = 200): Double {
+    /**
+     * Probability Thompson sampling picks [arm] here (Monte-Carlo), logged for offline evaluation (IPS).
+     * With [PROPENSITY_DRAWS] draws (the default of [propensityDraws]) the standard error is at most 0.011 (200 draws gave 0.035, too noisy for 1/p weights).
+     * The draws use their own random source, so they never change which arm [choose] picks.
+     */
+    private fun propensity(ctx: NudgeContext, arm: NudgeArm, draws: Int = propensityDraws): Double {
         val b = NudgeArm.entries.associateWith { belief(ctx, it) }
         var wins = 0
         repeat(draws) {
-            val pick = b.maxBy { (_, ab) -> sampleBeta(ab.first, ab.second) }.key
+            val pick = b.maxBy { (_, ab) -> sampleBeta(ab.first, ab.second, propensityRandom) }.key
             if (pick == arm) wins++
         }
         return (wins + 0.5) / (draws + 1.0)
     }
 
+    /** Made from [random] on first use, so a seeded policy stays repeatable but the choices do not depend on the draw count. */
+    private val propensityRandom: Random by lazy { Random(random.nextLong()) }
+
     private fun keyOf(ctx: NudgeContext, arm: NudgeArm) = "${ctx.key}|${arm.name}"
 
     // Beta(a, b) = X / (X + Y), X ~ Gamma(a), Y ~ Gamma(b).
-    private fun sampleBeta(a: Double, b: Double): Double {
-        val x = sampleGamma(a)
-        val y = sampleGamma(b)
+    private fun sampleBeta(a: Double, b: Double, source: Random = random): Double {
+        val x = sampleGamma(a, source)
+        val y = sampleGamma(b, source)
         return if (x + y == 0.0) 0.5 else x / (x + y)
     }
 
     /** Marsaglia–Tsang; shape < 1 boosted with U^(1/shape). */
-    private fun sampleGamma(shape: Double): Double {
-        if (shape < 1) return sampleGamma(shape + 1) * random.nextDouble().pow(1 / shape)
+    private fun sampleGamma(shape: Double, source: Random): Double {
+        if (shape < 1) return sampleGamma(shape + 1, source) * source.nextDouble().pow(1 / shape)
         val d = shape - 1.0 / 3
         val c = 1 / sqrt(9 * d)
         while (true) {
             var x: Double
             var v: Double
             do {
-                x = gaussian()
+                x = gaussian(source)
                 v = 1 + c * x
             } while (v <= 0)
             v *= v * v
-            val u = random.nextDouble()
+            val u = source.nextDouble()
             if (u < 1 - 0.0331 * x * x * x * x) return d * v
             if (ln(u) < 0.5 * x * x + d * (1 - v + ln(v))) return d * v
         }
     }
 
-    private fun gaussian(): Double {
+    private fun gaussian(source: Random): Double {
         // Box–Muller.
-        val u1 = random.nextDouble().coerceAtLeast(1e-12)
-        val u2 = random.nextDouble()
+        val u1 = source.nextDouble().coerceAtLeast(1e-12)
+        val u2 = source.nextDouble()
         return sqrt(-2 * ln(u1)) * kotlin.math.cos(2 * kotlin.math.PI * u2)
     }
 
     companion object {
+        /** Monte-Carlo draws behind the logged propensity. */
+        const val PROPENSITY_DRAWS = 2_000
+
         /** How a reaction to a nudge scores. [minutesAfterShown] is from when it appeared to the reaction. */
         fun rewardFor(action: ReminderAction?, minutesAfterShown: Double): Double = when (action) {
             ReminderAction.DONE -> if (minutesAfterShown <= 15) 1.0 else 0.6

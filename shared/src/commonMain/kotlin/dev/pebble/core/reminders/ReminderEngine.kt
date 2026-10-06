@@ -17,6 +17,9 @@ import kotlinx.coroutines.launch
 /**
  * Decides which reminders are due. Pure scheduling logic: time comes from [clock] and the
  * local minute-of-day from [minuteOfDay], so tests can drive it without waiting.
+ *
+ * Not thread-safe: the engine keeps plain mutable state and is confined to one thread (the main thread in
+ * the app). Call [tick], [act], [defer], [lessOften] and [upcoming] from that thread only.
  */
 class ReminderEngine(
     private val repo: ReminderRepository,
@@ -35,10 +38,12 @@ class ReminderEngine(
 ) {
     /** One nudge decision per due cycle of a repeating reminder: at most one wait, then it shows. */
     private class Decision(val ctx: NudgeContext, val arm: NudgeArm, var shownAt: Long? = null, var rewarded: Boolean = false)
-    private val decided = mutableMapOf<String, Decision>()
 
+    // State, all keyed by reminder key. [tick] drops the keys of rules that are off and one-offs that are gone.
     private val startedAt = clock()
+    private val decided = mutableMapOf<String, Decision>()
     private val snoozedUntil = mutableMapOf<String, Long>()
+    private val skips = mutableMapOf<String, Int>()
     private val announced = mutableSetOf<String>()
 
     private val _active = MutableStateFlow<List<ActiveReminder>>(emptyList())
@@ -47,9 +52,12 @@ class ReminderEngine(
     fun tick() {
         val now = clock()
         val quiet = nudge == null && (minuteOfDay(now) / 60) in quietHours()
+        val rules = repo.rules().filter { it.enabled }
+        val oneOffs = repo.pendingOneOffs()
+        pruneState(rules.map { ruleKey(it.id) }.toSet() + oneOffs.map { oneOffKey(it.id) })
         val due = buildList {
             if (!quiet) {
-                repo.rules().filter { it.enabled }.forEach { rule ->
+                rules.forEach { rule ->
                     val key = ruleKey(rule.id)
                     val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * backOff(key) * 60_000L)
                     if (now >= dueAt && inWindow(rule, now) && !deferredByPolicy(key, rule.kind, now)) {
@@ -57,7 +65,7 @@ class ReminderEngine(
                     }
                 }
             }
-            repo.pendingOneOffs().forEach { r ->
+            oneOffs.forEach { r ->
                 val key = oneOffKey(r.id)
                 val dueAt = snoozedUntil[key] ?: r.dueAt
                 if (now >= dueAt) add(ActiveReminder(key, ReminderKind.CUSTOM, r.title, r.strictness, dueAt))
@@ -80,12 +88,22 @@ class ReminderEngine(
         _active.value = due
     }
 
-    /** What's coming next — repeating reminders' next due time and pending one-offs — soonest first. */
+    /** Forgets the state of rules that are off and of one-offs that are gone, so it cannot come back with a re-enabled rule. */
+    private fun pruneState(liveKeys: Set<String>) {
+        decided.keys.retainAll(liveKeys)
+        snoozedUntil.keys.retainAll(liveKeys)
+        skips.keys.retainAll(liveKeys)
+    }
+
+    /**
+     * What's coming next — repeating reminders' next due time and pending one-offs — soonest first. A repeating
+     * reminder whose due time falls outside its active window is shown at the start of the next window.
+     */
     fun upcoming(limit: Int = 5): List<ActiveReminder> {
         val rules = repo.rules().filter { it.enabled }.map { rule ->
             val key = ruleKey(rule.id)
             val dueAt = snoozedUntil[key] ?: ((rule.lastDoneAt ?: startedAt) + rule.intervalMinutes * backOff(key) * 60_000L)
-            ActiveReminder(key, rule.kind, rule.title, rule.strictness, dueAt)
+            ActiveReminder(key, rule.kind, rule.title, rule.strictness, if (inWindow(rule, dueAt)) dueAt else nextWindowStart(rule, dueAt))
         }
         val once = repo.pendingOneOffs().map {
             val key = oneOffKey(it.id)
@@ -155,8 +173,6 @@ class ReminderEngine(
         return true
     }
 
-    private val skips = mutableMapOf<String, Int>()
-
     private fun backOff(key: String): Int = 1 + (skips[key] ?: 0).coerceAtMost(2)
 
     /**
@@ -178,6 +194,25 @@ class ReminderEngine(
         return minutes
     }
 
+    /**
+     * The first minute at or after [from] that opens [rule]'s active window (local time, from [minuteOfDay]).
+     * A clock change (DST) between [from] and the window start moves the local minute, so the guess is checked once
+     * and moved by the difference. If the start minute does not exist that day (it is in the spring-forward gap), the
+     * window opens at the first minute after the gap.
+     */
+    private fun nextWindowStart(rule: ReminderRule, from: Long): Long {
+        val wait = (rule.activeFromMinute - minuteOfDay(from) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+        val guess = from - from.mod(MINUTE) + wait * MINUTE
+        val half = MINUTES_PER_DAY / 2
+        val drift = (rule.activeFromMinute - minuteOfDay(guess) + MINUTES_PER_DAY + half) % MINUTES_PER_DAY - half
+        val corrected = guess + drift * MINUTE
+        if (corrected >= from && minuteOfDay(corrected) == rule.activeFromMinute) return corrected
+        val start = maxOf(corrected, from - from.mod(MINUTE))
+        // A window that lies wholly in the gap does not open that day: show the start of the next day.
+        return (0 until MAX_GAP_MINUTES).asSequence().map { start + it * MINUTE }.firstOrNull { inWindow(rule, it) }
+            ?: (guess + MINUTE * MINUTES_PER_DAY)
+    }
+
     private fun inWindow(rule: ReminderRule, now: Long): Boolean {
         val m = minuteOfDay(now)
         return if (rule.activeFromMinute <= rule.activeToMinute) {
@@ -190,6 +225,9 @@ class ReminderEngine(
     companion object {
         private const val RULE = "rule:"
         private const val ONCE = "once:"
+        private const val MINUTES_PER_DAY = 24 * 60
+        private const val MINUTE = 60_000L
+        private const val MAX_GAP_MINUTES = 180 // longer than any clock-change gap
         private const val IGNORED_AFTER = 30 * 60_000L
         fun ruleKey(id: String) = RULE + id
         fun oneOffKey(id: Long) = ONCE + id
