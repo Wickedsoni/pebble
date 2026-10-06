@@ -348,8 +348,8 @@ object QuickAddParser {
         }
     }
 
-    private val strictRx = Regex("""\b(?:strict\w*|coach\w*)\b""")
-    private val gentleRx = Regex("""\b(?:gentl\w*|soft\w*)\b""")
+    private val strictRx = Regex("""\b(?:strict(?:ly)?|coach)\b""")
+    private val gentleRx = Regex("""\b(?:gentl(?:e|y)|soft(?:ly)?)\b""")
     private val normalRx = Regex("""\bnormal\b""")
 
     private fun strictnessOf(text: String): Strictness? {

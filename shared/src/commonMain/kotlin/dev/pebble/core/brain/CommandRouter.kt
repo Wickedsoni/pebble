@@ -154,11 +154,15 @@ class CommandRouter(
         }
         fun isTimeWord(i: Int) = words[i].tag in timeTags || words[i].low in timeWords
         val kept = words.indices.filter { i ->
-            val nextToTime = (i > 0 && (isTimeWord(i - 1) || words[i - 1].low in HinglishTime.clockBeforeCues)) ||
-                (i < words.lastIndex && (isTimeWord(i + 1) || words[i + 1].low in HinglishTime.clockBeforeCues))
+            val weakCue = i > 0 && words[i - 1].low in HinglishTime.weakClockCues && (i == words.lastIndex || isTimeWord(i + 1))
+            val nextToTime = weakCue ||
+                (i > 0 && (isTimeWord(i - 1) || words[i - 1].low in HinglishTime.strongClockCues)) ||
+                (i < words.lastIndex && (isTimeWord(i + 1) || words[i + 1].low in HinglishTime.strongClockCues))
             !isTimeWord(i) && words[i].low !in particles && !(HinglishTime.numberOf(words[i].low) != null && nextToTime)
         }.map { words[it] }
-        val trimmed = withoutFramingPhrases(kept).dropWhile { it.low in filler }.dropLastWhile { it.low in filler }
+        val trimmed = withoutFramingPhrases(kept).dropWhile {
+            it.low in filler || it.low in leadingFiller
+        }.dropLastWhile { it.low in filler }
         val title = trimmed.joinToString(" ") { it.text }.trim()
         return title.ifBlank { if (intent == "alarm_set") "Wake up" else "Reminder" }.replaceFirstChar(Char::uppercase)
     }
@@ -258,11 +262,13 @@ class CommandRouter(
             listOf("रिमाइंडर", "लगा", "दो"), listOf("रिमाइंडर", "लगाओ"), listOf("रिमाइंडर", "लगा"),
         )
 
+        /** Polite openers, removed only at the start: "will" and "ping" can be names at the end ("call will"). */
+        private val leadingFiller = setOf("can", "could", "would", "will", "you", "hey", "pebble", "ping", "kindly")
+
         /** Words that frame a reminder rather than describe it, in all three scripts. Removed only at the start or end. */
         private val filler = setOf(
             "remind", "me", "to", "set", "a", "reminder", "for", "please", "alarm", "wake", "up", "at", "about", "don't", "let", "forget",
             "around", "approximately", "by", "pls", "plz", "dont", "lagbhag", "लगभग",
-            "can", "could", "would", "will", "you", "hey", "pebble", "ping", "kindly",
             "mujhe", "yaad", "dila", "dilana", "dilaana", "dena", "do", "karo", "kar", "laga", "lagao", "utha", "in",
             "मुझे", "याद", "दिला", "दिलाना", "देना", "दो", "करो", "रिमाइंडर", "लगा", "लगाओ", "जगा", "उठा",
         )

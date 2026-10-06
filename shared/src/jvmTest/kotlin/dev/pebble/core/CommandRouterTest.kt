@@ -317,4 +317,12 @@ class CommandRouterTest {
         val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
         assertEquals(10, (r.command as QuickCommand.RemindIn).minutes)
     }
+
+    @Test
+    fun aNameLikeWillStaysAtTheEndOfATitle() {
+        val text = "remind me to call will at five"
+        val tags = List(5) { "O" } + listOf("B-time")
+        val r = CommandRouter({ model(text to u(text, tags, "calendar_set" to 0.9f)) }).route(text) as Routed.Run
+        assertEquals("Call will", (r.command as QuickCommand.RemindAt).title)
+    }
 }

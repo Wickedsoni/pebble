@@ -144,4 +144,11 @@ class QuickAddParserTest {
         assertEquals(SetInterval(ReminderKind.STRETCH, 30, Strictness.GENTLE), p("stretch every 30 min gently"))
         assertEquals(SetInterval(ReminderKind.WATER, 30, Strictness.STRICT), p("water every 30 min strictly"))
     }
+
+    @Test fun strictnessWordsDoNotMatchLongerWords() {
+        assertEquals(SetInterval(ReminderKind.WATER, 30, null), p("water every 30 min software"))
+        assertEquals(SetInterval(ReminderKind.WATER, 30, null), p("water every 30 min softball"))
+        assertEquals(SetInterval(ReminderKind.WATER, 30, null), p("water every 30 min coaching"))
+        assertEquals(SetInterval(ReminderKind.WATER, 30, Strictness.GENTLE), p("water every 30 min softly"))
+    }
 }

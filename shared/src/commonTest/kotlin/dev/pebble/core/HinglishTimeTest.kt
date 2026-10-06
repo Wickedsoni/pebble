@@ -150,4 +150,25 @@ class HinglishTimeTest {
         assertEquals(At(5, 45, null, true), p("quarter to six"))
         assertEquals(At(6, 15, null, true), p("quarter past six"))
     }
+
+    @Test fun weakCuesNeedTheNumberToEndTheTime() {
+        assertNull(p("read around 5 pages tomorrow"))
+        assertNull(p("stand by 3 apples"))
+        assertEquals(At(5, 0, null, true), p("submit report by 5"))
+        assertEquals(At(5, 0, 1, true), p("by 5 tomorrow"))
+        assertEquals(At(17, 0, null, false), p("by 5 pm"))
+        assertEquals(At(5, 0, null, true), p("at 5 pages"))
+    }
+
+    @Test fun numberWordAdjacencyIgnoresNextWords() {
+        assertNull(p("review the next five chapters tomorrow"))
+        assertNull(p("agle paanch din"))
+        assertEquals(At(4, 0, 1, true), p("kal char"))
+        assertEquals(At(10, 0, 1, true), p("kal das"))
+    }
+
+    @Test fun theBelongsToNextOnly() {
+        assertEquals(At(4, 0, null, true), p("in the 30 minute meeting at 4"))
+        assertEquals(In(10), p("in the next 10 min"))
+    }
 }

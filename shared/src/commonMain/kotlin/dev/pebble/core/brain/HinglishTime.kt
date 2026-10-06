@@ -131,7 +131,7 @@ object HinglishTime {
     private val genitives = setOf("ke", "के")
 
     /** Words that may stand between "in" and the duration: "in about 10 minutes", "in the next 10 min". */
-    private val durationFillers = setOf("about", "around", "approximately", "roughly", "just", "the", "next", "another")
+    private val durationFillers = setOf("about", "around", "approximately", "roughly", "just", "next", "another")
 
     /** Longest relative reminder: one week, in minutes. */
     private const val MAX_RELATIVE_MINUTES = 7 * 24 * 60
@@ -146,7 +146,8 @@ object HinglishTime {
     private fun beforeMarkerAt(w: List<String>, start: Int): Boolean {
         var k = start - 1
         var skipped = 0
-        while (k >= 0 && w[k] in durationFillers && skipped < 2) {
+        // "the" counts only in "the next": "in the 30 minute meeting" is no duration.
+        while (k >= 0 && skipped < 2 && (w[k] in durationFillers || (w[k] == "the" && w.getOrNull(k + 1) == "next"))) {
             k--
             skipped++
         }
@@ -180,17 +181,22 @@ object HinglishTime {
     private val clockAfterCues = setOf("baje", "bje", "बजे", "oclock", "am", "pm")
 
     /** Words right before an hour that mark it as a clock time. Shared with the reminder title in `CommandRouter`. */
-    internal val clockBeforeCues = setOf(
-        "at", "by", "around", "before", "till", "until", "approx", "approximately", "lagbhag", "लगभग", "@",
-        "saade", "sade", "साढ़े", "साढे", "sava", "savaa", "sawa", "सवा", "paune", "pone", "पौने", "past",
+    internal val strongClockCues = setOf(
+        "at", "@", "saade", "sade", "साढ़े", "साढे", "sava", "savaa", "sawa", "सवा", "paune", "pone", "पौने", "past",
     )
+
+    /** Weaker cues ("read around 5 pages"): an hour only when the number ends the time. */
+    internal val weakClockCues = setOf("by", "around", "before", "till", "until", "approx", "approximately", "lagbhag", "लगभग")
 
     /** Number words that are also common words ("do" = give, "ek" = a, "one", "sat"…): never a time on their own. */
     private val ambiguousNumbers = setOf(
-        "do", "ek", "one", "sat", "tin", "che", "bara", "bis", "teen", "char", "das", "एक", "दो",
+        "do", "ek", "one", "sat", "tin", "che", "bara", "bis", "teen", "एक", "दो",
     )
     private val dayWords = setOf("today", "aaj", "aj", "आज", "tomorrow", "tmrw", "kal", "कल", "parso", "parson", "परसों", "tonight")
     private val dayFiller = dayWords + weekdayWords.keys + nextWords + partWords.values.flatten()
+
+    /** Day words a number word may stand next to ("kal saat"); not "next" / "agle", which also count things. */
+    private val dayAdjacent = dayWords + weekdayWords.keys + partWords.values.flatten()
 
     /**
      * Hour and minute from "5:30", "17.00", "saade paanch", "पौने सात", "dedh", "half past five", "at 5", "7 baje".
@@ -217,13 +223,15 @@ object HinglishTime {
             // "five thirty pm": an hour word, a minute word, then am / pm.
             val minuteWord = next?.let { number(it) }?.takeIf { it in 10..59 }
             if (minuteWord != null && w.getOrNull(i + 2) in setOf("am", "pm")) return h to minuteWord
-            val cued = raw != word || prev in clockBeforeCues || next in clockAfterCues || prev in partFiller || next in partFiller
+            val weakCued = prev in weakClockCues && (next == null || next in clockAfterCues || next in dayFiller)
+            val cued = raw != word || prev in strongClockCues || weakCued || next in clockAfterCues ||
+                prev in partFiller || next in partFiller
             val isDigits = word.all { it.isDigit() }
             // "kal 5", "kal saat", "friday five": a number among day words only; the ambiguous words never.
             val amongDays = if (isDigits) {
                 w.withIndex().all { (j, x) -> j == i || x in dayFiller }
             } else {
-                word !in ambiguousNumbers && (prev in dayFiller || next in dayFiller)
+                word !in ambiguousNumbers && (prev in dayAdjacent || next in dayAdjacent)
             }
             if (!cued && !amongDays) continue
             return when (prev) {
