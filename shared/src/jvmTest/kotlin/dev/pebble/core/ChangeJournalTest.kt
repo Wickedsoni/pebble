@@ -66,6 +66,64 @@ class ChangeJournalTest {
         assertEquals(4_000L, maxHlc().wallMillis, "the HLC uses the time of the write")
     }
 
+    // ------------------------------------------------------------------ QA round 1 (P2a)
+
+    @Test
+    fun recordJoinsTheCallersTransactionSoAFailureLeavesNoOrphanEntries() {
+        // record needs the caller's transaction (its receiver), so it cannot run outside one; and it rolls back with it.
+        val values = mapOf("text" to ChangeJournal.v("x"), "created_at" to ChangeJournal.v(1L), "archived" to ChangeJournal.v(0L))
+        runCatching { db.transaction { journal.record(this, dev.pebble.core.sync.SyncTable.NOTE, "orphan", values, 1); error("boom") } }
+        assertEquals(emptyMap(), entries("note", "orphan"))
+    }
+
+    @Test
+    fun aSecondDeleteOfANoteKeepsTheFirstTime() {
+        val id = notes.add("x", at = 1_000)
+        assertTrue(notes.delete(id, at = 2_000))
+        val before = entries("note", noteUid(id))
+        assertEquals(false, notes.delete(id, at = 9_000))
+        assertEquals(before, entries("note", noteUid(id)))
+        assertEquals(2_000L, db.wellnessQueries.noteStateById(id).executeAsOne().deleted_at)
+    }
+
+    @Test
+    fun aNoteEditThatChangesNothingOrHitsADeletedNoteWritesNothing() {
+        val id = notes.add("same", at = 1_000)
+        val hlc = maxHlc()
+        assertEquals(false, notes.update(id, "same", at = 2_000))
+        assertTrue(notes.archive(id, at = 3_000))
+        assertEquals(false, notes.archive(id, at = 4_000), "archived already")
+        notes.delete(id, at = 5_000)
+        val afterDelete = maxHlc()
+        assertEquals(false, notes.update(id, "new text", at = 6_000))
+        assertEquals(false, notes.archive(id, at = 7_000))
+        assertEquals(afterDelete, maxHlc(), "nothing was journaled")
+        assertTrue(afterDelete > hlc)
+        assertEquals("same", db.wellnessQueries.noteStateById(id).executeAsOne().text)
+        assertEquals(emptyList(), journal.verify())
+    }
+
+    @Test
+    fun aReminderThatWasDeletedElsewhereIgnoresDoneAndRescheduleAndDelete() {
+        val id = reminders.addOneOff("Call mom", dueAt = 5_000, at = 1_000)
+        assertTrue(reminders.deleteOneOff(id, at = 2_000))
+        val before = entries("one_off_reminder", oneOffUid(id))
+        assertEquals(false, reminders.markOneOffDone(id, at = 3_000))
+        assertEquals(false, reminders.rescheduleOneOff(id, dueAt = 9_000, at = 3_000))
+        assertEquals(false, reminders.deleteOneOff(id, at = 4_000))
+        assertEquals(before, entries("one_off_reminder", oneOffUid(id)), "the tombstone is not touched")
+        assertEquals(emptyList(), journal.verify())
+    }
+
+    @Test
+    fun aReminderMovedToTheSameTimeOrDoneTwiceWritesOnce() {
+        val id = reminders.addOneOff("Tea", dueAt = 5_000, at = 1_000)
+        assertEquals(false, reminders.rescheduleOneOff(id, dueAt = 5_000, at = 2_000))
+        assertTrue(reminders.markOneOffDone(id, at = 3_000))
+        assertEquals(false, reminders.markOneOffDone(id, at = 4_000))
+        assertEquals("3000", entries("one_off_reminder", oneOffUid(id)).getValue("done_at"))
+    }
+
     @Test
     fun everyWriteToAReminderGoesIntoTheJournal() {
         val id = reminders.addOneOff("Call mom", dueAt = 5_000, strictness = Strictness.GENTLE, at = 1_000)
@@ -220,10 +278,10 @@ class ChangeJournalTest {
         val fast = DatabaseFactory.inMemory()
         val j = ChangeJournal(fast)
         val values = mapOf("text" to ChangeJournal.v("note"), "created_at" to ChangeJournal.v(1L), "archived" to ChangeJournal.v(0L))
-        fast.transaction { repeat(500) { j.record(dev.pebble.core.sync.SyncTable.NOTE, "warm$it", values, it.toLong()) } }
+        fast.transaction { repeat(500) { j.record(this, dev.pebble.core.sync.SyncTable.NOTE, "warm$it", values, it.toLong()) } }
         val n = 2_000
         val perRecord = measureNanoTime {
-            fast.transaction { repeat(n) { j.record(dev.pebble.core.sync.SyncTable.NOTE, "u$it", values, 10_000L + it) } }
+            fast.transaction { repeat(n) { j.record(this, dev.pebble.core.sync.SyncTable.NOTE, "u$it", values, 10_000L + it) } }
         } / n
         println("ChangeJournal.record: ${perRecord / 1000} µs for each write of 3 fields")
         assertNotNull(Hlc.parse(fast.journalQueries.maxHlc().executeAsOne().hlc!!))

@@ -1,5 +1,6 @@
 package dev.pebble.core.wellness
 
+import app.cash.sqldelight.TransactionCallbacks
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOne
@@ -43,6 +44,7 @@ class NoteRepository(private val db: PebbleDatabase, private val journal: Change
     fun add(text: String, at: Long): Long = db.transactionWithResult {
         val uid = ChangeJournal.newUid()
         val hlc = journal.record(
+            this,
             SyncTable.NOTE,
             uid,
             mapOf("text" to v(text), "created_at" to v(at), "archived" to v(0L), "deleted_at" to JsonNull),
@@ -52,21 +54,33 @@ class NoteRepository(private val db: PebbleDatabase, private val journal: Change
         q.lastInsertedId().executeAsOne()
     }
 
-    fun update(id: Long, text: String, at: Long) = db.transaction {
-        q.updateNote(text = text, at = at, hlc = record(id, mapOf("text" to v(text)), at), id = id)
+    /** Changes the text of note [id]. Returns false, and writes nothing, if the note is gone or deleted, or has this text already. */
+    fun update(id: Long, text: String, at: Long): Boolean = db.transactionWithResult {
+        val state = q.noteStateById(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        if (state.deleted_at != null || state.text == text) return@transactionWithResult false
+        q.updateNote(text = text, at = at, hlc = record(this, id, mapOf("text" to v(text)), at), id = id)
+        true
     }
 
-    fun archive(id: Long, at: Long) = db.transaction {
-        q.archiveNote(at = at, hlc = record(id, mapOf("archived" to v(1L)), at), id = id)
+    /** Archives note [id]. Returns false, and writes nothing, if the note is gone, deleted or archived already. */
+    fun archive(id: Long, at: Long): Boolean = db.transactionWithResult {
+        val state = q.noteStateById(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        if (state.deleted_at != null || state.archived != 0L) return@transactionWithResult false
+        q.archiveNote(at = at, hlc = record(this, id, mapOf("archived" to v(1L)), at), id = id)
+        true
     }
 
     /**
      * Removes a note from view (used to undo a note Pebble created by mistake). The row stays as a tombstone
-     * (`deleted_at`) so that sync can tell other devices (WP E1); [purgeTombstones] removes it later.
+     * (`deleted_at`) so that sync can tell other devices (WP E1); [purgeTombstones] removes it later. A note that is
+     * deleted already keeps its first `deleted_at`: returns false and writes nothing.
      */
-    fun delete(id: Long, at: Long? = null) = db.transaction {
+    fun delete(id: Long, at: Long? = null): Boolean = db.transactionWithResult {
+        val state = q.noteStateById(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        if (state.deleted_at != null) return@transactionWithResult false
         val time = at ?: journal.now()
-        q.deleteNote(at = time, hlc = record(id, mapOf("deleted_at" to v(time)), time), id = id)
+        q.deleteNote(at = time, hlc = record(this, id, mapOf("deleted_at" to v(time)), time), id = id)
+        true
     }
 
     /** Removes tombstones older than [before], and their journal entries except the graves. Returns how many. */
@@ -75,8 +89,8 @@ class NoteRepository(private val db: PebbleDatabase, private val journal: Change
     }
 
     /** The HLC of the journal entries for [values] of note [id], or null if the note has no uid yet (reconcile records it). */
-    private fun record(id: Long, values: Map<String, JsonElement>, at: Long): String? =
-        q.noteUid(id).executeAsOneOrNull()?.uid?.let { journal.record(SyncTable.NOTE, it, values, at).toString() }
+    private fun record(tx: TransactionCallbacks, id: Long, values: Map<String, JsonElement>, at: Long): String? =
+        q.noteUid(id).executeAsOneOrNull()?.uid?.let { journal.record(tx, SyncTable.NOTE, it, values, at).toString() }
 
     /** Gives notes made before this device had an id, or by an older Pebble without uids, a uid and [deviceId]. */
     fun claim(deviceId: String) = db.transaction {

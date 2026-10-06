@@ -15,18 +15,18 @@ CREATE TABLE change_history (
     UNIQUE (tbl, uid, field, hlc)
 );
 
-CREATE INDEX change_history_row ON change_history(tbl, uid);
 CREATE INDEX change_history_kept ON change_history(kept_at);
 
 -- Keeps the entry that a new journal entry replaces, on every path (record, merge, reconcile). A journal entry is
 -- replaced with INSERT OR REPLACE, which fires BEFORE INSERT (checked with sqlite-jdbc 3.53.4.0). A delete is final,
--- so deleted_at is not kept. The same entry again (the same HLC) keeps nothing.
+-- so deleted_at is not kept. The same entry again (the same HLC) keeps nothing, and a value that does not change
+-- (two devices make the same edit) is not kept (QA round 1).
 CREATE TRIGGER change_journal_keep_history BEFORE INSERT ON change_journal
 BEGIN
     INSERT OR IGNORE INTO change_history(tbl, uid, field, value, hlc, replaced_by, kept_at, kind)
     SELECT tbl, uid, field, value, hlc, new.hlc, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 'replaced'
     FROM change_journal
-    WHERE tbl = new.tbl AND uid = new.uid AND field = new.field AND hlc <> new.hlc AND field <> 'deleted_at';
+    WHERE tbl = new.tbl AND uid = new.uid AND field = new.field AND hlc <> new.hlc AND value <> new.value AND field <> 'deleted_at';
 END;
 
 -- A peer's edit that lost the merge (ChangeJournal.apply).

@@ -201,6 +201,49 @@ class SyncMergeTest {
     }
 
     @Test
+    fun aGraveOfAPurgedRowSyncsToANewDeviceAndKeepsLaterEntriesOut() {
+        val a = Replica(1)
+        val id = a.notes.add("gone", a.now)
+        a.notes.add("stays", a.now + 1)
+        a.notes.delete(id, a.now + 2)
+        a.notes.purgeTombstones(before = a.now + 3) // only the grave of "gone" stays on A
+        val graveOnly = a.journal.changesSince(null).rows.single { it.fields.keys == setOf("deleted_at") }
+
+        val b = Replica(2)
+        assertTrue(b.pullAll(a) > 0) // the whole batch is applied, not refused
+        assertEquals(listOf("stays"), b.notes.recent().map { it.text }, "B never shows the purged note")
+        assertTrue(b.journal.isDeleted(dev.pebble.core.sync.SyncTable.NOTE, graveOnly.uid), "B has the grave")
+        assertEquals(emptyList(), b.journal.verify())
+
+        // A later live entry of the same uid (a device that was offline) is dropped on B.
+        val live = RowChange(
+            "note",
+            graveOnly.uid,
+            mapOf(
+                "text" to Stamped(JsonPrimitive("gone, edited"), Hlc(a.now + 9_000, 0, a.device).toString()),
+                "created_at" to Stamped(JsonPrimitive(1), Hlc(a.now + 9_000, 0, a.device).toString()),
+                "archived" to Stamped(JsonPrimitive(0), Hlc(a.now + 9_000, 0, a.device).toString()),
+                "deleted_at" to Stamped(JsonNull, Hlc(a.now + 9_000, 0, a.device).toString()),
+            ),
+        )
+        val r = b.journal.apply(ChangeBatch(a.journal.epoch(), listOf(live), a.journal.changesSince(null).next), b.now)
+        assertEquals(ApplyResult.Applied(0, 0, emptyList(), dropped = 1), r)
+        assertEquals(listOf("stays"), b.notes.recent().map { it.text })
+    }
+
+    @Test
+    fun aNewRowThatIsLiveAndIncompleteIsStillRefused() {
+        val a = Replica(1)
+        val b = Replica(2)
+        a.notes.add("x", a.now)
+        val row = a.journal.changesSince(null).rows.single()
+        val cut = RowChange(row.table, row.uid, row.fields - "archived")
+        assertTrue(
+            b.journal.apply(ChangeBatch(a.journal.epoch(), listOf(cut), a.journal.changesSince(null).next), b.now) is ApplyResult.Refused,
+        )
+    }
+
+    @Test
     fun calendarMadeRemindersAreNeverInABatch() {
         val a = Replica(1)
         a.calendar.save(event("e1"), a.now)

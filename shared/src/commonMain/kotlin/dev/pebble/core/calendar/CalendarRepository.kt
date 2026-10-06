@@ -96,7 +96,7 @@ class CalendarRepository(private val db: PebbleDatabase, private val journal: Ch
             fields.filter { (k, value) -> before[k] != value }
         }
         if (changed.isEmpty()) return@transactionWithResult true
-        val hlc = journal.record(SyncTable.CALENDAR_EVENT, e.uid, changed, at)
+        val hlc = journal.record(this, SyncTable.CALENDAR_EVENT, e.uid, changed, at)
         q.upsertEvent(
             uid = e.uid,
             title = e.title,
@@ -122,7 +122,7 @@ class CalendarRepository(private val db: PebbleDatabase, private val journal: Ch
     /** Removes the event from view. The row stays as a tombstone so that sync can tell other devices (WP E1). */
     fun delete(uid: String, at: Long) = db.transaction {
         val live = q.eventRowByUid(uid).executeAsOneOrNull()?.takeIf { it.deleted_at == null } ?: return@transaction
-        val hlc = journal.record(SyncTable.CALENDAR_EVENT, live.uid, mapOf("deleted_at" to v(at)), at)
+        val hlc = journal.record(this, SyncTable.CALENDAR_EVENT, live.uid, mapOf("deleted_at" to v(at)), at)
         q.deleteEvent(at = at, hlc = hlc.toString(), uid = uid)
     }
 

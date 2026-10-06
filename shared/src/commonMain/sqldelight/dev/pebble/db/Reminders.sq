@@ -75,6 +75,10 @@ UPDATE one_off_reminder SET done_at = :at, updated_at = :at, hlc = coalesce(:hlc
 rescheduleOneOff:
 UPDATE one_off_reminder SET due_at = :dueAt, updated_at = :at, hlc = coalesce(:hlc, hlc) WHERE id = :id;
 
+-- The state of a reminder, to skip a write that changes nothing (QA round 1).
+oneOffStateById:
+SELECT due_at, done_at, deleted_at FROM one_off_reminder WHERE id = ?;
+
 -- What sync needs to know of a reminder: its uid (null: not synced yet) and its event (non-null: not synced).
 oneOffSyncInfo:
 SELECT uid, event_uid FROM one_off_reminder WHERE id = ?;

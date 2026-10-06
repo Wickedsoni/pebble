@@ -40,6 +40,7 @@ class MigrationTest {
                 s.execute(
                     "INSERT INTO reminder_rule(id, kind, title, interval_minutes, strictness) VALUES ('stretch', 'STRETCH', 'Stand up & stretch', 30, 'GENTLE')",
                 )
+                s.execute(EVENT_LOG) // every real database has it; 15.sqm adds an index to it
                 s.execute("PRAGMA user_version = 4")
             }
         }
@@ -116,6 +117,7 @@ class MigrationTest {
                 s.execute("INSERT INTO note(text, created_at, updated_at) VALUES ('buy milk', 1, 2), ('call plumber', 3, 4)")
                 s.execute("INSERT INTO one_off_reminder(title, due_at, strictness) VALUES ('Call mom', 5000, 'NORMAL')")
                 s.execute("INSERT INTO one_off_reminder(title, due_at, strictness, done_at) VALUES ('Old one', 100, 'NORMAL', 200)")
+                s.execute(EVENT_LOG) // every real database has it; 15.sqm adds an index to it
                 s.execute("PRAGMA user_version = 11")
             }
         }
@@ -157,6 +159,7 @@ class MigrationTest {
                 s.execute(
                     "INSERT INTO one_off_reminder(title, due_at, strictness, uid, updated_at) VALUES ('Call mom', 5000, 'NORMAL', 'u1', 1)",
                 )
+                s.execute(EVENT_LOG) // every real database has it; 15.sqm adds an index to it
                 s.execute("PRAGMA user_version = 12")
             }
         }
@@ -198,6 +201,7 @@ class MigrationTest {
                 s.execute(
                     "INSERT INTO calendar_event(uid, title, start_at, end_at, tz, updated_at, owner_device) VALUES ('e1', 'Dentist', 1000, 2000, 'Asia/Kolkata', 1, 'aaaaaaaaaaaaaaaaaaaaaaaaaa')",
                 )
+                s.execute(EVENT_LOG) // every real database has it; 15.sqm adds an index to it
                 s.execute("PRAGMA user_version = 13")
             }
         }
@@ -231,6 +235,7 @@ class MigrationTest {
                 listOf("text" to "\"buy milk\"", "created_at" to "1", "archived" to "0", "deleted_at" to "null").forEach { (f, v) ->
                     s.execute("INSERT INTO change_journal(tbl, uid, field, value, hlc) VALUES ('note', 'n1', '$f', '$v', '$hlc')")
                 }
+                s.execute(EVENT_LOG) // every real database has it; 15.sqm adds an index to it
                 s.execute("PRAGMA user_version = 14")
             }
         }
@@ -243,6 +248,50 @@ class MigrationTest {
             listOf(mapOf("text" to kotlinx.serialization.json.JsonPrimitive("buy milk"))),
             history.versions(dev.pebble.core.sync.SyncTable.NOTE, "n1").map { it.fields },
         )
+    }
+
+    /**
+     * 15.sqm (QA round 1): a version-15 database loses the two indexes that repeat a UNIQUE prefix, gains
+     * `event_log_at`, and its history trigger no longer keeps a value that did not change.
+     */
+    @Test
+    fun version15DatabaseGetsTheQaRound1Schema() {
+        val file = Files.createTempFile("pebble-v15", ".db").toFile().apply { deleteOnExit() }
+        DatabaseFactory.create(file) // the current schema; the next lines turn it back into version 15
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.execute("DROP TRIGGER change_journal_keep_history")
+                s.execute("DROP INDEX event_log_at")
+                s.execute("CREATE INDEX change_journal_row ON change_journal(tbl, uid)")
+                s.execute("CREATE INDEX change_history_row ON change_history(tbl, uid)")
+                s.execute(
+                    "CREATE TRIGGER change_journal_keep_history BEFORE INSERT ON change_journal BEGIN " +
+                        "INSERT OR IGNORE INTO change_history(tbl, uid, field, value, hlc, replaced_by, kept_at, kind) " +
+                        "SELECT tbl, uid, field, value, hlc, new.hlc, 0, 'replaced' FROM change_journal " +
+                        "WHERE tbl = new.tbl AND uid = new.uid AND field = new.field AND hlc <> new.hlc AND field <> 'deleted_at'; END",
+                )
+                s.execute("PRAGMA user_version = 15")
+            }
+        }
+        val db = DatabaseFactory.create(file)
+        val names = DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use { s ->
+                s.executeQuery("SELECT name FROM sqlite_master WHERE type IN ('index', 'trigger')").use { r ->
+                    buildSet { while (r.next()) add(r.getString(1)) }
+                }
+            }
+        }
+        assertEquals(
+            setOf("event_log_at", "change_journal_keep_history"),
+            names.intersect(setOf("event_log_at", "change_journal_keep_history")),
+        )
+        assertEquals(emptySet(), names.intersect(setOf("change_journal_row", "change_history_row")))
+        val journal = db.journalQueries
+        journal.recordEntry("note", "n1", "text", "\"a\"", "000000000001.0000.aaaaaaaaaaaaaaaaaaaaaaaaaa")
+        journal.recordEntry("note", "n1", "text", "\"a\"", "000000000002.0000.aaaaaaaaaaaaaaaaaaaaaaaaaa")
+        assertEquals(emptyList(), db.changeHistoryQueries.historyOfRow("note", "n1").executeAsList(), "the same value is not kept")
+        journal.recordEntry("note", "n1", "text", "\"b\"", "000000000003.0000.aaaaaaaaaaaaaaaaaaaaaaaaaa")
+        assertEquals(1, db.changeHistoryQueries.historyOfRow("note", "n1").executeAsList().size)
     }
 
     /** Dry run on a *copy* of this machine's real database, if there is one. */
@@ -263,6 +312,9 @@ class MigrationTest {
     }
 
     private companion object {
+        /** The event log, which each real database has (15.sqm adds an index to it). */
+        const val EVENT_LOG = "CREATE TABLE event_log (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, payload TEXT NOT NULL, at_millis INTEGER NOT NULL)"
+
         /** The note table as 11.sqm (WP E1) left it. */
         const val NOTE_V11 =
             "CREATE TABLE note (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, archived INTEGER NOT NULL DEFAULT 0, uid TEXT, deleted_at INTEGER, hlc TEXT, origin_device TEXT)"

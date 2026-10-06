@@ -11,7 +11,6 @@ CREATE TABLE change_journal (
     UNIQUE (tbl, uid, field)
 );
 
-CREATE INDEX change_journal_row ON change_journal(tbl, uid);
 CREATE INDEX change_journal_hlc ON change_journal(hlc);
 
 -- Guard triggers (SQLDelight 2.4.0 resolves only lower-case new. and old.). A write by new code sets a new hlc: each synced field that it writes must have a journal entry
