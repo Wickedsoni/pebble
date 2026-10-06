@@ -97,18 +97,29 @@ object ModelPack {
         val r = readSigned(Files.readAllBytes(mf), Files.readString(sig), keys)
         if (r !is Result.Ok) return r
         if (r.manifest.name != name) return Result.Invalid("pack is for ${r.manifest.name}, not $name")
+        unlistedFile(dir, r.manifest)?.let { return Result.Invalid("$it is in the folder but not in pack.json") }
         for (e in r.manifest.files) {
             val f = dir.resolve(e.path)
-            val ok = if (cache !=
-                null
-            ) {
-                cache.matches(f, e.sha256)
-            } else {
-                f.exists() && Files.size(f) == e.size && ModelChecksums.sha256(f) == e.sha256
-            }
+            val ok = cache?.matches(f, e.sha256) ?: (f.exists() && Files.size(f) == e.size && ModelChecksums.sha256(f) == e.sha256)
             if (!ok) return Result.Invalid("${e.path} does not match pack.json")
         }
         return r
+    }
+
+    /**
+     * The first regular file in [dir] that [manifest] does not list (not counting `pack.json` and `pack.sig`), or null.
+     * An unlisted file is not covered by the signature, yet a program (the chat server loads DLLs from its own
+     * folder) can use it. Paths compare without case, as the file system does. The two files that Windows Explorer
+     * adds by itself ([SHELL_FILES]) are ignored: they run nothing, and a pack must not stop because a user opened its folder.
+     */
+    private fun unlistedFile(dir: Path, manifest: Manifest): String? {
+        val listed = manifest.files.mapTo(HashSet()) { it.path.lowercase() } + setOf(MANIFEST, SIGNATURE)
+        return Files.walk(dir).use { s ->
+            s.filter { Files.isRegularFile(it) }
+                .map { dir.relativize(it).toString().replace('\\', '/') }
+                .filter { it.lowercase() !in listed && it.substringAfterLast('/').lowercase() !in SHELL_FILES }
+                .findFirst().orElse(null)
+        }
     }
 
     /** The manifest of the pack installed in [dir], unchecked (for display); null if there is none. */
@@ -139,9 +150,7 @@ object ModelPack {
         if (appVersion != null && m.minApp != null && compareVersions(appVersion, m.minApp) < 0) {
             return Result.Invalid("needs Pebble ${m.minApp} or newer")
         }
-        if (m.files.sumOf { it.size } >
-            (if (m.name == "chat") MAX_CHAT_BYTES else MAX_TOTAL_BYTES)
-        ) {
+        if (m.files.sumOf { it.size } > (if (m.name == "chat") MAX_CHAT_BYTES else MAX_TOTAL_BYTES)) {
             return Result.Invalid("pack is too large")
         }
         Files.createDirectories(modelsDir)
@@ -181,8 +190,14 @@ object ModelPack {
         }
     }.toMap()
 
-    /** At start-up, before any model loads: does the staged installs and removals. Returns what it did. */
-    fun applyStaged(modelsDir: Path): List<String> {
+    /**
+     * At start-up, before any model loads: does the staged installs and removals. Returns what it did.
+     * With a [cache], each installed file is noted as checked: [stageInstall] hashed it while it unpacked it, so the
+     * first load does not read it again. The note is made only if the pack is still signed, lists every file in the
+     * folder, and each file has its listed size. (A change that keeps the size is trusted like the cache file
+     * itself, see [VerifiedModelCache].)
+     */
+    fun applyStaged(modelsDir: Path, cache: VerifiedModelCache? = null, keys: Map<String, String> = TRUSTED_KEYS): List<String> {
         if (!modelsDir.isDirectory()) return emptyList()
         val done = mutableListOf<String>()
         for (n in NAMES) {
@@ -199,12 +214,21 @@ object ModelPack {
                     if (target.exists()) target.deleteRecursivelySafe()
                     Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE)
                     done += "installed $n"
+                    if (cache != null) runCatching { seedCache(target, n, cache, keys) }
                 }
             }.onFailure { done += "failed for $n: ${it.message}" }
         }
         // Left over from an install that stopped half-way.
         modelsDir.listDirectoryEntries(".*").filter { it.isDirectory() }.forEach { it.deleteRecursivelySafe() }
         return done
+    }
+
+    /** Notes each file of the installed pack in [dir] in [cache] without hashing it (see [applyStaged]). */
+    private fun seedCache(dir: Path, name: String, cache: VerifiedModelCache, keys: Map<String, String>) {
+        val r = readSigned(Files.readAllBytes(dir.resolve(MANIFEST)), Files.readString(dir.resolve(SIGNATURE)), keys)
+        if (r !is Result.Ok || r.manifest.name != name || unlistedFile(dir, r.manifest) != null) return
+        if (r.manifest.files.any { Files.size(dir.resolve(it.path)) != it.size }) return
+        r.manifest.files.forEach { cache.record(dir.resolve(it.path), it.sha256) }
     }
 
     // ---- Making a pack (the maintainer's tool and the tests) ----
@@ -269,6 +293,9 @@ object ModelPack {
     ).generatePrivate(PKCS8EncodedKeySpec(Base64.getDecoder().decode(base64.trim())))
 
     // ---- Helpers ----
+
+    /** Files that Windows Explorer makes in a folder; [verifyInstalled] does not count them as unlisted. */
+    private val SHELL_FILES = setOf("desktop.ini", "thumbs.db")
 
     private const val STAGED = ".staged"
     private const val REMOVE = ".remove"

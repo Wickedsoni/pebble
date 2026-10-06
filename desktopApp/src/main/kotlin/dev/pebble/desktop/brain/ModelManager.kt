@@ -29,7 +29,7 @@ class ModelManager(
     /** Skips re-hashing files that passed before (null: hash every load, as tests and the dev tools do). */
     private val cache: VerifiedModelCache? = null,
 ) : Understanding {
-    private val lazy = LazyModel(
+    private val loader = LazyModel(
         name = "intent",
         scope = scope,
         idleMillis = idleMillis,
@@ -40,32 +40,33 @@ class ModelManager(
     )
 
     /** Status for logs and diagnostics ("ready (412 ms load)", "checksum mismatch — not loaded", …). */
-    val status: String get() = lazy.status.value.toString()
+    val status: String get() = loader.status.value.toString()
 
-    val statusFlow: StateFlow<ModelStatus> get() = lazy.status
+    val statusFlow: StateFlow<ModelStatus> get() = loader.status
 
-    val modelDir: Path? get() = lazy.dir
+    /** The model folder. The first call does file checks, so call it off the UI thread ([LazyModel.dir]). */
+    val modelDir: Path? get() = loader.dir
 
     /** Start loading if needed (e.g. when the quick-add bar opens). Cheap to call repeatedly. */
-    fun warmUp() = lazy.warmUp()
+    fun warmUp() = loader.warmUp()
 
     /** Waits for a pending load (tests and diagnostics; the app never blocks on this). */
-    suspend fun awaitLoaded(): Boolean = lazy.join()
+    suspend fun awaitLoaded(): Boolean = loader.join()
 
     /** The command model's version (see [ModelChecksums.version]); null when there is no model. */
     val version: String? by lazy { modelDir?.let { runCatching { ModelChecksums.version(it, "intent", "intent.int8.onnx") }.getOrNull() } }
 
     /** The sentence embedding of [text] if the model is loaded now; never loads it (background indexing). */
-    fun embedIfLoaded(text: String): Embedding? = lazy.getOrNull()?.let { m -> runCatching { m.understand(text)?.embedding }.getOrNull() }
+    fun embedIfLoaded(text: String): Embedding? = loader.withModel { m -> runCatching { m.understand(text)?.embedding }.getOrNull() }
 
     /** The sentence embedding of [text], loading the model first if needed (a search you asked for). */
     suspend fun embedLoading(
         text: String,
-    ): Embedding? = lazy.await()?.let { m -> runCatching { m.understand(text)?.embedding }.getOrNull() }
+    ): Embedding? = loader.awaitUse { m -> runCatching { m.understand(text)?.embedding }.getOrNull() }
 
     override fun understand(text: String): Understood? {
-        val m = lazy.getOrNull() ?: run { lazy.warmUp(); return null }
-        return runCatching { m.understand(text) }.getOrNull()
+        // withModel keeps the model open while it runs: an idle unload cannot free it under the session.
+        return loader.withModel { m -> runCatching { m.understand(text) }.getOrNull() } ?: run { loader.warmUp(); null }
     }
 
     /** One line per load in `%APPDATA%\Pebble\brain.log`: which model, from where, and how it went. */

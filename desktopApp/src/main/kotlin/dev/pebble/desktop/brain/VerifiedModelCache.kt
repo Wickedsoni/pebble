@@ -11,6 +11,7 @@ import kotlinx.serialization.json.long
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Remembers model files that already passed their SHA-256 check (`models-verified.json` in the data dir):
@@ -26,10 +27,12 @@ class VerifiedModelCache(
 ) {
     private data class Entry(val size: Long, val lastModified: Long, val sha256: String)
 
-    private val entries: MutableMap<String, Entry> by lazy { read() }
+    private val entries: MutableMap<String, Entry> by lazy { ConcurrentHashMap(read()) }
+
+    /** Serialises the writes of the cache file only; hashing never happens while it is held. */
+    private val writeLock = Any()
 
     /** True if [path] has the SHA-256 [expected]; hashes only when the file changed since it last matched. */
-    @Synchronized
     fun matches(path: Path, expected: String): Boolean {
         if (!Files.exists(path)) return false
         val key = path.toAbsolutePath().normalize().toString()
@@ -38,11 +41,26 @@ class VerifiedModelCache(
         entries[key]?.let { e ->
             if (e.size == size && e.lastModified == modified) return e.sha256 == expected
         }
-        val actual = hash(path)
+        val actual = hash(path) // slow (a model is up to 300 MB): no lock, so a quick check does not wait for it
         if (actual != expected) return false
-        entries[key] = Entry(size, modified, actual)
-        write()
+        remember(key, Entry(size, modified, actual))
         return true
+    }
+
+    /**
+     * Notes that [path] holds the SHA-256 [sha256] without reading it, for a file whose hash was checked at
+     * another place (a pack install checked each file while it unpacked it). The size and time are read now.
+     */
+    fun record(path: Path, sha256: String) {
+        val key = path.toAbsolutePath().normalize().toString()
+        remember(key, Entry(Files.size(path), Files.getLastModifiedTime(path).toMillis(), sha256))
+    }
+
+    private fun remember(key: String, entry: Entry) {
+        synchronized(writeLock) {
+            entries[key] = entry
+            write()
+        }
     }
 
     private fun read(): MutableMap<String, Entry> = runCatching {

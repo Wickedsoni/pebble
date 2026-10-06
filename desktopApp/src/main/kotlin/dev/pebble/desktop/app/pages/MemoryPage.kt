@@ -62,7 +62,9 @@ fun MemoryPage(app: PebbleApp) {
     var micOn by remember { mutableStateOf(app.settings.bool(Keys.MICROPHONE_ENABLED, true)) }
     var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
     var smartOn by remember { mutableStateOf(app.settings.bool(Keys.SMART_REPLIES, false)) }
-    val chatInstalled = remember { app.chat.available }
+    // Checking the chat pack can hash big files: never on the UI thread.
+    LaunchedEffect(Unit) { app.refreshChatInstalled() }
+    val chatInstalled by app.chatInstalled.state.collectAsState()
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         // The right column is full (search + privacy), so the Teach card shares the left column.

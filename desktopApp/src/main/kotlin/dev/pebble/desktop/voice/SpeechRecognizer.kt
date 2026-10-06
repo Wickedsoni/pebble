@@ -13,6 +13,7 @@ import dev.pebble.desktop.brain.LazyModel
 import dev.pebble.desktop.brain.ModelChecksums
 import dev.pebble.desktop.brain.ModelRuntime
 import dev.pebble.desktop.brain.VerifiedModelCache
+import dev.pebble.desktop.brain.buildOrClose
 import kotlinx.coroutines.CoroutineScope
 import java.nio.file.Files
 import java.nio.file.Path
@@ -54,7 +55,7 @@ class SpeechRecognizer(
         }
     }
 
-    private val lazy = LazyModel(
+    private val loader = LazyModel(
         name = "asr",
         scope = scope,
         idleMillis = idleMillis,
@@ -65,18 +66,18 @@ class SpeechRecognizer(
     )
 
     /** Status for logs and diagnostics ("ready (dolphin + whisper-base for English, 900 ms load)", …). */
-    val status: String get() = lazy.status.value.toString()
+    val status: String get() = loader.status.value.toString()
 
-    val modelDir: Path? get() = lazy.dir
+    val modelDir: Path? get() = loader.dir
 
     /** Start loading (the talk key just went down, so loading overlaps your speech). */
-    fun warmUp() = lazy.warmUp()
+    fun warmUp() = loader.warmUp()
 
     /** Waits for loading, then transcribes [samples] (16 kHz mono). Null: no model, or nothing was said. */
-    suspend fun transcribe(samples: FloatArray): Transcript? {
-        val e = lazy.await() ?: return null
+    suspend fun transcribe(samples: FloatArray): Transcript? = loader.awaitUse { e ->
+        // The engines stay open until this block ends: an idle unload cannot free them under the decoder.
         val speech = trim(e.vad, AudioPrep.prepare(samples))
-        if (speech.size < AudioPrep.SAMPLE_RATE / 4) return null // < 250 ms of speech: nothing to hear
+        if (speech.size < AudioPrep.SAMPLE_RATE / 4) return@awaitUse null // < 250 ms of speech: nothing to hear
         val t0 = System.currentTimeMillis()
         val seconds = speech.size.toDouble() / AudioPrep.SAMPLE_RATE
         val (text, lang) = if (e.ctc != null) {
@@ -85,34 +86,41 @@ class SpeechRecognizer(
         } else {
             decode(e, speech, pad = true)
         }
-        val cleaned = text.trim().takeIf { it.isNotEmpty() && !isHallucination(it) } ?: return null
-        return Transcript(cleaned, lang, speech.size * 1000L / AudioPrep.SAMPLE_RATE, System.currentTimeMillis() - t0)
+        val cleaned = text.trim().takeIf { it.isNotEmpty() && !isHallucination(it) } ?: return@awaitUse null
+        Transcript(cleaned, lang, speech.size * 1000L / AudioPrep.SAMPLE_RATE, System.currentTimeMillis() - t0)
     }
 
-    private fun loadEngines(dir: Path): AsrEngines {
+    /** Builds all engines. If one step fails, the ones built before it are released, so nothing native leaks. */
+    private fun loadEngines(dir: Path): AsrEngines = buildOrClose { cleanup ->
         ModelRuntime.loadSherpa()
         val size = whisperSize(dir)
         val ctcModel = dir.resolve("ctc-model.int8.onnx")
         val ctc = if (Files.exists(ctcModel)) {
-            OfflineRecognizer(
-                OfflineRecognizerConfig.builder().setOfflineModelConfig(
-                    OfflineModelConfig.builder()
-                        .setDolphin(OfflineDolphinModelConfig.builder().setModel(ctcModel.toString()).build())
-                        .setTokens(dir.resolve("ctc-tokens.txt").toString()).setNumThreads(THREADS).build(),
-                ).build(),
+            cleanup.track(
+                OfflineRecognizer(
+                    OfflineRecognizerConfig.builder().setOfflineModelConfig(
+                        OfflineModelConfig.builder()
+                            .setDolphin(OfflineDolphinModelConfig.builder().setModel(ctcModel.toString()).build())
+                            .setTokens(dir.resolve("ctc-tokens.txt").toString()).setNumThreads(THREADS).build(),
+                    ).build(),
+                ),
+                OfflineRecognizer::release,
             )
         } else {
             null
         }
-        val whisper = recognizer(dir, size, language = if (ctc != null) "en" else "")
-        val vad = Vad(
-            VadModelConfig.builder().setSileroVadModelConfig(
-                SileroVadModelConfig.builder().setModel(dir.resolve("silero_vad.onnx").toString())
-                    .setThreshold(0.5f).setMinSilenceDuration(0.3f).setMinSpeechDuration(0.2f)
-                    .setMaxSpeechDuration(15f).setWindowSize(512).build(),
-            ).setSampleRate(AudioPrep.SAMPLE_RATE).setNumThreads(1).build(),
+        val whisper = cleanup.track(recognizer(dir, size, language = if (ctc != null) "en" else ""), OfflineRecognizer::release)
+        val vad = cleanup.track(
+            Vad(
+                VadModelConfig.builder().setSileroVadModelConfig(
+                    SileroVadModelConfig.builder().setModel(dir.resolve("silero_vad.onnx").toString())
+                        .setThreshold(0.5f).setMinSilenceDuration(0.3f).setMinSpeechDuration(0.2f)
+                        .setMaxSpeechDuration(15f).setWindowSize(512).build(),
+                ).setSampleRate(AudioPrep.SAMPLE_RATE).setNumThreads(1).build(),
+            ),
+            Vad::release,
         )
-        return AsrEngines(ctc, whisper, vad, hexTokens = Files.exists(dir.resolve("HEX_TOKENS")), size = size)
+        AsrEngines(ctc, whisper, vad, hexTokens = Files.exists(dir.resolve("HEX_TOKENS")), size = size)
     }
 
     private fun decodeCtc(r: OfflineRecognizer, x: FloatArray): String {

@@ -24,6 +24,9 @@ The speech models are about 300 MB of the 364 MB installer. A smaller installer 
    - Copy each file with a byte limit equal to its declared size, and hash it while it is copied. The size field of the zip is not trusted.
    - Unpack to a temporary folder, then move it to `<name>.staged`. The install is done at the next start, before any model loads, because Windows can lock the files of a loaded model. Removal is staged the same way.
 4. **Load.** Pebble uses the user folder only if `ModelPack.verifyInstalled` passes at load time: the signature, the model name and every file hash. `VerifiedModelCache` keeps this fast. If the check fails, Pebble uses the bundled model.
+   - The folder must hold no file that `pack.json` does not list. The signature does not cover such a file, and a program (the chat server) can load it. Only `desktop.ini` and `Thumbs.db` are ignored, because Windows Explorer adds them.
+   - For the chat pack, the model file comes from the list in `pack.json`, not from a folder listing.
+   - The check runs off the UI thread. A failed load is not tried again until a model file changes or 5 minutes pass.
 5. **Developers.** `PEBBLE_MODELS_DIR`, `PEBBLE_ASR_DIR` and `brain/models` are not checked against a signature (as before).
 6. **Key custody.** The private key is a file on the maintainer's computer: `%USERPROFILE%\.pebble\signing\pebble-2026a.key`. It is never in the repo or in CI. The maintainer signs packs with `./gradlew :desktopApp:modelPack --args="sign …"`.
 7. **Lite installer.** `-Pflavor=lite` leaves the speech models out of `stageModel`. The release workflow builds `Pebble-x.y.z.msi` and `Pebble-lite-x.y.z.msi`.
