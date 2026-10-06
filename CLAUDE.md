@@ -52,6 +52,7 @@ The plan splits the work into work packages (WPs), for example "A1" or "B3".
 | Build the app as a folder | `./gradlew :desktopApp:createDistributable` |
 | Build the installer | `./gradlew :desktopApp:packageMsi` |
 | Python format and lint | `cd brain; uvx ruff@0.16.10 format . ; uvx ruff@0.16.10 check .` |
+| Version of a local build | `packageVersion` is `0.1.2` unless you pass `-PappVersion=1.2.3`. The release workflow passes the tag. A `ModelPack` with a higher `minApp` is refused by a local build with the default version |
 | Python tests | `cd brain; uv run python -m unittest discover -s tests` |
 | Offline gate for a nudge policy change (copy of your database) | `./gradlew :desktopApp:nudgeIps` |
 | Full sync convergence gate (300 sequences, about 100 s) | `PEBBLE_CONVERGENCE_SEQUENCES=300 ./gradlew :shared:jvmTest --tests "*ConvergenceTest*"` |

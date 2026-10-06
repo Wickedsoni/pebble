@@ -16,8 +16,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  # A push to main (the 300-sequence convergence gate) is never cancelled by a newer push.
+  # A pending run is cancelled when a newer one queues in the same group, even with cancel-in-progress false.
+  # So a push gets its own group per commit: no push to main skips the 300-sequence convergence gate.
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

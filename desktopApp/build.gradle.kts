@@ -10,6 +10,10 @@ plugins {
 // The release workflow passes the version from the tag: -PappVersion=1.2.3 (the MSI needs digits and dots only).
 val appVersion: String = providers.gradleProperty("appVersion").getOrElse("0.1.2")
 require(Regex("""\d+\.\d+\.\d+""").matches(appVersion)) { "appVersion must look like 1.2.3, got '$appVersion'" }
+// MSI limits: major <= 255, minor <= 255, build <= 65535.
+appVersion.split('.').map { it.toLong() }.let { (major, minor, build) ->
+    require(major <= 255 && minor <= 255 && build <= 65535) { "appVersion '$appVersion' is over the MSI limits (255.255.65535)" }
+}
 
 kotlin {
     jvmToolchain(21)
