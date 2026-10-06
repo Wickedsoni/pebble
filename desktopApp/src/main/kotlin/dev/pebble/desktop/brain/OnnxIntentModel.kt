@@ -47,18 +47,24 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
             dir.resolve("tokenizer/tokenizer.json"),
             mapOf("addSpecialTokens" to "true", "truncation" to "true", "maxLength" to "64", "padding" to "false"),
         )
-        val labels = Json.parseToJsonElement(Files.readString(dir.resolve("labels.json"))).jsonObject
-        intents = labels.getValue("intents").jsonArray.map { it.jsonPrimitive.content }
-        tags = labels.getValue("tags").jsonArray.map { it.jsonPrimitive.content }
-        temperature = labels["temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
-        moods = labels["moods"]?.jsonArray?.map { it.jsonPrimitive.content }
-        moodTemperature = labels["mood_temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
-        val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(threads)
-            setInterOpNumThreads(1)
-            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        try {
+            val labels = Json.parseToJsonElement(Files.readString(dir.resolve("labels.json"))).jsonObject
+            intents = labels.getValue("intents").jsonArray.map { it.jsonPrimitive.content }
+            tags = labels.getValue("tags").jsonArray.map { it.jsonPrimitive.content }
+            temperature = labels["temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
+            moods = labels["moods"]?.jsonArray?.map { it.jsonPrimitive.content }
+            moodTemperature = labels["mood_temperature"]?.jsonPrimitive?.content?.toFloat() ?: 1f
+            // The options only build the session; their native object is freed as soon as it exists.
+            session = OrtSession.SessionOptions().use { opts ->
+                opts.setIntraOpNumThreads(threads)
+                opts.setInterOpNumThreads(1)
+                opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+                env.createSession(dir.resolve("intent.int8.onnx").toString(), opts)
+            }
+        } catch (t: Throwable) {
+            tokenizer.close() // a failed load must not leave the tokenizer's native memory behind
+            throw t
         }
-        session = env.createSession(dir.resolve("intent.int8.onnx").toString(), opts)
     }
 
     /** Token ids exactly as fed to the model — exposed for the parity test. */
@@ -136,13 +142,37 @@ class OnnxIntentModel(dir: Path, threads: Int = 2) : Understanding, AutoCloseabl
         return firstPiece
     }
 
-    private fun words(text: String) = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    private fun words(text: String) = splitWords(text)
 
     private fun encode(words: List<String>) = tokenizer.encode((listOf("query:") + words).toTypedArray())
 
     override fun close() {
         session.close()
         tokenizer.close()
+    }
+
+    companion object {
+        /**
+         * Splits [text] into words like Python's `str.split()` in `intent_model.py`: on every Unicode white space
+         * (no-break space, thin space, ideographic space, …), not only ASCII. Another split shifts the slot tags.
+         */
+        fun splitWords(text: String): List<String> {
+            val words = mutableListOf<String>()
+            var start = -1
+            for (i in text.indices) {
+                if (isSpace(text[i])) {
+                    if (start >= 0) words += text.substring(start, i)
+                    start = -1
+                } else if (start < 0) {
+                    start = i
+                }
+            }
+            if (start >= 0) words += text.substring(start)
+            return words
+        }
+
+        /** Python's `str.isspace()` for one char: Unicode space, line and paragraph separators, controls 1C to 1F, and U+0085. */
+        private fun isSpace(c: Char) = Character.isWhitespace(c) || Character.isSpaceChar(c) || c == '\u0085'
     }
 
     private fun softmax(x: FloatArray): FloatArray {

@@ -98,6 +98,7 @@ class LazyModelTest {
     fun noModelFolderSaysSo() = runTest {
         val m = lazyModel(dir = null)
         m.warmUp()
+        runCurrent() // the folder is looked up on the background dispatcher now, not on the caller's thread
         assertEquals(ModelStatus.NotFound, m.status.value)
         assertNull(m.await())
     }

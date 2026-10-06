@@ -358,11 +358,18 @@ class LocalChat(
         fun filesIn(dir: Path?): ChatFiles? {
             if (dir == null || !Files.isDirectory(dir)) return null
             val server = dir.resolve("llama-server.exe").takeIf { Files.exists(it) } ?: return null
+            // A signed pack names its model file in pack.json (the list the hashes cover); a developer folder is listed.
+            val packed = ModelPack.installedManifest(dir)
             val model =
-                Files.list(dir).use { s ->
-                    s.filter { it.fileName.toString().endsWith(".gguf") }.sorted().findFirst().orElse(null)
-                }
-                    ?: return null
+                if (packed != null) {
+                    packed.files.map {
+                        it.path
+                    }.filter { it.endsWith(".gguf") }.minOrNull()?.let { dir.resolve(it) }?.takeIf { Files.exists(it) }
+                } else {
+                    Files.list(dir).use { s ->
+                        s.filter { it.fileName.toString().endsWith(".gguf") }.sorted().findFirst().orElse(null)
+                    }
+                } ?: return null
             return ChatFiles(server, model)
         }
 

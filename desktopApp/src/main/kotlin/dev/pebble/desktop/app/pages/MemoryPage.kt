@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -47,6 +48,8 @@ import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
 import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Everything Pebble has learned or been told, grouped by kind, each deletable. Plus the
@@ -62,7 +65,8 @@ fun MemoryPage(app: PebbleApp) {
     var micOn by remember { mutableStateOf(app.settings.bool(Keys.MICROPHONE_ENABLED, true)) }
     var voiceClips by remember { mutableStateOf(app.voiceSamples.count()) }
     var smartOn by remember { mutableStateOf(app.settings.bool(Keys.SMART_REPLIES, false)) }
-    val chatInstalled = remember { app.chat.available }
+    // Checking the chat pack can hash big files: never on the UI thread.
+    val chatInstalled by produceState(false) { value = withContext(Dispatchers.IO) { app.chat.available } }
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         // The right column is full (search + privacy), so the Teach card shares the left column.

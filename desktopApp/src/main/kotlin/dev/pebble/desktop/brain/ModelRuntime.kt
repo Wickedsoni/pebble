@@ -24,10 +24,13 @@ class ModelRuntime(scope: CoroutineScope, dataDir: Path, idleMillis: Long = 10 *
         }
     }
 
-    /** Pack installs and removals staged in the last run, done now: no model is loaded yet. */
-    val packChangesAtStart: List<String> = runCatching { ModelPack.applyStaged(packsDir) }.getOrElse { listOf("failed: ${it.message}") }
-
     val cache = VerifiedModelCache(dataDir.resolve("models-verified.json"))
+
+    /** Pack installs and removals staged in the last run, done now: no model is loaded yet. New files go in [cache] as checked. */
+    val packChangesAtStart: List<String> = runCatching {
+        ModelPack.applyStaged(packsDir, cache)
+    }.getOrElse { listOf("failed: ${it.message}") }
+
     val intent = ModelManager(scope, idleMillis, cache)
     val speech = SpeechRecognizer(scope, idleMillis, cache)
 
