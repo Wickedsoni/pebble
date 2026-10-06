@@ -1,5 +1,6 @@
 package dev.pebble.desktop
 
+import dev.pebble.core.backup.Backup
 import dev.pebble.core.brain.CommandFeedbackRepository
 import dev.pebble.core.brain.CommandRouter
 import dev.pebble.core.db.DatabaseFactory
@@ -39,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 
@@ -323,7 +325,7 @@ class PebbleApp(
     private val compactor = dev.pebble.core.history.HistoryCompactor(db, env::dayOf)
 
     /** Saves bus events to `event_log`; one writer thread, so the UI thread never waits for SQLite. */
-    val eventLog = EventLogger(db)
+    val eventLog = EventLogger(db) { log.warn(TAG, "event log write failed", it) }
 
     /**
      * Search over notes, facts and what you said (WP C2). It indexes only while the command model is loaded
@@ -631,9 +633,13 @@ class PebbleApp(
             val dir = DatabaseFactory.defaultDataDir()
             val log = FileLogger(dir.toPath().resolve("pebble.log"), env::millis, env.zone)
             // A restore staged on the About page replaces the database before it is opened (WP E4).
-            runCatching { dev.pebble.core.backup.Backup.applyStaged(dir) }
+            runCatching { Backup.applyStaged(dir) }
                 .onSuccess { it?.let { line -> log.info(TAG, line) } }
-                .onFailure { log.warn(TAG, "restoring the backup failed; the old database stays", it) }
+                .onFailure {
+                    log.warn(TAG, "restoring the backup failed", it)
+                    // No new empty database next to the old files: the next start puts them back (Backup.recoverInterrupted).
+                    if (!File(dir, Backup.DB).exists() && Backup.interruptedSwapPending(dir)) throw RestoreNotFinishedException(dir, it)
+                }
             return PebbleApp(DatabaseFactory.create(), env, log)
         }
     }
@@ -645,3 +651,7 @@ fun now(): Long = System.currentTimeMillis()
 @Deprecated("Uses the system zone directly. Use PebbleApp.env.minuteOfDay().", ReplaceWith("app.env.minuteOfDay(millis)"))
 fun minuteOfDay(millis: Long): Int =
     java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
+
+/** The restore of a backup could not finish and `pebble.db` is missing; the old files are in [dataDir] as `pebble.db.restoring-*`. */
+class RestoreNotFinishedException(val dataDir: File, cause: Throwable) :
+    IllegalStateException("Pebble could not finish restoring a backup, and the database is missing from $dataDir.", cause)

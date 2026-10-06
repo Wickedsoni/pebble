@@ -22,6 +22,7 @@ object Backup {
     const val DB = "pebble.db"
     private const val STAGED = "$DB.restore"
     private const val BEFORE = "$DB.before-restore"
+    private const val RESTORING = ".restoring-"
     private val SIDE = listOf("", "-wal", "-shm")
 
     /** What a backup holds, for the message after an export or a staged restore. */
@@ -60,6 +61,8 @@ object Backup {
             val summary = runCatching { check(tmp) }.getOrElse { e ->
                 throw e as? BackupException ?: BackupException("The backup does not hold a Pebble database.")
             }
+            // A stale side file of an earlier staged file must not meet the new one: SQLite would replay it.
+            SIDE.drop(1).forEach { File(dataDir, STAGED + it).delete() }
             Files.move(tmp.toPath(), File(dataDir, STAGED).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
             return summary
         } finally {
@@ -77,7 +80,16 @@ object Backup {
      * At start, before the database is opened: swaps in a staged restore. Returns a line for the log, or null when
      * nothing was staged. A staged file that fails its check again stays out (it is renamed `.failed`).
      */
-    fun applyStaged(dataDir: File): String? {
+    fun applyStaged(dataDir: File): String? = applyStaged(dataDir, ::moveFile)
+
+    /**
+     * The swap never deletes before it succeeds: the old files move aside to `pebble.db.restoring-<time>`, the staged
+     * file moves in, and only then do the old files become `pebble.db.before-restore`. When a step fails, every move
+     * is undone (in reverse order), the staged file stays for the next start, and a [BackupException] is thrown.
+     * [move] is a test seam.
+     */
+    internal fun applyStaged(dataDir: File, move: (Path, Path) -> Unit): String? {
+        recoverInterrupted(dataDir)
         val staged = File(dataDir, STAGED)
         if (!staged.exists()) return null
         runCatching { check(staged) }.onFailure {
@@ -85,29 +97,95 @@ object Backup {
             return "restore refused at start: ${it.message}"
         }
         val db = File(dataDir, DB)
-        val deviceId = if (db.exists()) runCatching { connect(db).use(::deviceIdOf) }.getOrNull() else null
-        SIDE.forEach { suffix ->
-            val from = File(db.path + suffix)
-            val to = File(dataDir, BEFORE + suffix)
-            to.delete()
-            if (from.exists()) Files.move(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        // A device id this computer cannot read must not let the backup's id through: two devices would share one.
+        val deviceId = if (db.exists()) {
+            runCatching { connect(db).use(::deviceIdOf) }.getOrNull() ?: dev.pebble.core.settings.DeviceIdentity.newId()
+        } else {
+            null
         }
-        Files.move(staged.toPath(), db.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        connect(db).use { c ->
-            if (deviceId != null) {
-                c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('device.id', ?)").use {
-                    it.setString(1, deviceId)
-                    it.executeUpdate()
+        // The ids go into the staged file, which is closed and checked, so the swap itself is renames only.
+        try {
+            writeIds(staged, deviceId)
+        } catch (e: Exception) {
+            throw BackupException("The restore failed (${e.message}). The old database stays.")
+        }
+        val aside = "$DB$RESTORING${System.currentTimeMillis()}"
+        val moved = ArrayDeque<Pair<Path, Path>>() // (from, to), in the order done
+        fun step(from: File, to: File) {
+            move(from.toPath(), to.toPath())
+            moved.addLast(from.toPath() to to.toPath())
+        }
+        try {
+            SIDE.forEach { suffix ->
+                val from = File(db.path + suffix)
+                if (from.exists()) step(from, File(dataDir, aside + suffix))
+            }
+            step(staged, db)
+        } catch (e: Exception) {
+            val undoErrors = mutableListOf<Throwable>()
+            while (moved.isNotEmpty()) {
+                val (from, to) = moved.removeLast()
+                // Never write over a file that is there: that could destroy the one copy of the restore or of the old data.
+                if (Files.exists(from)) {
+                    undoErrors += IllegalStateException("cannot undo, $from exists")
+                } else {
+                    runCatching { move(to, from) }.onFailure { undoErrors += it }
                 }
             }
-            // A new journal epoch (WP E3b, spec 8): the restored journal's seq can be smaller than a peer's cursor,
-            // so peers read it again from the start (the merge is idempotent).
-            c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('sync.journalEpoch', ?)").use {
-                it.setString(1, dev.pebble.core.settings.DeviceIdentity.newId())
+            val outcome = if (undoErrors.isEmpty()) "The old database stays." else "Some files could not be put back; see the log."
+            throw BackupException("The restore failed (${e.message}). $outcome").also { f -> undoErrors.forEach(f::addSuppressed) }
+        }
+        // Only now replace the older before-restore files: all three, so a stale -wal never meets a new database.
+        SIDE.forEach { File(dataDir, BEFORE + it).delete() }
+        SIDE.forEach { suffix ->
+            val old = File(dataDir, aside + suffix)
+            if (old.exists()) runCatching { move(old.toPath(), File(dataDir, BEFORE + suffix).toPath()) }
+        }
+        // Older leftovers of other swaps: a later manual reset of `pebble.db` must not be undone by recoverInterrupted.
+        dataDir.listFiles { f -> f.name.startsWith("$DB$RESTORING") && !f.name.startsWith(aside) }?.forEach { it.delete() }
+        return "restored a backup; the old database is $BEFORE"
+    }
+
+    /**
+     * Puts the old database back when a swap was cut short (a crash or a failed undo) and `pebble.db` is missing.
+     * Returns true if it moved files back. Call it before Pebble opens the database, so a new empty one is never made.
+     */
+    fun recoverInterrupted(dataDir: File): Boolean {
+        if (File(dataDir, DB).exists()) return false
+        val newest = dataDir.list().orEmpty()
+            .filter { it.startsWith("$DB$RESTORING") && !it.endsWith("-wal") && !it.endsWith("-shm") }
+            .maxOrNull() ?: return false
+        // The main file moves last: if a move fails in between, `pebble.db` is still missing and this runs again.
+        SIDE.drop(1).forEach { suffix ->
+            val from = File(dataDir, newest + suffix)
+            if (from.exists()) moveFile(from.toPath(), File(dataDir, DB + suffix).toPath())
+        }
+        moveFile(File(dataDir, newest).toPath(), File(dataDir, DB).toPath())
+        return true
+    }
+
+    /** True when files of a cut-short swap (`pebble.db.restoring-*`) wait in [dataDir]. */
+    fun interruptedSwapPending(dataDir: File): Boolean = dataDir.list().orEmpty().any { it.startsWith("$DB$RESTORING") }
+
+    private fun moveFile(from: Path, to: Path) {
+        Files.move(from, to, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    private fun writeIds(db: File, deviceId: String?) = connect(db).use { c ->
+        // No WAL side files for a file that is staged; `DatabaseFactory` sets WAL again when it opens the database.
+        c.createStatement().use { it.execute("PRAGMA journal_mode = DELETE") }
+        if (deviceId != null) {
+            c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('device.id', ?)").use {
+                it.setString(1, deviceId)
                 it.executeUpdate()
             }
         }
-        return "restored a backup; the old database is $BEFORE"
+        // A new journal epoch (WP E3b, spec 8): the restored journal's seq can be smaller than a peer's cursor,
+        // so peers read it again from the start (the merge is idempotent).
+        c.prepareStatement("INSERT OR REPLACE INTO setting(key, value) VALUES ('sync.journalEpoch', ?)").use {
+            it.setString(1, dev.pebble.core.settings.DeviceIdentity.newId())
+            it.executeUpdate()
+        }
     }
 
     /** Checks that [file] is a whole Pebble database this app can open. */

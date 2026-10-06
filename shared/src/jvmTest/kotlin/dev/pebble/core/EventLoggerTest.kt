@@ -9,12 +9,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import java.nio.file.Files
 import java.sql.DriverManager
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,5 +99,54 @@ class EventLoggerTest {
                 s.executeQuery("PRAGMA journal_mode").use { r -> r.next(); assertEquals("wal", r.getString(1)) }
             }
         }
+    }
+
+    @Test
+    fun aFailedWriteDoesNotStopTheWriterOrHangFlush() = runBlocking {
+        val file = Files.createTempFile("pebble-poison", ".db").toFile().apply { delete(); deleteOnExit() }
+        val db = DatabaseFactory.create(file)
+        // Event 5 cannot be saved, like a write that fails on a busy or full disk.
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use {
+                it.execute("CREATE TRIGGER poison BEFORE INSERT ON event_log WHEN new.at_millis = 5 BEGIN SELECT RAISE(ABORT, 'boom'); END")
+            }
+        }
+        val errors = mutableListOf<Throwable>()
+        val bus = EventBus()
+        val logger = EventLogger(db) { synchronized(errors) { errors += it } }
+        logger.attach(bus, scope, Dispatchers.IO.limitedParallelism(1))
+        repeat(10) { bus.publish(event(it)) }
+        assertTrue(logger.flush(10.seconds), "flush completes after a failed batch")
+        assertEquals(9, rows(db), "only the bad event is lost")
+        assertEquals(1, errors.size)
+        repeat(3) { bus.publish(event(100 + it)) } // the writer is still alive
+        assertTrue(logger.flush(10.seconds))
+        assertEquals(12, rows(db))
+    }
+
+    @Test
+    fun aLockedDatabaseStopsTheRowByRowRetryAfterThreeMisses() = runBlocking {
+        val file = Files.createTempFile("pebble-locked", ".db").toFile().apply { delete(); deleteOnExit() }
+        val db = DatabaseFactory.create(file)
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { c ->
+            c.createStatement().use {
+                it.execute("CREATE TRIGGER poison BEFORE INSERT ON event_log BEGIN SELECT RAISE(ABORT, 'locked'); END")
+            }
+        }
+        val errors = mutableListOf<Throwable>()
+        val bus = EventBus()
+        val logger = EventLogger(db) { synchronized(errors) { errors += it } }
+        // Hold the writer until all 10 events are queued, so they are one batch.
+        val executor = Executors.newSingleThreadExecutor()
+        val gate = CountDownLatch(1)
+        executor.execute { gate.await() }
+        logger.attach(bus, scope, executor.asCoroutineDispatcher())
+        repeat(10) { bus.publish(event(it)) }
+        gate.countDown()
+        assertTrue(logger.flush(10.seconds))
+        executor.shutdown()
+        assertEquals(0, rows(db))
+        assertEquals(4, errors.size, "3 failed rows, then one report for the rest")
+        assertTrue(errors.last().message!!.contains("7 more"), errors.last().message)
     }
 }

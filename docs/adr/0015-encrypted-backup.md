@@ -31,6 +31,8 @@ Facts:
 - One file holds everything: notes, reminders, calendar, memory, conversation, event log and settings. It does not hold voice clip audio files or model packs.
 - The Compose text field keeps the passphrase as a `String` until the card clears the field. A memory dump of the running app could show it. This is the same as other desktop apps; the file on disk is the asset to protect.
 - A downgrade is refused: a backup from a newer Pebble is not staged.
+- The swap at start is safe against a failed move. Pebble first moves the old files aside to `pebble.db.restoring-<time>`. It deletes nothing before the new file is in place. If a step fails, Pebble moves every file back, keeps the staged file for the next start, and writes the failure to the log. A start that was cut short in the middle of the swap is repaired at the next start (`Backup.recoverInterrupted`), so Pebble never opens a new empty database next to the old files.
+- If the old database has no readable `device.id`, the restored database gets a new one. It never keeps the id of the backup.
 
 ## Alternatives
 

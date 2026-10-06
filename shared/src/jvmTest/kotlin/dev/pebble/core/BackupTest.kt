@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Path
 import java.security.SecureRandom
 import java.sql.DriverManager
 import kotlin.random.Random
@@ -180,5 +181,156 @@ class BackupTest {
         Backup.cancelRestore(dir)
         assertFalse(Backup.restorePending(dir))
         assertEquals(null, Backup.applyStaged(dir))
+    }
+
+    /** A data folder with a real old database (notes, device id) plus fake side files, and a staged restore. */
+    private fun withStaged(): File {
+        val dir = dataDir()
+        val dbFile = File(dir, Backup.DB)
+        DatabaseFactory.create(dbFile).let { NoteRepository(it).add("old note", 1) }
+        setDevice(dbFile, "olddevice")
+        val other = File(dataDir(), Backup.DB)
+        DatabaseFactory.create(other).let { NoteRepository(it).add("backup note", 1) }
+        setDevice(other, "backupdevice")
+        val out = File(dir, "b.pebblebackup").toPath()
+        Backup.export(other, out, pass.copyOf(), iterations = 1_000)
+        Backup.stageRestore(out, dir, pass.copyOf())
+        return dir
+    }
+
+    /**
+     * A mover that fails when [failOn] says so. SQLite removes fake side files when it opens the old database, so the
+     * first call makes them (as a database in use has them), just before the moves reach them.
+     */
+    private fun failingMover(dir: File, failOn: (Int, Path) -> Boolean): (Path, Path) -> Unit {
+        var calls = 0
+        return { from, to ->
+            if (++calls == 1) {
+                File(dir, "${Backup.DB}-wal").writeText("wal")
+                File(dir, "${Backup.DB}-shm").writeText("shm")
+            }
+            if (failOn(calls, from)) error("locked") else Files.move(from, to)
+        }
+    }
+
+    private fun assertOldDataIntact(dir: File) {
+        assertEquals("wal", File(dir, "${Backup.DB}-wal").readText())
+        assertEquals("shm", File(dir, "${Backup.DB}-shm").readText())
+        assertTrue(Backup.restorePending(dir), "the staged file is kept for the next start")
+        assertTrue(
+            dir.list()!!.none {
+                it.contains("restoring") || it.contains("before-restore")
+            },
+            "nothing left aside: ${dir.list()!!.toList()}",
+        )
+    }
+
+    @Test
+    fun aFailedMoveOfASideFileLeavesTheOldDatabaseWhereItWas() {
+        val dir = withStaged()
+        val e = assertFailsWith<BackupException> {
+            Backup.applyStaged(dir, failingMover(dir) { call, _ -> call == 3 })
+        }
+        assertTrue(e.message!!.contains("old database stays"))
+        assertOldDataIntact(dir)
+        assertEquals("olddevice", deviceOf(File(dir, Backup.DB)))
+    }
+
+    @Test
+    fun aFailedMoveOfTheRestoredFileLeavesTheOldDatabaseWhereItWas() {
+        val dir = withStaged()
+        val e = assertFailsWith<BackupException> {
+            Backup.applyStaged(dir, failingMover(dir) { _, from -> from.fileName.toString() == "${Backup.DB}.restore" })
+        }
+        assertTrue(e.message!!.contains("old database stays"))
+        assertOldDataIntact(dir)
+        assertEquals("olddevice", deviceOf(File(dir, Backup.DB)))
+    }
+
+    @Test
+    fun aSwapCutShortIsUndoneAtTheNextStart() {
+        val dir = dataDir()
+        // As left by a crash after the old files moved aside and before the restore moved in.
+        File(dir, "${Backup.DB}.restoring-100").writeText("db")
+        File(dir, "${Backup.DB}.restoring-100-wal").writeText("wal")
+        assertTrue(Backup.recoverInterrupted(dir))
+        assertEquals("db", File(dir, Backup.DB).readText())
+        assertEquals("wal", File(dir, "${Backup.DB}-wal").readText())
+        assertFalse(Backup.recoverInterrupted(dir), "nothing more to do")
+    }
+
+    @Test
+    fun anUnreadableOldDeviceIdDoesNotLetTheBackupsIdThrough() {
+        val dir = withStaged()
+        File(dir, Backup.DB).writeText("this is not a database") // the old file cannot be read
+        assertTrue(Backup.applyStaged(dir)!!.startsWith("restored"))
+        val id = deviceOf(File(dir, Backup.DB))
+        assertTrue(id != "backupdevice" && id.isNotBlank(), "a new id, not the backup's: $id")
+    }
+
+    private fun settingOf(db: File, key: String) = DriverManager.getConnection("jdbc:sqlite:${db.absolutePath}").use { c ->
+        c.createStatement().use { s ->
+            s.executeQuery("SELECT value FROM setting WHERE key = '$key'").use { if (it.next()) it.getString(1) else null }
+        }
+    }
+
+    @Test
+    fun aStaleBeforeRestoreSideFileDoesNotSurviveANewRestore() {
+        val dir = withStaged()
+        File(dir, "${Backup.DB}.before-restore-wal").writeText("stale wal from an earlier restore")
+        File(dir, "${Backup.DB}.before-restore-shm").writeText("stale shm")
+        assertTrue(Backup.applyStaged(dir)!!.startsWith("restored"))
+        assertTrue(File(dir, "${Backup.DB}.before-restore").exists())
+        assertFalse(File(dir, "${Backup.DB}.before-restore-wal").exists())
+        assertFalse(File(dir, "${Backup.DB}.before-restore-shm").exists())
+    }
+
+    @Test
+    fun theIdsAreInTheStagedFileBeforeAnyMove() {
+        val dir = withStaged()
+        assertFailsWith<BackupException> {
+            Backup.applyStaged(dir, failingMover(dir) { _, from -> from.fileName.toString() == "${Backup.DB}.restore" })
+        }
+        val staged = File(dir, "${Backup.DB}.restore")
+        assertEquals("olddevice", settingOf(staged, "device.id"), "so a crash right after the move cannot keep the backup's id")
+        assertTrue(!settingOf(staged, "sync.journalEpoch").isNullOrBlank())
+    }
+
+    @Test
+    fun undoFailuresAreReportedAndNothingIsOverwritten() {
+        val dir = withStaged()
+        var calls = 0
+        val e = assertFailsWith<BackupException> {
+            Backup.applyStaged(dir) { from, to ->
+                if (++calls == 1) {
+                    File(dir, "${Backup.DB}-wal").writeText("wal")
+                    File(dir, "${Backup.DB}-shm").writeText("shm")
+                }
+                if (calls >= 3) error("locked") else Files.move(from, to)
+            }
+        }
+        assertTrue(e.suppressed.isNotEmpty(), "undo failures are kept on the exception")
+        assertTrue(Backup.restorePending(dir), "the staged copy is not lost")
+        assertTrue(Backup.recoverInterrupted(dir), "the next start brings the old database back")
+        assertEquals("olddevice", deviceOf(File(dir, Backup.DB)))
+    }
+
+    @Test
+    fun olderRestoringSetsAreRemovedAfterASuccessfulSwap() {
+        val dir = withStaged()
+        File(dir, "${Backup.DB}.restoring-1").writeText("old leftover")
+        File(dir, "${Backup.DB}.restoring-1-wal").writeText("old leftover")
+        assertTrue(Backup.applyStaged(dir)!!.startsWith("restored"))
+        assertTrue(dir.list()!!.none { it.contains("restoring") }, dir.list()!!.toList().toString())
+    }
+
+    @Test
+    fun aNewStagedFileNeverMeetsAStaleSideFile() {
+        val dir = withStaged()
+        File(dir, "${Backup.DB}.restore-wal").writeText("stale wal of an earlier staged file")
+        Backup.stageRestore(File(dir, "b.pebblebackup").toPath(), dir, pass.copyOf())
+        assertFalse(File(dir, "${Backup.DB}.restore-wal").exists())
+        Backup.applyStaged(dir)
+        assertTrue(dir.list()!!.none { it.contains(".restore-") }, dir.list()!!.toList().toString())
     }
 }
