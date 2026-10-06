@@ -74,6 +74,7 @@ class NudgePolicy(
 
     data class Choice(val arm: NudgeArm, val propensity: Double)
 
+    @Synchronized
     fun choose(ctx: NudgeContext): Choice {
         val samples = NudgeArm.entries.associateWith { arm -> belief(ctx, arm).let { (a, b) -> sampleBeta(a, b) } }
         val arm = samples.maxBy { it.value }.key
@@ -81,6 +82,7 @@ class NudgePolicy(
     }
 
     /** Learn from one outcome: [reward] in 0..1 nudges the belief for (context, arm). */
+    @Synchronized
     fun learn(ctx: NudgeContext, arm: NudgeArm, reward: Double) {
         val (a, b) = belief(ctx, arm)
         val r = reward.coerceIn(0.0, 1.0)
@@ -90,10 +92,12 @@ class NudgePolicy(
     }
 
     /** Mean success estimate per arm — for the Memory page ("I wait a bit around 2 pm"). */
+    @Synchronized
     fun expected(ctx: NudgeContext): Map<NudgeArm, Double> =
         NudgeArm.entries.associateWith { arm -> belief(ctx, arm).let { (a, b) -> a / (a + b) } }
 
     /** How many reactions this context has seen (beyond the priors), across all arms. */
+    @Synchronized
     fun observations(ctx: NudgeContext): Double = NudgeArm.entries.sumOf { arm ->
         val learned = beliefs[keyOf(ctx, arm)]?.takeIf { it.first > 0 || it.second > 0 } ?: return@sumOf 0.0
         val p = prior(ctx, arm)
@@ -101,6 +105,7 @@ class NudgePolicy(
     }
 
     /** Forget what was learned for every context whose key starts with [contextPrefix] (e.g. "WATER:3"). */
+    @Synchronized
     fun resetContext(contextPrefix: String) {
         beliefs.keys.filter { it.startsWith(contextPrefix) }.forEach {
             beliefs.remove(it)
@@ -129,6 +134,7 @@ class NudgePolicy(
      * How often [choose] picks each arm in [ctx] with today's beliefs (Monte-Carlo, sums to 1): the policy
      * as a fixed target for the offline evaluator ([NudgeIpsEvaluator]).
      */
+    @Synchronized
     fun probabilities(ctx: NudgeContext, draws: Int = 2_000): Map<NudgeArm, Double> {
         val b = NudgeArm.entries.associateWith { belief(ctx, it) }
         val wins = NudgeArm.entries.associateWith { 0 }.toMutableMap()

@@ -47,6 +47,7 @@ import dev.pebble.desktop.app.IconButton
 import dev.pebble.desktop.app.PebbleIcons
 import dev.pebble.desktop.ui.Chip
 import dev.pebble.desktop.ui.LocalGlass
+import kotlinx.coroutines.launch
 
 /**
  * Everything Pebble has learned or been told, grouped by kind, each deletable. Plus the
@@ -55,7 +56,8 @@ import dev.pebble.desktop.ui.LocalGlass
 @Composable
 fun MemoryPage(app: PebbleApp) {
     val c = LocalGlass.current
-    LaunchedEffect(Unit) { runCatching { app.brain.learn() } }
+    LaunchedEffect(Unit) { app.learn() }
+    val scope = rememberCoroutineScope()
     val memories by remember { app.memory.visibleFlow() }.collectAsState(initial = app.memory.visible())
     var mediaOn by remember { mutableStateOf(app.settings.bool(Keys.MEDIA_TRACKING, false)) }
     var keepVoice by remember { mutableStateOf(app.settings.bool(Keys.KEEP_VOICE_CORRECTIONS, false)) }
@@ -121,7 +123,7 @@ fun MemoryPage(app: PebbleApp) {
                         lineHeight = 16.sp,
                     )
                     Spacer(Modifier.height(8.dp))
-                    Chip("Clear watch history", false) { app.memory.clearMedia(); runCatching { app.brain.learn() } }
+                    Chip("Clear watch history", false) { app.memory.clearMedia(); scope.launch { app.learn() } }
                     Spacer(Modifier.height(12.dp))
                     SettingRow("Microphone (talk to Pebble)", micOn) {
                         micOn = it

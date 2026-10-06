@@ -33,6 +33,8 @@ Write new pages and changes to pages in this pattern. Write this file in STE (se
 **Caution:** `ReminderEngine` is not thread-safe. Its own loop runs on the UI thread.
 - Call an engine (`tick`, `upcoming`, `act`) only on the thread of the state holder's scope. In the app, this is the UI thread.
 - Write to the database in `withContext(env.dispatchers.io)`.
+- Do not put a reminder task in a window that the user can hide. `ReminderPresenter` (started in `Main`) shows due reminders on the UI thread, with or without the pet window.
+- Run slow reads (`brain.learn()`, the growth check) on `app.workDispatcher`, one thread, and not on the UI thread.
 - Read time only from `env` (`env.millis()`, `env.zone()`). Do not use `System.currentTimeMillis()` or `ZoneId.systemDefault()`.
 
 **Caution:** `combine` emits only after each flow emitted one time. A flow that has a fixed dispatcher can stop the state in tests.
