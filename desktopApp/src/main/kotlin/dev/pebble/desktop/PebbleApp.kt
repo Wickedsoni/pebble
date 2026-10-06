@@ -541,9 +541,17 @@ class PebbleApp(
         logFile = DatabaseFactory.defaultDataDir().toPath().resolve("chat-server.log"),
     )
 
-    /** Whether a chat model is installed. Checked on the io thread at start (a pack change waits for a restart), so the UI never checks files. */
-    private val chatInstalled = dev.pebble.desktop.brain.BackgroundFlag { chat.available }.also {
-        appScope.launch(env.dispatchers.io) { it.refresh() }
+    /**
+     * Whether a chat model is installed. The check can hash a big pack, so it runs on the io thread, never on the UI
+     * thread, and only when needed: at start with Smart replies on, and when the Memory page opens ([refreshChatInstalled]).
+     */
+    internal val chatInstalled = dev.pebble.desktop.brain.BackgroundFlag { chat.available }.also {
+        if (settings.bool(Keys.SMART_REPLIES, false)) appScope.launch(env.dispatchers.io) { it.refresh() }
+    }
+
+    /** Checks again, off the UI thread, whether a chat model is installed. */
+    fun refreshChatInstalled() {
+        appScope.launch(env.dispatchers.io) { chatInstalled.refresh() }
     }
 
     /** True when the chat model may answer small talk: the setting is on and a chat model is installed. */

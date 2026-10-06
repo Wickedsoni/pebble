@@ -1,5 +1,6 @@
 package dev.pebble.desktop
 
+import dev.pebble.core.db.DatabaseFactory
 import dev.pebble.desktop.brain.BackgroundFlag
 import dev.pebble.desktop.brain.LazyModel
 import dev.pebble.desktop.brain.LocalChat
@@ -345,6 +346,22 @@ class ModelLoadingHardeningTest {
         assertTrue(computedOn !== readThread)
         assertEquals(true, flag.value)
         assertEquals(1, computed, "reading again still does nothing")
+    }
+
+    @Test
+    fun withSmartRepliesOffTheChatPackIsNotCheckedAtStart() {
+        val app = PebbleApp(DatabaseFactory.inMemory())
+        try {
+            Thread.sleep(500) // a start-up check would have run on the io thread by now
+            assertEquals(0, app.chatInstalled.refreshes, "no hashing of a chat pack for a feature that is off")
+            assertEquals(false, app.smartRepliesOn())
+            app.refreshChatInstalled() // the Memory page opens
+            val end = System.currentTimeMillis() + 5_000
+            while (app.chatInstalled.refreshes == 0 && System.currentTimeMillis() < end) Thread.sleep(20)
+            assertEquals(1, app.chatInstalled.refreshes)
+        } finally {
+            app.shutdown()
+        }
     }
 
     @Test
