@@ -16,7 +16,7 @@ The plan puts `RecurrenceExpander` in `commonMain`. The `:shared` module has no 
    - Sync-ready columns: `uid` (primary key), `updated_at`, `deleted_at` (tombstone), `hlc`, `origin_device`. Also `owner_device` and `visibility` (`private` by default) for milestone F.
    - `exdates`: skipped occurrences (ICS `EXDATE`). This column is not in the plan. Without it, an imported series with skipped days shows days that you deleted in Google or Outlook. The "Skip day" button on the Calendar page also writes it.
    - `remind_minutes`: a reminder before each occurrence.
-2. **The RRULE subset:** `FREQ=DAILY|WEEKLY|MONTHLY`, `INTERVAL`, `BYDAY` (WEEKLY, without numbers), `BYMONTHDAY` (MONTHLY, 1 to 31), `UNTIL` or `COUNT`, `WKST=MO`. Pebble keeps every other rule, shows the event one time with a warning, and exports the rule unchanged.
+2. **The RRULE subset:** `FREQ=DAILY|WEEKLY|MONTHLY|YEARLY`, `INTERVAL`, `BYDAY` (WEEKLY, without numbers), `BYMONTHDAY` (MONTHLY, 1 to 31; YEARLY, only with `BYMONTH`), `BYMONTH` (YEARLY), `UNTIL` or `COUNT`, `WKST=MO`. Pebble keeps every other rule, shows the event one time with a warning, and exports the rule unchanged.
 3. **Expansion in `:shared` jvmMain with `java.time`** (`RecurrenceExpander`, `RecurrenceRule`, `Ics`, `CalendarAgenda`). The repository stays in `commonMain`. This is the difference from the plan.
    - A timed event keeps its local time in its own zone (`tz`) across DST. A time in a spring-forward gap moves forward. A time that occurs twice uses the first one.
    - An all-day event is a set of dates. It starts at midnight in the zone of the person who looks.
@@ -45,3 +45,10 @@ A delete always wins (`docs/specs/E3-CHANGE-JOURNAL.md`, D5, the maintainer's de
 - `CalendarRepository.save` returns false for the uid of a deleted event, and changes nothing. Before E3, a save brought the tombstone back.
 - The ICS import counts these events and shows "N events were deleted before and were not imported again".
 - A trigger stops each write that sets `deleted_at` back to null.
+
+## Revision (WP QA1, 2026-10-06)
+
+- `FREQ=YEARLY` is in the subset: `INTERVAL`, `UNTIL` or `COUNT`, and `BYMONTH` with `BYMONTHDAY`. Without them, the event repeats on the day of its start. 29 Feb has no occurrence in a year that is not a leap year (RFC 5545). `BYMONTHDAY` without `BYMONTH` is not in the subset: RFC 5545 reads it as every month, so Pebble shows such an event one time. The Calendar page has a "Yearly" chip.
+- `Occurrence.date` is the day in the view zone. `UNTIL` and `EXDATE` still use the day in the event zone.
+- A rule that no day fits (the 30th every 12 months from February) ends after 500 empty periods. A DAILY or WEEKLY rule without `COUNT` goes straight to the window, so an old start costs no time.
+- An `EXDATE` with a date value on a timed series is stored as the start of that day's occurrence. The stored format does not change.

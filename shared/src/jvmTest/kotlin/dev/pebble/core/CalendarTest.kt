@@ -164,4 +164,15 @@ class CalendarTest {
         val row = fresh.calendarQueries.eventByUid("x").executeAsOne()
         assertEquals(id to id, row.origin_device to row.owner_device, "claimed once; a later claim never replaces it")
     }
+
+    @Test
+    fun aTimedEventInAnotherZoneIsOnOneDayOfTheViewZone() {
+        // 02:00 on 4 Oct in Kolkata is 20:30 UTC on 3 Oct: stored with tz = UTC, listed once, on 4 Oct.
+        val start = at(4, 2)
+        calendar.save(CalendarEvent("utc", "Early", start, start + 3_600_000, "UTC"), at = 1)
+        calendar.save(event("late", 4, 22), at = 1)
+        val days = agenda.days(LocalDate.of(2026, 10, 3), LocalDate.of(2026, 10, 5))
+        assertEquals(setOf(LocalDate.of(2026, 10, 4)), days.keys)
+        assertEquals(listOf("utc", "late"), days.getValue(LocalDate.of(2026, 10, 4)).map { it.event.uid }, "sorted under the right day")
+    }
 }

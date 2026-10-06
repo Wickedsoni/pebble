@@ -6,6 +6,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 /**
@@ -17,7 +18,7 @@ import java.time.format.DateTimeFormatter
  * Write: the same properties; `TZID` names the IANA zone without a `VTIMEZONE` block.
  */
 object Ics {
-    /** What a file gave. [shownOnce]: events that repeat in a way Pebble cannot expand. [unknownZones]: `TZID`s that are not IANA zones (read in the default zone). [skipped]: VEVENTs without a start. */
+    /** What a file gave. [shownOnce]: events that repeat in a way Pebble cannot expand. [unknownZones]: `TZID`s that are not IANA zones (read in the default zone). [skipped]: VEVENTs without a start, or without END:VEVENT. */
     data class Import(val events: List<CalendarEvent>, val shownOnce: Int, val unknownZones: Int, val skipped: Int)
 
     private val LOCAL = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
@@ -31,30 +32,54 @@ object Ics {
         val lines = text.replace("\r\n", "\n").replace("\r", "\n").replace(Regex("\n[ \t]"), "").split('\n')
         val blocks = mutableListOf<List<Prop>>()
         var current: MutableList<Prop>? = null
-        var nested = 0 // VALARM and other blocks inside a VEVENT
+        var skipped = 0
+        // Open blocks, outermost first: VEVENT, then VALARM and other blocks inside it.
+        val stack = ArrayList<String>()
         for (line in lines) {
             if (line.isBlank()) continue
             val p = prop(line) ?: continue
+            val name = p.value.trim().uppercase()
             val block = current
             when {
-                block == null -> if (p.name == "BEGIN" && p.value.equals("VEVENT", true)) current = mutableListOf()
-
-                p.name == "END" && nested == 0 && p.value.equals("VEVENT", true) -> {
-                    blocks += block
-                    current = null
+                block == null -> if (p.name == "BEGIN" && name == "VEVENT") {
+                    current = mutableListOf()
+                    stack += name
                 }
 
-                p.name == "BEGIN" -> nested++
+                // A VEVENT that never ended: drop it, and read this line again as the start of the next block.
+                p.name == "BEGIN" && name == "VEVENT" -> {
+                    skipped++
+                    current = mutableListOf()
+                    stack.clear()
+                    stack += name
+                }
 
-                p.name == "END" -> nested--
+                p.name == "BEGIN" -> stack += name
 
-                nested == 0 -> block += p
+                p.name == "END" && name == "VCALENDAR" -> {
+                    skipped++
+                    current = null
+                    stack.clear()
+                }
+
+                p.name == "END" -> {
+                    val at = stack.lastIndexOf(name)
+                    if (at == 0) {
+                        blocks += block
+                        current = null
+                        stack.clear()
+                    } else if (at > 0) {
+                        while (stack.size > at) stack.removeAt(stack.lastIndex)
+                    }
+                }
+
+                stack.size == 1 -> block += p
             }
         }
+        if (current != null) skipped++ // the file ended inside a VEVENT
 
         var shownOnce = 0
         val unknownZones = mutableSetOf<String>()
-        var skipped = 0
         fun zoneOf(p: Prop): ZoneId? {
             val tzid = p.params["TZID"] ?: return null
             // Some programs write "/mozilla.org/20070129_1/Europe/Berlin"-style ids: try the IANA part.
@@ -110,8 +135,21 @@ object Ics {
                 }
             val rrule = first("RRULE")?.value?.trim()?.takeIf { it.isNotEmpty() }
             if ((rrule != null && RecurrenceRule.parse(rrule) == null) || (rrule != null && first("RDATE") != null)) shownOnce++
+            val startTime = Instant.ofEpochMilli(startAt).atZone(zone).toLocalTime()
             val exdates = b.filter { it.name == "EXDATE" }.flatMap { p ->
-                p.value.split(',').mapNotNull { v -> time(p.copy(value = v))?.first }
+                p.value.split(',').mapNotNull { v ->
+                    val (millis, exZone, isDate) = time(p.copy(value = v)) ?: return@mapNotNull null
+                    // A date on a timed series skips that day: store it as the start of that day's occurrence.
+                    if (isDate && !allDay) {
+                        ZonedDateTime.of(
+                            LocalDate.ofInstant(Instant.ofEpochMilli(millis), exZone),
+                            startTime,
+                            zone,
+                        ).toInstant().toEpochMilli()
+                    } else {
+                        millis
+                    }
+                }
             }
             val uid = first("UID")?.value?.trim()?.takeIf { it.isNotEmpty() }
             Parsed(
@@ -169,13 +207,13 @@ object Ics {
                 else -> "$name;TZID=${zone.id}:" + LOCAL.format(LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), zone))
             }
             line("BEGIN:VEVENT")
-            line("UID:${e.uid}")
+            line("UID:${noBreaks(e.uid)}")
             line("DTSTAMP:$stamp")
             line(time("DTSTART", e.startAt))
             line(time("DTEND", e.endAt))
             line("SUMMARY:${escape(e.title)}")
             e.notes?.let { line("DESCRIPTION:${escape(it)}") }
-            e.rrule?.let { line("RRULE:$it") }
+            e.rrule?.let { line("RRULE:${noBreaks(it)}") }
             e.exdates.forEach { line(time("EXDATE", it)) }
             line("END:VEVENT")
         }
@@ -250,7 +288,10 @@ object Ics {
     private fun escape(s: String): String = s.replace(
         "\\",
         "\\\\",
-    ).replace(";", "\\;").replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n")
+    ).replace(";", "\\;").replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n")
+
+    /** A value that is not text (UID, RRULE) cannot hold a line break: remove it, or the file gets a second property. */
+    private fun noBreaks(s: String): String = s.replace("\r", "").replace("\n", "")
 
     /** RFC 5545 folding: lines of at most 75 bytes (UTF-8), continued with a space. Never splits a character. */
     private fun fold(s: String): String {

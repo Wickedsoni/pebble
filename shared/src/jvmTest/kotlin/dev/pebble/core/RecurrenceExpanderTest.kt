@@ -63,7 +63,7 @@ class RecurrenceExpanderTest {
         assertEquals("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=6", r.format())
         assertEquals(r, RecurrenceRule.parse("RRULE:" + r.format()))
         listOf(
-            "FREQ=YEARLY",
+            "FREQ=YEARLY;BYMONTHDAY=3", // a day without a month means every month
             "FREQ=HOURLY",
             "FREQ=MONTHLY;BYDAY=1MO", // nth weekday of the month
             "FREQ=WEEKLY;BYDAY=1MO",
@@ -195,7 +195,7 @@ class RecurrenceExpanderTest {
 
     @Test
     fun anUnsupportedRuleIsShownOnce() {
-        val e = event(LocalDateTime.of(2026, 10, 1, 9, 0), kolkata, "FREQ=YEARLY")
+        val e = event(LocalDateTime.of(2026, 10, 1, 9, 0), kolkata, "FREQ=MONTHLY;BYDAY=1MO")
         val got = RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, kolkata)
         assertEquals(1, got.size)
         assertFalse(got.single().recurrenceShown)
@@ -220,5 +220,156 @@ class RecurrenceExpanderTest {
         assertEquals(listOf(LocalDate.of(2026, 10, 2), LocalDate.of(2026, 10, 9)), got.map { it.date })
         assertEquals(LocalDate.of(2026, 10, 2).atStartOfDay(kolkata).toInstant().toEpochMilli(), got[0].startAt)
         assertEquals(LocalDate.of(2026, 10, 4).atStartOfDay(kolkata).toInstant().toEpochMilli(), got[0].endAt, "two days long")
+    }
+
+    /** Runs [block] on its own thread; fails when it does not end within 5 seconds (a rule that loops for ever). */
+    private fun <T> endsQuickly(block: () -> T): T {
+        var result: Result<T>? = null
+        val t = Thread { result = runCatching(block) }.apply {
+            isDaemon = true
+            start()
+            join(5_000)
+        }
+        assertFalse(t.isAlive, "the expansion did not end")
+        return result!!.getOrThrow()
+    }
+
+    @Test
+    fun aMonthlyRuleThatNoDayFitsEndsAtOnceAndKeepsTheStart() {
+        // Every 12 months from February never reaches a 30th; every 12 months from April never reaches a 31st.
+        val feb = event(LocalDateTime.of(2026, 2, 10, 9, 0), kolkata, "FREQ=MONTHLY;INTERVAL=12;BYMONTHDAY=30")
+        val apr = event(LocalDateTime.of(2026, 4, 10, 9, 0), kolkata, "FREQ=MONTHLY;INTERVAL=12;BYMONTHDAY=31")
+        for (e in listOf(feb, apr)) {
+            val got = endsQuickly { RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, kolkata) }
+            assertEquals(listOf(e.startAt), got.map { it.startAt })
+        }
+    }
+
+    @Test
+    fun aTimedEventIsListedOnItsDayInTheViewZone() {
+        // 02:00 on 4 Oct in Kolkata is 20:30 UTC on 3 Oct, and the event is stored with tz = UTC.
+        val start = millis(LocalDateTime.of(2026, 10, 3, 20, 30), ZoneId.of("UTC"))
+        val e = CalendarEvent("u1", "Early", start, start + 3_600_000, "UTC", rrule = "FREQ=DAILY;COUNT=3")
+        val got = RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, kolkata)
+        assertEquals(listOf(4, 5, 6), got.map { it.date.dayOfMonth }, "the day in Kolkata, not in UTC")
+        assertEquals(listOf(start), got.take(1).map { it.startAt })
+    }
+
+    @Test
+    fun theEventZoneStillDecidesUntil() {
+        // UNTIL 4 Oct (a UTC date): the 3 Oct and 4 Oct 20:30 UTC starts are in; 5 Oct is out.
+        val start = millis(LocalDateTime.of(2026, 10, 3, 20, 30), ZoneId.of("UTC"))
+        val e = CalendarEvent("u2", "x", start, start + 1, "UTC", rrule = "FREQ=DAILY;UNTIL=20261004")
+        assertEquals(2, RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, kolkata).size)
+    }
+
+    @Test
+    fun anOldStartIsReachedWithoutWalkingFromIt() {
+        val start = LocalDateTime.of(2000, 1, 3, 9, 0) // a Monday
+        val from = LocalDate.of(2026, 10, 1)
+        val to = LocalDate.of(2026, 11, 1)
+        val rules = listOf("FREQ=DAILY", "FREQ=DAILY;INTERVAL=7", "FREQ=WEEKLY;INTERVAL=3;BYDAY=MO,FR", "FREQ=WEEKLY;BYDAY=TU,SU")
+        for (rule in rules) {
+            val r = RecurrenceRule.parse(rule)!!
+            val got = endsQuickly { starts(event(start, kolkata, rule), from, to, kolkata) }
+            // The same rule with a COUNT too large to matter: no jump, so every step is walked.
+            val walked = starts(event(start, kolkata, "$rule;COUNT=100000"), from, to, kolkata)
+            assertEquals(walked, got, rule)
+            val week0 = LocalDate.of(2000, 1, 3)
+            val expected = generateSequence(from) { it.plusDays(1) }.takeWhile { it.isBefore(to) }.filter { d ->
+                val days = java.time.temporal.ChronoUnit.DAYS.between(week0, d)
+                when (r.freq) {
+                    RecurrenceRule.Freq.DAILY -> days % r.interval == 0L
+                    else -> (days / 7) % r.interval == 0L && d.dayOfWeek in r.byDay
+                }
+            }.map { it.atTime(9, 0) }.toList()
+            assertEquals(expected, got, rule)
+        }
+    }
+
+    @Test
+    fun aStartMoreThan200000DaysAgoStillGivesTheRightDays() {
+        // 1300 is about 270 000 days before 2026: more than MAX_STEPS if every day were walked.
+        val start = LocalDateTime.of(1300, 1, 1, 9, 0)
+        val e = event(start, kolkata, "FREQ=DAILY")
+        val got = endsQuickly { starts(e, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 4), kolkata) }
+        assertEquals(listOf(1, 2, 3), got.map { it.dayOfMonth })
+        val weekly = event(LocalDateTime.of(1300, 1, 1, 9, 0), kolkata, "FREQ=WEEKLY;BYDAY=MO,TH")
+        assertEquals(
+            listOf(1, 5),
+            endsQuickly {
+                starts(weekly, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 7), kolkata)
+            }.map { it.dayOfMonth },
+        )
+    }
+
+    @Test
+    fun aHugeDurationDoesNotMakeTheSeriesVanish() {
+        val s = millis(LocalDateTime.of(2020, 1, 1, 9, 0), kolkata)
+        val e = CalendarEvent("big", "x", s, s + 6_048_000_000_000_000_000L, kolkata.id, rrule = "FREQ=DAILY") // P9999999999W
+        val got =
+            endsQuickly {
+                RecurrenceExpander.occurrences(
+                    e,
+                    millis(LocalDateTime.of(2026, 10, 1, 0, 0), kolkata),
+                    millis(LocalDateTime.of(2026, 10, 3, 0, 0), kolkata),
+                    kolkata,
+                )
+            }
+        assertTrue(got.isNotEmpty())
+    }
+
+    @Test
+    fun yearlyRepeatsOnTheDayOfTheStartAndSkips29FebInOtherYears() {
+        val leap = event(LocalDateTime.of(2024, 2, 29, 9, 0), kolkata, "FREQ=YEARLY;COUNT=3")
+        assertEquals(
+            listOf(2024, 2028, 2032),
+            starts(leap, LocalDate.of(2020, 1, 1), LocalDate.of(2040, 1, 1), kolkata).map { it.year },
+            "RFC 5545: 29 Feb does not exist in other years, so those years have no occurrence",
+        )
+        val everyTwo = event(LocalDateTime.of(2026, 10, 5, 9, 0), kolkata, "FREQ=YEARLY;INTERVAL=2;UNTIL=20311005")
+        assertEquals(
+            listOf(LocalDate.of(2026, 10, 5), LocalDate.of(2028, 10, 5), LocalDate.of(2030, 10, 5)),
+            starts(everyTwo, LocalDate.of(2026, 1, 1), LocalDate.of(2040, 1, 1), kolkata).map { it.toLocalDate() },
+        )
+    }
+
+    @Test
+    fun yearlyWithMonthsAndDaysFollowsThem() {
+        val e = event(LocalDateTime.of(2026, 3, 1, 9, 0), kolkata, "FREQ=YEARLY;BYMONTH=3,9;BYMONTHDAY=1,15")
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 3, 15),
+                LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 9, 15),
+                LocalDate.of(2027, 3, 1),
+                LocalDate.of(2027, 3, 15),
+            ),
+            starts(e, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 4, 1), kolkata).map { it.toLocalDate() },
+        )
+        val rule = RecurrenceRule.parse("FREQ=YEARLY;INTERVAL=2;BYMONTH=9,3;BYMONTHDAY=15;COUNT=4")!!
+        assertEquals("FREQ=YEARLY;INTERVAL=2;BYMONTH=3,9;BYMONTHDAY=15;COUNT=4", rule.format())
+        assertEquals(listOf(3, 9), rule.byMonth)
+        assertNull(RecurrenceRule.parse("FREQ=YEARLY;BYMONTH=13"))
+        assertNull(RecurrenceRule.parse("FREQ=MONTHLY;BYMONTH=3"))
+        assertNull(RecurrenceRule.parse("FREQ=YEARLY;BYMONTHDAY=3"), "a day without a month means every month")
+    }
+
+    @Test
+    fun aYearlyRuleThatNoYearFitsEndsAtOnce() {
+        // 29 Feb every 4 years from 2023 never meets a leap year.
+        val e = event(LocalDateTime.of(2023, 2, 28, 9, 0), kolkata, "FREQ=YEARLY;INTERVAL=4;BYMONTH=2;BYMONTHDAY=29")
+        val got = endsQuickly { RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, kolkata) }
+        assertEquals(listOf(e.startAt), got.map { it.startAt })
+    }
+
+    @Test
+    fun recurrenceShownIsSetOnEachOccurrence() {
+        val day = LocalDateTime.of(2026, 10, 5, 9, 0)
+        val ok = RecurrenceExpander.occurrences(event(day, kolkata, "FREQ=DAILY;COUNT=2"), 0, Long.MAX_VALUE, kolkata)
+        assertTrue(ok.all { it.recurrenceShown })
+        val odd = RecurrenceExpander.occurrences(event(day, kolkata, "FREQ=HOURLY"), 0, Long.MAX_VALUE, kolkata)
+        assertEquals(listOf(false), odd.map { it.recurrenceShown })
     }
 }

@@ -53,9 +53,10 @@ class CalendarAgenda(
         var added = 0
         // The HLC of each event read here: an event moved or deleted on another thread before addLinked gets no reminder
         // for this version (its own eventChanged makes the new ones).
-        val withOffset = events.betweenWithHlc(now, now + horizonMillis + MAX_OFFSET).filter { it.first.remindMinutes != null }
-        for ((e, hlc) in withOffset) {
-            val offset = e.remindMinutes!! * 60_000L
+        val withOffset = events.betweenWithHlc(now, now + horizonMillis + MAX_OFFSET).mapNotNull { (e, hlc) ->
+            e.remindMinutes?.let { Triple(e, hlc, it * 60_000L) }
+        }
+        for ((e, hlc, offset) in withOffset) {
             for (o in RecurrenceExpander.occurrences(e, now, now + horizonMillis + offset, zone())) {
                 val due = o.startAt - offset
                 if (o.startAt <= now || due > now + horizonMillis) continue

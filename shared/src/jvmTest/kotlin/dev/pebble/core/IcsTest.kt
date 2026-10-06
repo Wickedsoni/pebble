@@ -2,6 +2,7 @@ package dev.pebble.core
 
 import dev.pebble.core.calendar.CalendarEvent
 import dev.pebble.core.calendar.Ics
+import dev.pebble.core.calendar.RecurrenceExpander
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -68,7 +69,7 @@ class IcsTest {
         "DTSTART;TZID=India Standard Time:20261011T180000",
         "UID:outlook@example.com",
         "SUMMARY:Outlook zone name",
-        "RRULE:FREQ=YEARLY",
+        "RRULE:FREQ=MONTHLY;BYDAY=1MO",
         "END:VEVENT",
         "BEGIN:VEVENT",
         "UID:nostart@example.com",
@@ -82,7 +83,7 @@ class IcsTest {
         val r = Ics.parse(google, kolkata) { "new" }
         assertEquals(1, r.skipped, "the VEVENT without DTSTART")
         assertEquals(1, r.unknownZones, "India Standard Time is a Windows name")
-        assertEquals(1, r.shownOnce, "FREQ=YEARLY")
+        assertEquals(1, r.shownOnce, "an nth weekday of the month")
         val byUid = r.events.associateBy { it.uid }
         val standup = byUid.getValue("standup@example.com")
         assertEquals("Team standup, daily", standup.title)
@@ -160,5 +161,96 @@ class IcsTest {
         assertTrue(Ics.parse("not a calendar\nat all", kolkata).events.isEmpty())
         val r = Ics.parse("BEGIN:VEVENT\nDTSTART:garbage\nSUMMARY:x\nEND:VEVENT", kolkata)
         assertEquals(0 to 1, r.events.size to r.skipped)
+    }
+
+    @Test
+    fun aVeventWithoutEndIsDroppedAndTheLaterEventsStay() {
+        val text = listOf(
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT", // never ends
+            "UID:broken",
+            "DTSTART:20261005T090000Z",
+            "SUMMARY:Broken",
+            "BEGIN:VEVENT",
+            "UID:second",
+            "DTSTART:20261006T090000Z",
+            "SUMMARY:Second",
+            "BEGIN:VALARM",
+            "ACTION:DISPLAY",
+            "END:VALARM",
+            "END:VEVENT",
+            "BEGIN:VEVENT", // ends with the calendar
+            "UID:cut",
+            "DTSTART:20261007T090000Z",
+            "END:VCALENDAR",
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT",
+            "UID:third",
+            "DTSTART:20261008T090000Z",
+            "BEGIN:VALARM", // an alarm without END before the event ends
+            "END:VEVENT",
+            "END:VCALENDAR",
+        ).joinToString("\n")
+        val r = Ics.parse(text, kolkata)
+        assertEquals(listOf("second", "third"), r.events.map { it.uid })
+        assertEquals(2, r.skipped)
+    }
+
+    @Test
+    fun aFileThatEndsInsideAVeventCountsIt() {
+        val text = "BEGIN:VEVENT\nUID:a\nDTSTART:20261005T090000Z\nEND:VEVENT\nBEGIN:VEVENT\nUID:b\nDTSTART:20261006T090000Z"
+        val r = Ics.parse(text, kolkata)
+        assertEquals(listOf("a") to 1, r.events.map { it.uid } to r.skipped)
+    }
+
+    @Test
+    fun writeKeepsLineBreaksOutOfUidRruleAndText() {
+        val e = CalendarEvent(
+            "a\r\nBEGIN:VEVENT",
+            "one\rtwo\r\nthree\nfour",
+            millis(LocalDateTime.of(2026, 10, 5, 9, 0), kolkata),
+            millis(LocalDateTime.of(2026, 10, 5, 10, 0), kolkata),
+            kolkata.id,
+            rrule = "FREQ=DAILY\r\nATTENDEE:x",
+        )
+        val text = Ics.write(listOf(e), 0)
+        assertEquals(1, Regex("BEGIN:VEVENT").findAll(text).count() - 1, "one real VEVENT; the other match is inside the UID")
+        assertTrue("UID:aBEGIN:VEVENT\r\n" in text)
+        assertTrue("RRULE:FREQ=DAILYATTENDEE:x\r\n" in text)
+        assertTrue("SUMMARY:one\\ntwo\\nthree\\nfour\r\n" in text, text)
+        assertTrue(Regex("\r(?!\n)").find(text) == null, "no lone CR")
+        assertTrue(text.lines().none { it.startsWith("ATTENDEE") })
+    }
+
+    @Test
+    fun aDateExdateSkipsThatDayOfATimedSeries() {
+        val text = listOf(
+            "BEGIN:VEVENT",
+            "UID:w",
+            "DTSTART;TZID=Europe/Berlin:20261005T090000",
+            "DTEND;TZID=Europe/Berlin:20261005T100000",
+            "RRULE:FREQ=DAILY;COUNT=4",
+            "EXDATE;VALUE=DATE:20261006",
+            "EXDATE;TZID=Europe/Berlin:20261008T090000",
+            "END:VEVENT",
+        ).joinToString("\n")
+        val e = Ics.parse(text, kolkata).events.single()
+        assertEquals(
+            listOf(millis(LocalDateTime.of(2026, 10, 6, 9, 0), berlin), millis(LocalDateTime.of(2026, 10, 8, 9, 0), berlin)),
+            e.exdates,
+            "a date becomes the start of that day's occurrence; a stored time stays",
+        )
+        val days = RecurrenceExpander.occurrences(e, 0, Long.MAX_VALUE, berlin).map { it.date.dayOfMonth }
+        assertEquals(listOf(5, 7), days)
+    }
+
+    @Test
+    fun aYearlyEventSurvivesExportAndImport() {
+        val start = millis(LocalDateTime.of(2026, 3, 4, 9, 0), kolkata)
+        val rrule = "FREQ=YEARLY;INTERVAL=2;BYMONTH=3;BYMONTHDAY=4"
+        val e = CalendarEvent("y1", "Anniversary", start, start + 3_600_000, kolkata.id, rrule = rrule)
+        val r = Ics.parse(Ics.write(listOf(e), 0), kolkata)
+        assertEquals(listOf(e) to 0, r.events to r.shownOnce)
+        assertEquals(0, Ics.parse("BEGIN:VEVENT\nDTSTART:20261005T090000Z\nRRULE:FREQ=YEARLY\nEND:VEVENT", kolkata).shownOnce)
     }
 }
