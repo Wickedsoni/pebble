@@ -197,14 +197,18 @@ class ReminderEngine(
     /**
      * The first minute at or after [from] that opens [rule]'s active window (local time, from [minuteOfDay]).
      * A clock change (DST) between [from] and the window start moves the local minute, so the guess is checked once
-     * and moved by the difference.
+     * and moved by the difference. If the start minute does not exist that day (it is in the spring-forward gap), the
+     * window opens at the first minute after the gap.
      */
     private fun nextWindowStart(rule: ReminderRule, from: Long): Long {
         val wait = (rule.activeFromMinute - minuteOfDay(from) + MINUTES_PER_DAY) % MINUTES_PER_DAY
         val guess = from - from.mod(MINUTE) + wait * MINUTE
         val half = MINUTES_PER_DAY / 2
         val drift = (rule.activeFromMinute - minuteOfDay(guess) + MINUTES_PER_DAY + half) % MINUTES_PER_DAY - half
-        return (guess + drift * MINUTE).takeIf { it >= from } ?: guess
+        val corrected = guess + drift * MINUTE
+        if (corrected >= from && minuteOfDay(corrected) == rule.activeFromMinute) return corrected
+        val start = maxOf(corrected, from - from.mod(MINUTE))
+        return (0 until MAX_GAP_MINUTES).asSequence().map { start + it * MINUTE }.firstOrNull { inWindow(rule, it) } ?: guess
     }
 
     private fun inWindow(rule: ReminderRule, now: Long): Boolean {
@@ -221,6 +225,7 @@ class ReminderEngine(
         private const val ONCE = "once:"
         private const val MINUTES_PER_DAY = 24 * 60
         private const val MINUTE = 60_000L
+        private const val MAX_GAP_MINUTES = 180 // longer than any clock-change gap
         private const val IGNORED_AFTER = 30 * 60_000L
         fun ruleKey(id: String) = RULE + id
         fun oneOffKey(id: Long) = ONCE + id

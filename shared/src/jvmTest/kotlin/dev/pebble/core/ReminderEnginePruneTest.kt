@@ -129,4 +129,30 @@ class ReminderEnginePruneTest {
         now = 20_000 * day + (5 * 60 + 30) * minute // 05:30: due 06:30, after the window closes
         assertEquals(20_000 * day + 22 * 60 * minute, engine().upcoming().first { it.key == "rule:water" }.dueAt)
     }
+
+    @Test
+    fun aWindowStartInTheSpringForwardGapOpensAtTheFirstMinuteAfterTheGap() {
+        setWaterWindow(fromMinute = 90, toMinute = 1380) // 01:30-23:00; on 29 Mar 2026 London has no 01:00-01:59
+        val london = ZoneId.of("Europe/London")
+        now = ZonedDateTime.of(2026, 3, 28, 23, 30, 0, 0, london).toInstant().toEpochMilli() // due 00:30, closed
+        val e = engine(minuteOfDay = { Instant.ofEpochMilli(it).atZone(london).let { t -> t.hour * 60 + t.minute } })
+        val expected = ZonedDateTime.of(2026, 3, 29, 2, 0, 0, 0, london).toInstant().toEpochMilli()
+        assertEquals(expected, e.upcoming().first { it.key == "rule:water" }.dueAt, "02:00 BST, the first minute in the window")
+    }
+
+    @Test
+    fun upcomingFindsTheWindowStartAfterTheClocksGoBack() {
+        val london = ZoneId.of("Europe/London") // 25 Oct 2026 02:00 BST: the clocks go back to 01:00
+        now = ZonedDateTime.of(2026, 10, 24, 22, 50, 0, 0, london).toInstant().toEpochMilli()
+        val e = engine(minuteOfDay = { Instant.ofEpochMilli(it).atZone(london).let { t -> t.hour * 60 + t.minute } })
+        val expected = ZonedDateTime.of(2026, 10, 25, 8, 0, 0, 0, london).toInstant().toEpochMilli()
+        assertEquals(expected, e.upcoming().first { it.key == "rule:water" }.dueAt)
+    }
+
+    private fun setWaterWindow(fromMinute: Int, toMinute: Int) =
+        DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}").use { c ->
+            c.createStatement().use {
+                it.execute("UPDATE reminder_rule SET active_from_minute = $fromMinute, active_to_minute = $toMinute WHERE id = 'water'")
+            }
+        }
 }

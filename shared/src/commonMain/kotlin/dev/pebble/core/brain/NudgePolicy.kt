@@ -66,6 +66,10 @@ class NudgePolicy(
     /** Monte-Carlo draws for each logged propensity; tests change it to show that it never changes the choice. */
     private val propensityDraws: Int = PROPENSITY_DRAWS,
 ) {
+    init {
+        require(propensityDraws > 0) { "propensityDraws must be positive, got $propensityDraws" }
+    }
+
     private val beliefs: MutableMap<String, Pair<Double, Double>> = store.load().toMutableMap()
 
     data class Choice(val arm: NudgeArm, val propensity: Double)

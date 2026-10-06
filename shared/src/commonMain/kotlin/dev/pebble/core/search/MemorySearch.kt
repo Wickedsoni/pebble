@@ -80,22 +80,22 @@ class MemorySearch(
         val queryWords = words(query)
         val asked = query.trim().lowercase()
         val keep = (limit * CANDIDATES_PER_RESULT).coerceAtLeast(1)
-        val first = scan(version, qv, queryWords, asked, limit, keep)
         // The cut can drop a good hit when the index is stale: a candidate that ranked high with its old text may be
-        // gone or changed. Then too few hits are left, so scan again with no cut. Rare, and the answer stays right.
-        return if (first.hits.size < limit && first.stale &&
-            first.cut
-        ) {
-            scan(version, qv, queryWords, asked, limit, Int.MAX_VALUE).hits
-        } else {
-            first.hits
+        // gone or changed. Then too few hits are left, so scan again with a larger cut, up to [MAX_RESCAN_KEEP] (the
+        // cost stays bounded on a big index). This finds most such hits, not all: copies of one text still count once.
+        var keepNow = keep
+        var result = scan(version, qv, queryWords, asked, limit, keepNow)
+        while (result.hits.size < limit && result.stale && result.cut && keepNow < MAX_RESCAN_KEEP) {
+            keepNow = (keepNow * 4).coerceAtMost(MAX_RESCAN_KEEP)
+            result = scan(version, qv, queryWords, asked, limit, keepNow)
         }
+        return result.hits
     }
 
     private class Scan(val hits: List<Result>, val stale: Boolean, val cut: Boolean)
 
     private fun scan(version: String, qv: Embedding, queryWords: Set<String>, asked: String, limit: Int, keep: Int): Scan {
-        val top = ArrayList<Candidate>(minOf(keep, 1024) + 1) // best first
+        val top = ArrayList<Candidate>(keep + 1) // best first
         var cut = false
         // The mapper does the work row by row, so only the few best candidates stay in memory, not every vector.
         q.vectorsForSearch(version) { kind, refId, text, vec ->
@@ -169,6 +169,7 @@ class MemorySearch(
 
         /** How many best vectors per wanted result are read back: room for copies of one text and for stale index text. */
         private const val CANDIDATES_PER_RESULT = 3
+        private const val MAX_RESCAN_KEEP = 240
 
         /** Below this, a hit is more likely noise than an answer (brain/eval/memory_search_v1.jsonl). */
         const val MIN_SCORE = 0.40f
