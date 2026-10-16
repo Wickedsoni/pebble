@@ -5,7 +5,7 @@ coroutines = "1.11.0"
 serialization = "1.11.0"
 sqldelight = "2.4.0"
 jna = "5.19.1"
-onnxruntime = "1.30.0"
+onnxruntime = "1.31.0"
 djl = "0.38.0"
 sherpa-onnx = "v1.13.5"
 
